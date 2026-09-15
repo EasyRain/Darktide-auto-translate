@@ -1030,6 +1030,28 @@ static int cmd_model(int argc, char** argv)
     return 0;
 }
 
+// Collects a finished job, giving up after a minute.
+//
+// Every wait here needs a deadline: an unbounded `Sleep` loop that waits for a result
+// nobody will produce looks exactly like a hang - the process sits at 0% CPU and never
+// returns, which is what happened when the pairing check below ran with a single string.
+#define POLL_TIMEOUT_MS 60000
+static int poll_result(char* out, int cap)
+{
+    const DWORD start = GetTickCount();
+    for (;;) {
+        const int n = at_poll(out, cap);
+        if (n != 0) {
+            return n;
+        }
+        if (GetTickCount() - start > POLL_TIMEOUT_MS) {
+            fprintf(stderr, "no result after %d ms\n", POLL_TIMEOUT_MS);
+            return -100;
+        }
+        Sleep(5);
+    }
+}
+
 // ---------------------------------------------------------------------------
 // queue — translate several strings in sequence, the way the game's queue does
 //
@@ -1063,7 +1085,11 @@ static int cmd_queue(int argc, char** argv)
     // string is still being translated must be refused. It used to be accepted, and
     // the core then held two results while the caller polled one per frame, which
     // shifted every later translation onto the next key.
-    {
+    //
+    // It needs two strings, so it is skipped when only one was given - which is how
+    // this command once ended up waiting forever for a result that was never
+    // submitted.
+    if (argc >= 6) {
         int first = at_submit(argv[4], lang);
         int second = first == 1 ? at_submit(argv[5], lang) : 0;
         int n;
@@ -1075,13 +1101,7 @@ static int cmd_queue(int argc, char** argv)
         }
 
         // Collect the first one; it must belong to the first string.
-        for (;;) {
-            n = at_poll(out, (int)sizeof(out));
-            if (n != 0) {
-                break;
-            }
-            Sleep(5);
-        }
+        n = poll_result(out, (int)sizeof(out));
         printf("first result : %s -> %s\n", argv[4], n > 0 ? out : at_model_error());
 
         // Then the second, which was refused and has to be submitted again.
@@ -1089,13 +1109,7 @@ static int cmd_queue(int argc, char** argv)
             printf("FAIL: the refused string could not be submitted afterwards\n");
             problems++;
         } else {
-            for (;;) {
-                n = at_poll(out, (int)sizeof(out));
-                if (n != 0) {
-                    break;
-                }
-                Sleep(5);
-            }
+            n = poll_result(out, (int)sizeof(out));
             printf("second result: %s -> %s\n", argv[5], n > 0 ? out : at_model_error());
         }
     }
@@ -1112,13 +1126,7 @@ static int cmd_queue(int argc, char** argv)
             continue;
         }
 
-        for (;;) {
-            n = at_poll(out, (int)sizeof(out));
-            if (n != 0) {
-                break;
-            }
-            Sleep(5);
-        }
+        n = poll_result(out, (int)sizeof(out));
 
         if (n < 0) {
             printf("[%02d] %-34s -> FAILED %s\n", i - 3, text, at_model_error());
@@ -1207,13 +1215,7 @@ static int cmd_load(int argc, char** argv)
             fprintf(stderr, "submit refused: %s\n", at_model_error());
             return 3;
         }
-        for (;;) {
-            n = at_poll(out, (int)sizeof(out));
-            if (n != 0) {
-                break;
-            }
-            Sleep(20);
-        }
+        n = poll_result(out, (int)sizeof(out));
         if (n < 0) {
             fprintf(stderr, "translate failed: %s\n", at_model_error());
             return 3;
