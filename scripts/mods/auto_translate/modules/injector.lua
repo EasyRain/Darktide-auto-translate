@@ -21,7 +21,7 @@ local dirty = {}
 -- as plain strings) while `data` is initialized. So the translation has to be
 -- inside the table BEFORE DMF stores it — the on_all_mods_loaded path is too late
 -- for option texts.
-function M.merge(mod, name, loc_table)
+function M.merge(mod, name, loc_table, lang)
     if type(name) ~= "string" or name == "" or name == "auto_translate" then
         return 0
     end
@@ -29,7 +29,7 @@ function M.merge(mod, name, loc_table)
         return 0
     end
 
-    local data = store.load(name)
+    local data = store.load(name, lang)
     if not data then
         return 0
     end
@@ -43,15 +43,15 @@ function M.merge(mod, name, loc_table)
 
     for key, value in pairs(loc_table) do
         if type(value) == "table" and type(value["en"]) == "string" and value["en"] ~= "" then
-            local existing = value["zh-cn"]
+            local existing = value[lang]
             if not (type(existing) == "string" and existing ~= "") then
                 local hash = util.hash(value["en"])
-                local zh, src, needs_backfill = store.lookup(data, key, value["en"], hash)
-                if zh then
-                    value["zh-cn"] = zh
+                local text, src, needs_backfill = store.lookup(data, key, value["en"], hash)
+                if text then
+                    value[lang] = text
                     applied = applied + 1
                     if needs_backfill then
-                        store.set_entry(data, key, value["en"], hash, zh, src)
+                        store.set_entry(data, key, value["en"], hash, text, src)
                         backfilled = backfilled + 1
                     end
                 end
@@ -64,26 +64,26 @@ function M.merge(mod, name, loc_table)
     end
 
     if applied > 0 then
-        util.info(mod, "merged %d key(s) into %s (backfilled %d)", applied, name, backfilled)
+        util.info(mod, "merged %d key(s) into %s [%s] (backfilled %d)", applied, name, lang, backfilled)
     else
-        util.log(mod, "merge %s: nothing to apply", name)
+        util.log(mod, "merge %s [%s]: nothing to apply", name, lang)
     end
     return applied
 end
 
 -- Persist translation files that were enriched during merging.
-function M.flush(mod)
+function M.flush(mod, lang)
     local saved = 0
     for name, data in pairs(dirty) do
         if data.manual_cleared then
-            util.info(mod, "%s: machine translations were added, 'manual' flag cleared (add manual = true back to protect hand written text)", name)
+            util.info(mod, "%s [%s]: machine translations were added, 'manual' flag cleared (add manual = true back to protect hand written text)", name, lang)
             data.manual_cleared = nil
         end
-        local ok = store.save(name, data)
+        local ok = store.save(name, lang, data)
         if ok then
             saved = saved + 1
         else
-            util.warn(mod, "could not save translation file for %s", name)
+            util.warn(mod, "could not save translation file for %s [%s]", name, lang)
         end
         dirty[name] = nil
     end
@@ -91,7 +91,7 @@ function M.flush(mod)
 end
 
 -- Injects everything that is ready for this mod. Returns the number injected.
-local function inject_mod(mod, dmf, entry)
+local function inject_mod(mod, dmf, entry, lang)
     if not entry.tbl or #entry.ready == 0 then
         return 0
     end
@@ -100,7 +100,7 @@ local function inject_mod(mod, dmf, entry)
     for _, item in ipairs(entry.ready) do
         local bucket = entry.tbl[item.key]
         if type(bucket) == "table" then
-            bucket["zh-cn"] = item.zh
+            bucket[lang] = item.text
             injected = injected + 1
         end
     end
@@ -125,7 +125,7 @@ local function inject_mod(mod, dmf, entry)
     return injected
 end
 
-function M.apply(mod, report)
+function M.apply(mod, report, lang)
     local dmf = get_mod("DMF")
     if not dmf then
         util.warn(mod, "DMF not found; nothing injected")
@@ -134,14 +134,14 @@ function M.apply(mod, report)
 
     local total = 0
     for _, entry in ipairs(report.mods) do
-        local n = inject_mod(mod, dmf, entry)
+        local n = inject_mod(mod, dmf, entry, lang)
         if n > 0 then
             total = total + n
-            util.log(mod, "injected %d key(s) into %s", n, entry.name)
+            util.log(mod, "injected %d key(s) into %s [%s]", n, entry.name, lang)
         end
     end
 
-    util.info(mod, "injected %d translated key(s) across %d mod(s)", total, #report.mods)
+    util.info(mod, "injected %d translated key(s) across %d mod(s) [%s]", total, #report.mods, lang)
     return total
 end
 

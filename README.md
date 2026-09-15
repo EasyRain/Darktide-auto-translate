@@ -40,30 +40,54 @@ mod files are never modified. Translations are cached locally in editable text f
 
 ## Translation files (hand editable)
 
-One file per mod at `mods/auto_translate/translations/<modid>.lua`:
+One file per mod **and language**, at `mods/auto_translate/translations/<language>/<modid>.lua`
+(e.g. `translations/zh-cn/ability_timer.lua`, `translations/ja/ability_timer.lua`):
 
 ```lua
 return {
     enabled = true,                      -- set false to skip this mod entirely
     manual  = true,                      -- hand written file: machine translation never overwrites it
     entries = {
-        ["some_key"] = { zh = "译文" },
+        ["some_key"] = { text = "译文" },
     },
 }
 ```
 
+* The target language follows the game by default; override it with the **Target language** option.
 * Mark `manual = true` **once per file** — there is no need to tag every entry. (A single entry can
   still be protected on its own with `src = "manual"`.)
 * `manual` does **not** skip the mod: its file is still read and validated on every launch.
   Hand written text wins as long as it still matches the source; keys added by a mod update, and
   entries whose source text changed, are queued for machine translation.
 * When a hand written entry goes out of date, the fresh translation is stored and the old text is
-  kept next to it as `zh_prev`, so nothing is lost.
+  kept next to it as `text_prev`, so nothing is lost.
 * Once **any** machine translation is stored in the file (a new key, or a stale entry being
   refreshed), the file is no longer purely hand written and the `manual` flag is **cleared
   automatically**. Add `manual = true` back by hand to protect it again.
 * `en` / `hash` are filled in automatically on the next run (they detect source changes).
 * Delete an entry (or the whole file) to have it translated again.
+
+## Glossary (term protection)
+
+`translations/glossary.lua` holds official terminology. Matching terms are replaced by placeholders
+before a text is sent to a translator and restored afterwards, so "Keystone" cannot become
+"corner stone".
+
+```lua
+return {
+    terms = {
+        { en = "Keystone", ["zh-cn"] = "楔石", ja = "キーストーン", ko = "키스톤" },
+        { en = "Veteran",  ["zh-cn"] = "老兵", ["zh-tw"] = "老兵" },
+    },
+}
+```
+
+* A term is used **only** for languages that have a value — unknown languages are skipped, nothing
+  is invented. Only verified wording is shipped (currently zh-cn / zh-tw / ja / ko for the mechanics
+  terms, and zh-cn / zh-tw for class names).
+* Missing languages are welcome: add them as reliable sources appear (official localisation mods,
+  localised wiki pages).
+* Use **Test glossary** in the options to see masking/restoring in the log.
 
 ## Roadmap
 

@@ -35,6 +35,20 @@ function M.hash(text)
     return string.format("djb2%08x", h)
 end
 
+-- Language we translate INTO: the configured one, or the game's current language.
+function M.target_language(mod)
+    local configured = mod:get("target_language")
+    if type(configured) == "string" and configured ~= "" and configured ~= "auto" then
+        return configured
+    end
+    local app = rawget(_G, "Application")
+    local current = app and app.user_setting and app.user_setting("language_id")
+    if type(current) == "string" and current ~= "" then
+        return current
+    end
+    return "en"
+end
+
 local function io_lib()
     local m = Mods and Mods.lua
     return (m and m.io) or io
@@ -105,6 +119,83 @@ function M.write_file_atomic(path, content)
         end
     end
     return M.write_file(path, content)
+end
+
+local function utf8_to_utf16(str)
+    local ffi = Mods and Mods.lua and Mods.lua.ffi
+    if not (ffi and ffi.new) then
+        return nil
+    end
+
+    local units = {}
+    local i, len = 1, #str
+    while i <= len do
+        local b = str:byte(i)
+        local cp
+        if b < 0x80 then
+            cp = b
+            i = i + 1
+        elseif b < 0xE0 then
+            cp = (b - 0xC0) * 0x40 + (str:byte(i + 1) - 0x80)
+            i = i + 2
+        elseif b < 0xF0 then
+            cp = (b - 0xE0) * 0x1000 + (str:byte(i + 1) - 0x80) * 0x40 + (str:byte(i + 2) - 0x80)
+            i = i + 3
+        else
+            cp = (b - 0xF0) * 0x40000 + (str:byte(i + 1) - 0x80) * 0x1000 + (str:byte(i + 2) - 0x80) * 0x40 + (str:byte(i + 3) - 0x80)
+            i = i + 4
+        end
+
+        if cp >= 0x10000 then
+            cp = cp - 0x10000
+            units[#units + 1] = 0xD800 + math.floor(cp / 1024)
+            units[#units + 1] = 0xDC00 + (cp % 1024)
+        else
+            units[#units + 1] = cp
+        end
+    end
+
+    local buf = ffi.new("uint16_t[?]", #units + 1)
+    for j = 1, #units do
+        buf[j - 1] = units[j]
+    end
+    buf[#units] = 0
+    return buf
+end
+
+-- Creates a directory (and it is fine if it already exists).
+-- Lua has no mkdir, so this goes through kernel32.CreateDirectoryW.
+M._dir_cache = {}
+
+function M.ensure_dir(path)
+    if M._dir_cache[path] then
+        return true
+    end
+
+    local ffi = Mods and Mods.lua and Mods.lua.ffi
+    if not (ffi and ffi.cdef and ffi.load and ffi.new) then
+        return false
+    end
+
+    pcall(ffi.cdef, [[
+        int __stdcall CreateDirectoryW(const void* lpPathName, void* lpSecurityAttributes);
+    ]])
+
+    local ok, kernel32 = pcall(ffi.load, "kernel32")
+    if not ok or not kernel32 then
+        return false
+    end
+
+    local buf = utf8_to_utf16(path)
+    if not buf then
+        return false
+    end
+
+    local rc = kernel32.CreateDirectoryW(buf, nil)
+    -- rc == 0 can also mean "already exists" (ERROR_ALREADY_EXISTS); the actual
+    -- write that follows is the real test, so this stays best effort.
+    M._dir_cache[path] = true
+    return true
 end
 
 -- Execute a Lua file and return its result (used to read other mods' localization files).

@@ -23,6 +23,74 @@ return {
         en = "Off = stop translating new texts; already translated texts still apply.",
         ["zh-cn"] = "关闭后停止翻译新文本；已翻译的内容仍然生效。",
     },
+    target_language = {
+        en = "Target language",
+        ["zh-cn"] = "目标语言",
+    },
+    target_language_description = {
+        en = "Language to translate into. 'Automatic' follows the game's language. Translation files live in translations/<language>/.",
+        ["zh-cn"] = "要翻译成的语言。「自动」表示跟随游戏语言。译文文件位于 translations/<语言>/ 目录。",
+    },
+    lang_auto = {
+        en = "Automatic (game language)",
+        ["zh-cn"] = "自动（跟随游戏语言）",
+    },
+    lang_zh_cn = {
+        en = "简体中文",
+        ["zh-cn"] = "简体中文",
+    },
+    lang_zh_tw = {
+        en = "繁體中文",
+        ["zh-cn"] = "繁體中文",
+    },
+    lang_ja = {
+        en = "日本語",
+        ["zh-cn"] = "日本語",
+    },
+    lang_ko = {
+        en = "한국어",
+        ["zh-cn"] = "한국어",
+    },
+    lang_ru = {
+        en = "Русский",
+        ["zh-cn"] = "Русский",
+    },
+    lang_de = {
+        en = "Deutsch",
+        ["zh-cn"] = "Deutsch",
+    },
+    lang_fr = {
+        en = "Français",
+        ["zh-cn"] = "Français",
+    },
+    lang_es = {
+        en = "Español",
+        ["zh-cn"] = "Español",
+    },
+    lang_it = {
+        en = "Italiano",
+        ["zh-cn"] = "Italiano",
+    },
+    lang_pl = {
+        en = "Polski",
+        ["zh-cn"] = "Polski",
+    },
+    lang_pt_br = {
+        en = "Português (BR)",
+        ["zh-cn"] = "Português (BR)",
+    },
+    lang_uk = {
+        en = "Українська",
+        ["zh-cn"] = "Українська",
+    },
+    test_glossary = {
+        en = "Test glossary",
+        ["zh-cn"] = "术语表自检",
+    },
+    test_glossary_description = {
+        en = "Shows in the log how known terms are masked before translation and restored afterwards.",
+        ["zh-cn"] = "在日志中演示已知术语在翻译前如何被占位、翻译后如何还原。",
+    },
     engine = {
         en = "Translation engine",
         ["zh-cn"] = "翻译引擎",

@@ -108,21 +108,21 @@ function M.is_implemented(name)
 end
 
 -- Placeholder runner: reports what would be translated.
-function M.run(mod, report)
+function M.run(mod, report, lang)
     local engine = M.resolve(mod)
     local pending = report.stats.pending
 
     if pending == 0 then
-        util.info(mod, "nothing to translate (engine: %s)", engine)
+        util.info(mod, "nothing to translate (engine: %s, target: %s)", engine, tostring(lang))
         return
     end
 
     if not M.is_implemented(engine) then
-        util.info(mod, "%d key(s) awaiting translation; engine '%s' is not implemented in this framework build", pending, engine)
+        util.info(mod, "%d key(s) awaiting translation into '%s'; engine '%s' is not implemented in this framework build", pending, tostring(lang), engine)
         return
     end
 
-    util.info(mod, "%d key(s) pending", pending)
+    util.info(mod, "%d key(s) pending (target: %s)", pending, tostring(lang))
 end
 
 return M

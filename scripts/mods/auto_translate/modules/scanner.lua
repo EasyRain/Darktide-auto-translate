@@ -1,5 +1,5 @@
 -- scanner.lua — enumerates loaded mods, reads their localization tables and
--- works out which keys still need a translation.
+-- works out which keys still need a translation for the current target language.
 local M = {}
 
 local util
@@ -40,11 +40,10 @@ local function localization_path(mod_file_path)
     return path
 end
 
--- Scans a single mod. Returns an entry with ready/pending key lists and the raw table.
--- Manual translation files are still fully read and validated here: only their
--- existing translations are protected, while missing or out of date keys stay pending
--- so the engine can fill them in.
-function M.scan_mod(name)
+-- Scans a single mod for the target language. Manual translation files are still
+-- fully read and validated: only their existing translations are protected, while
+-- missing or out of date keys stay pending so an engine can fill them in.
+function M.scan_mod(name, lang)
     local entry = { name = name, total = 0, already = 0, ready = {}, pending = {}, stale = 0 }
 
     local mod_file = find_mod_file(name)
@@ -65,7 +64,7 @@ function M.scan_mod(name)
         return entry
     end
 
-    local data, _ = store.load(name)
+    local data = store.load(name, lang)
     if type(data) == "table" and data.enabled == false then
         entry.skipped = "disabled in translation file"
         entry.tbl = tbl
@@ -75,14 +74,15 @@ function M.scan_mod(name)
     for key, value in pairs(tbl) do
         if type(value) == "table" and type(value["en"]) == "string" and value["en"] ~= "" then
             entry.total = entry.total + 1
-            local existing = value["zh-cn"]
+            local existing = value[lang]
             if type(existing) == "string" and existing ~= "" then
+                -- the mod already ships this language
                 entry.already = entry.already + 1
             else
                 local hash = util.hash(value["en"])
-                local zh, reason = store.lookup(data, key, value["en"], hash)
-                if zh then
-                    entry.ready[#entry.ready + 1] = { key = key, en = value["en"], hash = hash, zh = zh, src = reason }
+                local text, reason = store.lookup(data, key, value["en"], hash)
+                if text then
+                    entry.ready[#entry.ready + 1] = { key = key, en = value["en"], hash = hash, text = text, src = reason }
                 else
                     -- no translation yet, or the source text changed since it was written
                     entry.pending[#entry.pending + 1] = { key = key, en = value["en"], hash = hash }
@@ -94,13 +94,16 @@ function M.scan_mod(name)
         end
     end
 
-    table.sort(entry.pending, function(a, b) return a.key < b.key end)
+    table.sort(entry.pending, function(a, b)
+        return a.key < b.key
+    end)
     entry.tbl = tbl
     return entry
 end
 
-function M.scan(mod)
+function M.scan(mod, lang)
     local report = {
+        lang = lang,
         mods = {},
         stats = { mods_total = 0, keys_total = 0, already = 0, ready = 0, pending = 0, stale = 0, skipped = 0 },
     }
@@ -119,7 +122,7 @@ function M.scan(mod)
 
     for _, name in ipairs(names) do
         if not SKIP_MODS[name] then
-            local entry = M.scan_mod(name)
+            local entry = M.scan_mod(name, lang)
             report.mods[#report.mods + 1] = entry
             local st = report.stats
             st.mods_total = st.mods_total + 1

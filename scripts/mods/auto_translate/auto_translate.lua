@@ -1,8 +1,8 @@
 -- auto_translate.lua — main entry point.
 --
 -- Pipeline on startup (and on demand):
---   1. scan every loaded mod's localization table (DMF's registry)
---   2. look up our local translation library
+--   1. scan every loaded mod's localization table (DMF's registry) for the target language
+--   2. look up our local translation library (translations/<language>/<modid>.lua)
 --   3. inject the merged table back into DMF (in memory — original mod files untouched)
 --   4. hand the remaining keys to the selected translation engine (later step)
 local mod = get_mod("auto_translate")
@@ -22,13 +22,21 @@ injector.init(util, store)
 local engines = mod:io_dofile(BASE .. "engines")
 engines.init(util, store)
 
+local glossary = mod:io_dofile(BASE .. "glossary")
+glossary.init(util)
+
+-- Language we translate INTO (configured, or the game's current language).
+local function current_lang()
+    return util.target_language(mod)
+end
+
 -- ---------------------------------------------------------------------------
 -- Early hook: every mod loaded AFTER us passes through here.
 --
 -- DMF loads a mod's resources as localization -> data -> script, and localizes
 -- the option titles/tooltips while initializing `data` (caching them as plain
 -- strings). So we merge our translations into the table right before DMF stores
--- it — otherwise option texts would stay English forever.
+-- it — otherwise option texts would stay in the source language forever.
 -- This is why auto_translate must be the FIRST entry in mod_load_order.txt.
 -- ---------------------------------------------------------------------------
 local hooked = false
@@ -50,7 +58,7 @@ local function install_hook()
             name = target_mod:get_name()
         end
 
-        local ok, err = pcall(injector.merge, mod, name, loc_table)
+        local ok, err = pcall(injector.merge, mod, name, loc_table, current_lang())
         if not ok then
             util.warn(mod, "merge error (%s): %s", tostring(name), tostring(err))
         end
@@ -105,13 +113,34 @@ local function check_engine_settings()
     return false
 end
 
+local function glossary_report(lang)
+    local ok, err = glossary.load()
+    if not ok then
+        util.warn(mod, "glossary unavailable: %s", tostring(err))
+        return
+    end
+    util.info(
+        mod,
+        "glossary: %d term(s) total, %d usable for '%s'",
+        glossary.total(), glossary.count(lang), lang
+    )
+end
+
 local function run_pipeline(reason)
     if not mod:get("apply_translation") then
         util.info(mod, "translations disabled by master switch (%s)", reason)
         return
     end
 
-    local report = scanner.scan(mod)
+    local lang = current_lang()
+    if lang == "en" then
+        util.info(mod, "target language is English; installed mods are English already, nothing to do")
+        return
+    end
+
+    glossary_report(lang)
+
+    local report = scanner.scan(mod, lang)
     local st = report.stats
 
     if report.error then
@@ -121,20 +150,20 @@ local function run_pipeline(reason)
 
     util.info(
         mod,
-        "scan (%s): mods=%d keys=%d already=%d ready=%d pending=%d stale=%d skipped=%d",
-        reason, st.mods_total, st.keys_total, st.already, st.ready, st.pending, st.stale or 0, st.skipped
+        "scan (%s) [%s]: mods=%d keys=%d already=%d ready=%d pending=%d stale=%d skipped=%d",
+        reason, lang, st.mods_total, st.keys_total, st.already, st.ready, st.pending, st.stale, st.skipped
     )
 
-    injector.apply(mod, report)
+    injector.apply(mod, report, lang)
 
-    local saved = injector.flush(mod)
+    local saved = injector.flush(mod, lang)
     if saved > 0 then
         util.info(mod, "saved %d translation file(s) with backfilled source hashes", saved)
     end
 
     if mod:get("auto_translate_enabled") then
         if check_engine_settings() then
-            engines.run(mod, report)
+            engines.run(mod, report, lang)
         else
             util.info(mod, "translation paused: the selected engine is not usable yet")
         end
@@ -154,30 +183,50 @@ end
 -- Mod options: "Reload translation files"
 function mod.reload_translations()
     engines.reset(mod) -- give a paused engine another chance
+    glossary.load(true)
     local ok, err = pcall(run_pipeline, "manual reload")
     if not ok then
         util.warn(mod, "reload error: %s", tostring(err))
     end
 end
 
--- Mod options: "Clear local translations"
+-- Mod options: "Clear local translations" (only the current target language)
 function mod.clear_cache()
     local oslib = (Mods and Mods.lua and Mods.lua.os) or os
-    local report = scanner.scan(mod)
+    local lang = current_lang()
+    local report = scanner.scan(mod, lang)
     local removed = 0
     for _, entry in ipairs(report.mods) do
-        local path = store.path_for(entry.name)
+        local path = store.path_for(entry.name, lang)
         if util.file_exists(path) then
             pcall(oslib.remove, path)
             removed = removed + 1
         end
     end
-    util.info(mod, "cleared %d translation file(s); they will be rebuilt on demand", removed)
+    util.info(mod, "cleared %d translation file(s) for '%s'; they will be rebuilt on demand", removed, lang)
+end
+
+-- Mod options: "Test glossary" — shows what the term masking does.
+function mod.test_glossary()
+    local lang = current_lang()
+    local sample = "Keystone: Blitz — Veteran, Ogryn, Psyker, Skitarii"
+    local masked, tokens = glossary.mask(sample, lang)
+    local restored, missing = glossary.unmask(masked, tokens)
+
+    util.info(mod, "glossary test [%s]:", lang)
+    util.info(mod, "  source  : %s", sample)
+    util.info(mod, "  masked  : %s", masked)
+    util.info(mod, "  restored: %s  (missing placeholders: %d)", restored, missing)
+    if mod.echo then
+        pcall(mod.echo, mod, string.format("[%s] %s", lang, restored))
+    end
 end
 
 mod.on_setting_changed = function(setting_id)
     if setting_id == "download_model_small" or setting_id == "download_model_large" then
         util.info(mod, "model download toggles are registered but the downloader is not implemented yet")
+    elseif setting_id == "target_language" then
+        util.info(mod, "target language set to: %s (press 'Reload translation files' to apply now)", tostring(mod:get("target_language")))
     elseif setting_id == "engine" or setting_id == "online_api_key" then
         if setting_id == "engine" then
             util.info(mod, "engine set to: %s", tostring(mod:get("engine")))
