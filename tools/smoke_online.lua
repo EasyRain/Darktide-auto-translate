@@ -294,5 +294,14 @@ available = {}
 check("resolve(key, auto, no models)", resolve_with("sk-test", "auto"), "online_api")
 check("resolve(no key, auto, no models)", resolve_with("", "auto"), nil)
 
+-- A settings file written before the 600M tier was removed still says "local_small".
+-- It has to keep working (as the 1.3B), or the saved choice selects an engine that no
+-- longer exists and the queue silently never starts.
+check("legacy 'local_small' means the 1.3B", engines.canonical("local_small"), "local_base")
+check("legacy engine is still a local engine", engines.is_local_engine("local_small"), true)
+check("unknown engine stays unknown", engines.is_local_engine("no_such_engine"), false)
+check("legacy engine maps to the base directory",
+    engines.model_dir("local_small"), engines.model_dir("local_base"))
+
 print(string.format("%d failure(s) in total", failures))
 os.exit(failures == 0 and 0 or 1)

@@ -53,8 +53,23 @@ local REQUIRED_MODEL_FILES = {
     "sentencepiece.bpe.model",
 }
 
+-- A settings file written before the 600M tier was removed still says
+-- engine = "local_small" (and download_model_small = true). That value has to keep
+-- meaning the 1.3B: otherwise the player's saved choice selects an engine that no
+-- longer exists and translation quietly never starts.
+local LEGACY_ENGINES = {
+    local_small = "local_base",
+}
+
+function M.canonical(name)
+    if type(name) ~= "string" then
+        return name
+    end
+    return LEGACY_ENGINES[name] or name
+end
+
 function M.model_dir(name)
-    local sub = MODEL_SUBDIR[name]
+    local sub = MODEL_SUBDIR[M.canonical(name)]
     if not sub then
         return nil
     end
@@ -75,7 +90,7 @@ function M.model_available(name)
 end
 
 function M.is_local_engine(name)
-    return MODEL_SUBDIR[name] ~= nil
+    return MODEL_SUBDIR[M.canonical(name)] ~= nil
 end
 
 -- ---------------------------------------------------------------------------
@@ -247,7 +262,7 @@ end
 function M.resolve(mod, lang)
     local wanted = mod:get("engine") or "auto"
     if wanted ~= "auto" then
-        return wanted
+        return M.canonical(wanted)
     end
 
     local key = mod:get("online_api_key")
