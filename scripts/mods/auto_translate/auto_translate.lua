@@ -31,6 +31,10 @@ online.init(util, store, glossary, engines, injector)
 local exporter = mod:io_dofile(BASE .. "exporter")
 exporter.init(util)
 
+local progress_hud = mod:io_dofile(BASE .. "progress_hud")
+progress_hud.init(mod, util, online)
+progress_hud.install(mod)
+
 local options_refresh = mod:io_dofile(BASE .. "options_refresh")
 options_refresh.init(util)
 options_refresh.install_hook(mod)

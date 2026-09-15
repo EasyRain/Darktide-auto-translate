@@ -231,8 +231,33 @@ return {
         ["zh-cn"] = "显示进度",
     },
     progress_hud_description = {
-        en = "Shows translation progress in the bottom-right corner.",
-        ["zh-cn"] = "在右下角显示翻译进度。",
+        en = "Shows translation progress in the bottom-right corner while it is running.",
+        ["zh-cn"] = "翻译进行时在右下角显示进度。",
+    },
+    -- Placeholder order is always %d first, then %s.
+    hud_progress = {
+        en = "%d / %d translated",
+        ["zh-cn"] = "已翻译 %d / %d",
+    },
+    hud_left = {
+        en = "%d left",
+        ["zh-cn"] = "剩余 %d",
+    },
+    hud_failures = {
+        en = "%d failed, %d refused",
+        ["zh-cn"] = "%d 失败，%d 被拒",
+    },
+    hud_cooldown = {
+        en = "rate limited, resuming in %ds",
+        ["zh-cn"] = "被限流，%d 秒后继续",
+    },
+    hud_finished = {
+        en = "done, %d translated",
+        ["zh-cn"] = "完成，共 %d 条",
+    },
+    hud_error = {
+        en = "last error: %s",
+        ["zh-cn"] = "最近错误：%s",
     },
     reload_translations = {
         en = "Reload translation files",
