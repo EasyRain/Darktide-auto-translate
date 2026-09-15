@@ -1563,14 +1563,21 @@ end
 -- each; a custom endpoint instead names where the string is ("choices.0.message.content"),
 -- which at_json_string_at() walks. Returns the byte count (>0) or sets `why`.
 local function read_response(req, body, why_out)
+    local ffi = Mods.lua.ffi
+
     if req.provider == "custom" then
-        local n = core.at_json_string_at(body, req.response_path, out_buf, SMALL_CAP)
-        if n == 0 then
+        -- custom.string_at() owns the one trap here: at_json_string_at() answers 1 when it
+        -- found a string - a flag, not a length - and NUL-terminates the buffer. Taking that
+        -- flag for a length is what truncated every custom translation to its first byte
+        -- (measured: the "translation" of "Reload Speed" was "R").
+        local text = custom and custom.string_at(core, req.response_path, body, out_buf,
+                                                 SMALL_CAP, ffi.string)
+        if not text then
             why_out(nil, string.format("%s (path '%s')", tostring(cstr(core.at_error())),
                 tostring(req.response_path)))
             return 0
         end
-        return n
+        return #text
     end
 
     local n = core.at_online_parse(req.provider, body, out_buf, SMALL_CAP)
@@ -2051,7 +2058,17 @@ function M.update(mod, dt)
                     util.popup(mod, "custom_test_failed", string.format("transport error %d", result))
                 elseif http_code < 200 or http_code >= 300 then
                     local key = custom and custom.error_key(http_code)
-                    util.popup(mod, key or "custom_test_failed", tostring(http_code))
+                    -- The service's own sentence, when it wrote one: DeepL answers a bad
+                    -- parameter with "Value for 'source_lang' not supported", which is the
+                    -- whole diagnosis. The status alone leaves eight fields to guess between.
+                    local said = custom and custom.error_message(core, body, out_buf,
+                                                                  SMALL_CAP, ffi.string)
+                    if said and not key then
+                        util.popup(mod, "custom_test_failed",
+                            string.format("HTTP %d: %s", http_code, said))
+                    else
+                        util.popup(mod, key or "custom_test_failed", tostring(http_code))
+                    end
                 else
                     local why
                     local n = read_response(req, body, function(_, message) why = message end)
@@ -2075,7 +2092,22 @@ function M.update(mod, dt)
                 end
             elseif result == 0 then
                 -- completed, but the service answered with an error status
-                fail_item(mod, req, string.format("HTTP %d", http_code), http_code, true)
+                local reason = string.format("HTTP %d", http_code)
+                -- A custom endpoint usually says *why* in the reply, and that sentence is the
+                -- only thing that distinguishes a wrong language code from a wrong key from a
+                -- wrong URL. Reported once per session, like the other configuration
+                -- problems: the failure itself is per item and would repeat verbatim.
+                if req.provider == "custom" and custom and not custom.error_key(http_code) then
+                    local len = len_buf[0]
+                    local said = len > 0
+                        and custom.error_message(core, ffi.string(body_buf, len), out_buf,
+                                                 SMALL_CAP, ffi.string)
+                    if said then
+                        reason = string.format("HTTP %d: %s", http_code, said)
+                        note_custom_problem(mod, "custom_http_error", reason)
+                    end
+                end
+                fail_item(mod, req, reason, http_code, true)
             else
                 local win = win_buf[0]
                 local text = win ~= 0 and cstr(core.at_win_error_text(win)) or nil

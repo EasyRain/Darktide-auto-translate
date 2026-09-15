@@ -1,4 +1,4 @@
-﻿-- custom.lua — a translation endpoint the player describes themselves.
+-- custom.lua — a translation endpoint the player describes themselves.
 --
 -- This is a *machine translation service* described by settings, not a chat endpoint: a
 -- URL, a text parameter, a source and a target language, one key, and a reply that holds
@@ -22,15 +22,19 @@ local M = {}
 -- one of these names).
 local PLACEHOLDERS = { "text", "source", "target", "key" }
 
--- The shipped defaults describe an ordinary machine-translation service, because that is
--- what this engine is for: a URL, a text parameter, a source and a target language, one
--- key. The body below is the DeepL/Google-v2/LibreTranslate shape, and the response path
--- is the most common one ({"translations":[{"text":"..."}]}).
+-- The shipped defaults *are* one working configuration: DeepL's. The body below carries
+-- DeepL's parameters and the response path is DeepL's reply shape
+-- ({"translations":[{"text":"..."}]}), so with the key in place the section runs as it
+-- stands. A player using another service edits the fields in place - the tooltips name
+-- what LibreTranslate, Google v2 and the Chinese providers want instead.
 --
--- A chat-style JSON endpoint is still reachable - the body is a free-text template and the
+-- A chat-style JSON endpoint remains reachable - the body is a free-text template and the
 -- response path is yours to set - but nothing here is built around it, and there is no
 -- prompt field: a translation service takes text and languages, not instructions.
-local DEFAULT_BODY = "text={text}&source_lang={source}&target_lang={target}&key={key}"
+--
+-- DeepL wants the key in the auth header, not in the body, which is why the default body
+-- has no {key} and the settings pre-fill "Authorization: DeepL-Auth-Key {key}" instead.
+local DEFAULT_BODY = "text={text}&source_lang={source}&target_lang={target}"
 local DEFAULT_PATH = "translations.0.text"
 
 function M.defaults()
@@ -95,7 +99,14 @@ function M.spec(mod)
     if spec.method ~= "get" then
         spec.method = "post"
     end
-    -- Nothing is substituted here on purpose: the defaults are the settings' own
+    -- One key, entered once: an empty "Custom: key" falls back to the API key above, so the
+    -- pre-filled DeepL defaults run without pasting the same key twice. Nothing else
+    -- changes: a service that needs no key sends none, because {key} only appears where a
+    -- template asks for it.
+    if spec.key == "" then
+        spec.key = text("online_api_key")
+    end
+    -- Nothing else is substituted here on purpose: the defaults are the settings' own
     -- default_value, so the fields arrive filled in already, and a field the player has
     -- *cleared* is a mistake worth naming rather than a value to guess at.
     return spec
@@ -274,6 +285,52 @@ function M.error_key(http_status)
     end
     if http_status and http_status >= 500 then
         return "custom_server_error"
+    end
+    return nil
+end
+
+-- Where an error reply keeps its sentence, most common first. DeepL answers a bad
+-- parameter with {"message":"Bad request. Reason: Value for 'source_lang' not supported."};
+-- Google v2 uses error.message; several services use detail.
+local ERROR_PATHS = { "message", "error.message", "detail", "error", "error_message" }
+
+-- The string at a response path, or nil when there is none.
+--
+-- at_json_string_at() answers **1 for "found" - a flag, not a length** - and NUL-terminates
+-- the buffer, so the text is read to its NUL here. Reading the buffer with that 1 as a length
+-- is the mistake this function exists to prevent: it truncated every custom translation to
+-- its first byte ("Reload Speed" became "R") while every parser test still passed, because the
+-- parsers themselves were right.
+--
+-- `read` is ffi.string; it is a parameter so this stays testable without the DLL.
+function M.string_at(core, path, body, out_buf, cap, read)
+    if not core or type(body) ~= "string" or body == "" or type(path) ~= "string"
+        or path == "" then
+        return nil
+    end
+    if core.at_json_string_at(body, path, out_buf, cap) == 0 then
+        return nil
+    end
+    local text = read(out_buf)
+    if type(text) ~= "string" or text == "" then
+        return nil
+    end
+    return text
+end
+
+-- The service's own words about a failed request, or nil when the reply holds none.
+--
+-- This exists because the status code alone is not a diagnosis. A 400 from an endpoint that
+-- was reached correctly says exactly which parameter is wrong ("Value for 'source_lang' not
+-- supported"), and that sentence is the difference between a fixable setting and eight
+-- fields to guess between. Measured against the real DeepL endpoint: the mod used to report
+-- "no string at translations.0.text" for a reply that already said what was wrong.
+function M.error_message(core, body, out_buf, cap, read)
+    for _, path in ipairs(ERROR_PATHS) do
+        local said = M.string_at(core, path, body, out_buf, cap, read)
+        if said then
+            return said
+        end
     end
     return nil
 end

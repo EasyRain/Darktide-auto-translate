@@ -23,6 +23,11 @@ MARK = "[stub]"
 
 
 class Handler(BaseHTTPRequestHandler):
+    def _received_headers(self) -> dict:
+        # Echoed so a test can tell "the key arrived in the auth header" from "the key was
+        # dropped" - the two look identical from the client side.
+        return {name.lower(): value for name, value in self.headers.items()}
+
     def _send(self, payload: dict) -> None:
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         self.send_response(200)
@@ -61,6 +66,7 @@ class Handler(BaseHTTPRequestHandler):
             self._send({
                 "choices": [{"index": 0, "message": {"role": "assistant", "content": f"{MARK} {text}"}}],
                 "received": {"system": system, "text": text},
+                "headers": self._received_headers(),
             })
             return
 
@@ -74,6 +80,7 @@ class Handler(BaseHTTPRequestHandler):
             "translations": [{"detected_source_language": values.get("source_lang", "EN").upper(),
                               "text": f"{MARK} {text}"}],
             "received": values,
+            "headers": self._received_headers(),
         })
 
     def do_GET(self) -> None:

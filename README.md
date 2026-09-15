@@ -1,4 +1,4 @@
-﻿# Auto Translate (for Warhammer 40,000: Darktide)
+# Auto Translate (for Warhammer 40,000: Darktide)
 
 Automatically translates the texts of your installed mods **in memory** — the original
 mod files are never modified. Translations are cached locally in editable text files.
@@ -506,16 +506,21 @@ that.)
 the core does the two things Lua cannot: the HTTP call and reading one string out of the
 JSON reply.
 
-| field | default | example |
+Every field ships pre-filled with **DeepL's own parameters**, so the section as it stands is
+a working DeepL configuration — paste the key and press the test button — and the reference
+to edit in place for anything else:
+
+| field | default (DeepL's) | examples for other services |
 | --- | --- | --- |
-| URL | — | `https://api-free.deepl.com/v2/translate` |
-| key | — | your key; empty for a self-hosted service that needs none |
-| auth header | empty | `Authorization: DeepL-Auth-Key {key}` — empty because the shipped template passes the key as a parameter |
-| method | POST | POST (parameters) or GET (query string) |
+| URL | `https://api-free.deepl.com/v2/translate` | Google v2: `https://translation.googleapis.com/language/translate/v2`; LibreTranslate: `http://localhost:5000/translate` |
+| key | empty — falls back to the **API key** field above | empty for a self-hosted service that needs none |
+| auth header | `Authorization: DeepL-Auth-Key {key}` | `Authorization: Bearer {key}`, `x-api-key: {key}`, or empty (LibreTranslate) |
+| method | POST | POST (body template) or GET (query template) |
 | content type | `application/x-www-form-urlencoded` | `application/json` for a JSON body |
-| request template | `text={text}&source_lang={source}&target_lang={target}&key={key}` | DeepL: `text={text}&target_lang={target}`; LibreTranslate: `q={text}&source={source}&target={target}` |
+| request template | `text={text}&source_lang={source}&target_lang={target}` | LibreTranslate: `q={text}&source={source}&target={target}`; Google v2: a JSON body |
 | extra headers | empty | separated by `;;` or a literal `\n` (the box is one line) |
 | response path | `translations.0.text` | Google v2: `data.translations.0.translatedText`; LibreTranslate: `translatedText`; Baidu: `trans_result.0.dst` |
+| language codes | DeepL's spelling of all 13 game languages (`en=EN;; zh-cn=ZH-HANS;; pt-br=PT-BR;; …`) | Google wants `zh-tw=zh-TW`; Baidu wants `zh-tw=cht` |
 
 Placeholders are `{text}` `{source}` `{target}` `{key}`. Values are **percent-encoded in a
 form body or a query string and JSON-escaped in a JSON body** — the format decides, not the
@@ -525,6 +530,12 @@ The defaults are the settings' own default values, and a *cleared* field is a mi
 is named (`custom_url_missing`, `custom_url_invalid`, `custom_path_missing`,
 `custom_body_missing`) rather than silently replaced by a guess.
 
+**One mapping serves both positions, and DeepL only accepts the regional variants as a
+target.** `en=EN-US` makes every request fail with `400 ... Value for 'source_lang' not
+supported` (measured against the live endpoint), because the mod always sends English as
+the *source*. The English entry therefore has to be `en=EN`; only the target-only codes
+(`ZH-HANS`, `ZH-HANT`, `PT-BR`) belong in the mapping with a region on them.
+
 What is *not* configurable is the safety around it: glossary masking (a custom endpoint
 never gets rich-text markup unmasked), the placeholder count, the format-specifier and
 truncation guards and the "unchanged" tagging all run exactly as they do for DeepL — a
@@ -532,15 +543,22 @@ user-supplied endpoint is the one most likely to answer with something unexpecte
 
 Mistakes are named instead of looking alike: a missing URL or response path pauses the run
 with a notice naming the field, and HTTP 401/403, 404, 429 and 5xx each have their own
-message (once per session, because the failure is per response, not per string).
+message (once per session, because the failure is per response, not per string). Any other
+status shows **the service's own sentence** when it wrote one — a `400` from DeepL answers
+`Value for 'source_lang' not supported`, and that reply is the whole diagnosis; reporting
+the response path instead (what the mod used to do) named neither the parameter nor the
+value. That sentence can live at `message`, `error.message`, `detail`, `error` or
+`error_message` (`modules/custom.lua`'s `error_message()`), which covers DeepL, Google v2
+and the common self-hosted shapes.
 
 **Test the online engine** sends one sample string through whatever is configured and shows
 the request, the status and the reply in the chat — the only way to tell a wrong URL from a
 wrong response path.
 
 `tools/custom_api_stub.py` is a local stand-in for such an endpoint (it parses the body it
-receives, so it also proves the template produced valid JSON); the extraction half is
-testable offline against `tests/fixtures/custom_*.json`:
+receives, so it also proves the template produced valid JSON, and echoes the headers it saw
+so a test can tell "the key arrived in the auth header" from "the key was dropped"); the
+extraction half is testable offline against `tests/fixtures/custom_*.json`:
 
 ```
 python tools\custom_api_stub.py 8791

@@ -1,4 +1,4 @@
-﻿-- auto_translate_data.lua
+-- auto_translate_data.lua
 local mod = get_mod("auto_translate")
 
 return {
@@ -74,25 +74,33 @@ return {
             -- the query string, what the request looks like, and where the translation sits
             -- in the reply. The tooltips carry the explanations (and one example each); the
             -- labels stay short so the list is readable.
+            --
+            -- The fields are pre-filled with DeepL's real parameters, so the section as it
+            -- ships *is* a working DeepL configuration: paste the key and press the test
+            -- button. They double as the reference to edit in place for another service -
+            -- and because they are the settings' own values (not hidden substitutions),
+            -- what the box shows is exactly what is sent.
             {
                 setting_id = "custom_url",
                 type = "text",
-                default_value = "",
+                default_value = "https://api-free.deepl.com/v2/translate",
                 max_length = 512,
             },
             {
+                -- Left empty on purpose: there is no key to pre-fill, and an empty key is
+                -- meaningful for a self-hosted service. When it is empty the API key above
+                -- is used, so the DeepL defaults work without pasting the key twice. The
+                -- tooltip says so.
                 setting_id = "custom_key",
                 type = "text",
                 default_value = "",
                 max_length = 256,
             },
             {
-                -- Empty by default: the shipped body template carries the key as a
-                -- parameter, which is what DeepL-style services do. The tooltip shows the
-                -- header form for the ones that want it.
+                -- DeepL's header form. The request template below therefore carries no key.
                 setting_id = "custom_auth",
                 type = "text",
-                default_value = "",
+                default_value = "Authorization: DeepL-Auth-Key {key}",
                 max_length = 256,
             },
             {
@@ -113,18 +121,19 @@ return {
             {
                 setting_id = "custom_body",
                 type = "text",
-                -- The DeepL/Google-v2/LibreTranslate shape; see the tooltip for the two
-                -- variants those services prefer.
-                default_value = "text={text}&source_lang={source}&target_lang={target}&key={key}",
+                -- DeepL's own parameters. Other services differ: LibreTranslate wants
+                -- q={text}&source={source}&target={target}, Google v2 a JSON body.
+                default_value = "text={text}&source_lang={source}&target_lang={target}",
                 max_length = 1024,
             },
 
             {
                 -- Every service spells languages its own way; this is where the player
-                -- says how. Empty = pass the mod's own codes through unchanged.
+                -- says how. The default is DeepL's spelling of the game's languages - the
+                -- same table the built-in DeepL provider uses, so both engines agree.
                 setting_id = "custom_langs",
                 type = "text",
-                default_value = "",
+                default_value = "en=EN;; zh-cn=ZH-HANS;; zh-tw=ZH-HANT;; ja=JA;; ko=KO;; ru=RU;; de=DE;; fr=FR;; es=ES;; it=IT;; pl=PL;; pt-br=PT-BR;; uk=UK",
                 max_length = 512,
             },
             {

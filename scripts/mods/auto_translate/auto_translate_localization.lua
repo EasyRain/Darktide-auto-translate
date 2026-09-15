@@ -1,4 +1,4 @@
-﻿return {
+return {
     mod_name = {
         en = "Auto Translate",
         ["zh-cn"] = "自动翻译",
@@ -134,8 +134,8 @@
         ["zh-cn"] = "API 服务商",
     },
     api_provider_description = {
-        en = "Which translation service the 'Online API' engine talks to. DeepL has a free tier (500,000 characters per month) and is reachable from mainland China. Custom is any translation service you describe yourself (a self-hosted engine, another provider, a service behind your own gateway): URL, key, request template and where the reply keeps the translation are all settings.",
-        ["zh-cn"] = "「在线（正式 API）」引擎要连哪家翻译服务。DeepL 有免费额度（每月 50 万字符）且国内可直连。自定义＝你自己描述的任意翻译服务（自建引擎、其他供应商、走自己网关的服务）：网址、密钥、请求模板、响应里译文的位置都由你填写。",
+        en = "Which translation service the 'Online API' engine talks to. DeepL has a free tier (500,000 characters per month) and is reachable from mainland China. Custom is any translation service you describe yourself (a self-hosted engine, another provider, a service behind your own gateway): URL, key, request template and where the reply keeps the translation are all settings - and they ship pre-filled with DeepL's parameters, so switching to Custom against DeepL needs nothing but the key.",
+        ["zh-cn"] = "「在线（正式 API）」引擎要连哪家翻译服务。DeepL 有免费额度（每月 50 万字符）且国内可直连。自定义＝你自己描述的任意翻译服务（自建引擎、其他供应商、走自己网关的服务）：网址、密钥、请求模板、响应里译文的位置都由你填写——而且默认已预填 DeepL 的参数，所以用「自定义」接 DeepL 只需填密钥。",
     },
     api_deepl = {
         en = "DeepL (recommended)",
@@ -150,24 +150,24 @@
         ["zh-cn"] = "自定义：接口网址",
     },
     custom_url_description = {
-        en = "The full URL of the translation service, e.g. https://api-free.deepl.com/v2/translate (DeepL), https://translation.googleapis.com/language/translate/v2 (Google v2), http://localhost:5000/translate (LibreTranslate), or your own server. Used only by the 'Custom' service.",
-        ["zh-cn"] = "翻译服务的完整网址，例如 https://api-free.deepl.com/v2/translate（DeepL）、https://translation.googleapis.com/language/translate/v2（Google v2）、http://localhost:5000/translate（LibreTranslate），或你自己的服务。仅在「自定义」服务下使用。",
+        en = "The full URL of the translation service. Ships as DeepL's endpoint, https://api-free.deepl.com/v2/translate; Google v2 is https://translation.googleapis.com/language/translate/v2, LibreTranslate is http://localhost:5000/translate, or point it at your own server. Used only by the 'Custom' service. Every field in this section ships pre-filled with DeepL's parameters, so it is a working DeepL configuration as it stands - paste the key and it runs - and the reference to edit in place for anything else.",
+        ["zh-cn"] = "翻译服务的完整网址。默认已填 DeepL 的接口 https://api-free.deepl.com/v2/translate；Google v2 是 https://translation.googleapis.com/language/translate/v2，LibreTranslate 是 http://localhost:5000/translate，也可以指向你自己的服务。仅在「自定义」服务下使用。本分区所有字段都预填了 DeepL 的参数，因此它本身就是一份可用的 DeepL 配置——填上密钥即可用——同时也可作为改用其他服务时的参照，直接在框里改。",
     },
     custom_key = {
         en = "Custom: key",
         ["zh-cn"] = "自定义：密钥",
     },
     custom_key_description = {
-        en = "The service's key. May be left empty for a self-hosted service that needs none. Substituted wherever {key} appears - in the auth header, the request template or the query template.",
-        ["zh-cn"] = "服务的密钥。自建服务不需要密钥时可留空。它会被填到出现 {key} 的地方——鉴权头、请求参数模板或查询模板。",
+        en = "The service's key. Leave it empty and the API key field above is used instead, so the pre-filled DeepL defaults run without pasting the same key twice. Substituted wherever {key} appears - in the auth header, the request template or the query template.",
+        ["zh-cn"] = "服务的密钥。留空则改用上面的「API 密钥」字段，这样预填的 DeepL 参数不用再粘一次密钥。它会被填到出现 {key} 的地方——鉴权头、请求参数模板或查询模板。",
     },
     custom_auth = {
         en = "Custom: auth header",
         ["zh-cn"] = "自定义：鉴权头",
     },
     custom_auth_description = {
-        en = "The header that carries the key, for services that want it there: 'Authorization: DeepL-Auth-Key {key}' (DeepL), 'Authorization: Bearer {key}', 'x-api-key: {key}'. Empty by default, because the shipped request template passes the key as a parameter instead - use whichever your service documents.",
-        ["zh-cn"] = "把密钥放在请求头里的服务用它：'Authorization: DeepL-Auth-Key {key}'（DeepL）、'Authorization: Bearer {key}'、'x-api-key: {key}'。默认为空，因为内置模板是把密钥当参数传的——按服务文档二选一。",
+        en = "The header that carries the key. Ships as DeepL's own form, 'Authorization: DeepL-Auth-Key {key}'; other services want 'Authorization: Bearer {key}' or 'x-api-key: {key}'. Leave it empty for a service that takes no header at all (LibreTranslate) - the request template below carries no key either way, because DeepL wants it here.",
+        ["zh-cn"] = "把密钥放在请求头里的那一行。默认是 DeepL 的形式 'Authorization: DeepL-Auth-Key {key}'；其他服务可能要 'Authorization: Bearer {key}' 或 'x-api-key: {key}'。完全不需要请求头的服务（如 LibreTranslate）就清空它——下面的请求体模板本身不含密钥，因为 DeepL 要求密钥放这里。",
     },
     custom_method = {
         en = "Custom: request method",
@@ -202,16 +202,16 @@
         ["zh-cn"] = "自定义：请求体模板",
     },
     custom_body_description = {
-        en = "The request parameters, with {text} {source} {target} {key} replaced (JSON-escaped in a JSON body, percent-encoded in a query). Empty = the shipped DeepL-shaped default: text={text}&source_lang={source}&target_lang={target}&key={key}. DeepL itself wants 'text={text}&target_lang={target}' with the key in the auth header; LibreTranslate wants 'q={text}&source={source}&target={target}'.",
-        ["zh-cn"] = "请求参数模板，其中 {text} {source} {target} {key} 会被替换（JSON 体里做 JSON 转义，查询串里做百分号编码）。留空＝内置的 DeepL 形状默认值：text={text}&source_lang={source}&target_lang={target}&key={key}。DeepL 本身用 'text={text}&target_lang={target}' 且密钥放鉴权头；LibreTranslate 用 'q={text}&source={source}&target={target}'。",
+        en = "The request parameters, with {text} {source} {target} {key} replaced (JSON-escaped in a JSON body, percent-encoded in a query). Ships as DeepL's own parameters: text={text}&source_lang={source}&target_lang={target}. Other services differ: LibreTranslate wants q={text}&source={source}&target={target}, Google v2 wants a JSON body with q and target, a Baidu-style service wants q={text}&from={source}&to={target}.",
+        ["zh-cn"] = "请求参数模板，其中 {text} {source} {target} {key} 会被替换（JSON 体里做 JSON 转义，查询串里做百分号编码）。默认就是 DeepL 的参数：text={text}&source_lang={source}&target_lang={target}。其他服务不一样：LibreTranslate 用 q={text}&source={source}&target={target}，Google v2 用含 q 与 target 的 JSON 体，百度一类用 q={text}&from={source}&to={target}。",
     },
     custom_langs = {
         en = "Custom: language codes",
         ["zh-cn"] = "自定义：语言代码映射",
     },
     custom_langs_description = {
-        en = "How your service spells the target language, one 'code=SERVICE_CODE' per entry, separated by ';;' or a literal \n. The mod's codes are the game's (en, zh-cn, zh-tw, pt-br). DeepL wants 'zh-cn=ZH-HANS;; zh-tw=ZH-HANT' (and 'en=EN-US'), Google wants 'zh-tw=zh-TW', Baidu wants 'zh-tw=cht'. Empty = pass the mod's codes through unchanged, which is right for a service that already uses them.",
-        ["zh-cn"] = "你的服务怎么写目标语言，每项 '代码=服务代码'，用 ';;' 或字面量 \n 分隔。本 mod 用的是游戏的语言码（en、zh-cn、zh-tw、pt-br）。DeepL 要 'zh-cn=ZH-HANS;; zh-tw=ZH-HANT'（以及 'en=EN-US'），Google 要 'zh-tw=zh-TW'，百度要 'zh-tw=cht'。留空＝原样传 mod 的语言码，适用于本来就使用这套代码的服务。",
+        en = "How your service spells the languages, one 'code=SERVICE_CODE' per entry, separated by ';;' or a literal \n. The mod's codes are the game's (en, zh-cn, zh-tw, pt-br). Ships with DeepL's spelling of all of them (zh-cn=ZH-HANS;; zh-tw=ZH-HANT;; pt-br=PT-BR ...). Careful: the same mapping is used for the source and the target, and DeepL refuses the regional variants as a *source* language - 'en=EN-US' makes every request fail with 'source_lang not supported', so the English entry has to be 'en=EN'. Google wants 'zh-tw=zh-TW', Baidu 'zh-tw=cht'.",
+        ["zh-cn"] = "你的服务怎么写语言，每项 '代码=服务代码'，用 ';;' 或字面量 \n 分隔。本 mod 用的是游戏的语言码（en、zh-cn、zh-tw、pt-br）。默认已填好 DeepL 的全部写法（zh-cn=ZH-HANS;; zh-tw=ZH-HANT;; pt-br=PT-BR……）。注意：同一份映射既当源语言也当目标语言，而 DeepL 不接受带地区后缀的写法作为**源**语言——写成 'en=EN-US' 会让每次请求都以 'source_lang not supported' 失败，所以英语必须是 'en=EN'。Google 要 'zh-tw=zh-TW'，百度要 'zh-tw=cht'。",
     },
     custom_headers = {
         en = "Custom: extra headers",
@@ -269,6 +269,10 @@
         en = "Auto Translate: the custom endpoint answered HTTP %s (server error).",
         ["zh-cn"] = "Auto Translate：自定义接口返回 HTTP %s（服务端错误）。",
     },
+    custom_http_error = {
+        en = "Auto Translate: the custom endpoint rejected the request. %s. Translation is paused - that sentence is the service's own explanation and usually names the exact field.",
+        ["zh-cn"] = "Auto Translate：自定义接口拒绝了请求。%s。翻译已暂停——那句话是服务自己的说明，通常直接指出是哪个参数不对。",
+    },
     custom_unreadable = {
         en = "Auto Translate: the reply from the custom endpoint has no string at the configured response path: %s (Mod Options -> Custom: response path).",
         ["zh-cn"] = "Auto Translate：自定义接口的响应里，在配置的取值路径处没有字符串：%s（模组设置 → 自定义：响应取值路径）。",
@@ -280,7 +284,8 @@
     custom_test_failed = {
         en = "Auto Translate [test]: failed - %s",
         ["zh-cn"] = "Auto Translate【测试】：失败——%s",
-    },    api_custom = {
+    },
+    api_custom = {
         en = "Custom (any HTTP API)",
         ["zh-cn"] = "自定义（任意 HTTP 接口）",
     },

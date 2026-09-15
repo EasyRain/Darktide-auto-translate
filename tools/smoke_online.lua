@@ -1,4 +1,4 @@
-﻿-- smoke_online.lua -- load modules/online.lua outside the game and exercise the
+-- smoke_online.lua -- load modules/online.lua outside the game and exercise the
 -- guards, with LuaJIT (the same runtime the game uses).
 --
 -- Why: a syntax check is not enough. Moving a helper above the `local` it depends on
@@ -727,15 +727,78 @@ check("custom: an empty body is its own problem",
     cu.problem(cu.spec(fake_mod_with({ custom_url = "https://a.example.com/x",
                                        custom_path = "translations.0.text" }))), "custom_body_missing")
 
--- The shipped default is an ordinary translation service: parameters in a form body, the
--- translation under translations.0.text, key as a parameter.
+-- The shipped default is one working configuration, and it is DeepL's: parameters in a form
+-- body, the key in the auth header rather than a parameter, the translation under
+-- translations.0.text.
 local defaults = cu.defaults()
 check("custom: the default body is the DeepL shape",
     defaults.body:find("text={text}", 1, true) ~= nil
+        and defaults.body:find("source_lang={source}", 1, true) ~= nil
         and defaults.body:find("target_lang={target}", 1, true) ~= nil, true)
+check("custom: the default body carries no key (DeepL wants it in the header)",
+    defaults.body:find("{key}", 1, true), nil)
 check("custom: the default path is translations.0.text", defaults.path, "translations.0.text")
 check("custom: the default content type is a form",
     defaults.content_type, "application/x-www-form-urlencoded")
+
+-- The settings file's own default_value entries have to be a *complete* configuration, not
+-- just plausible-looking ones: a field left empty while the module expects it filled is the
+-- failure this catches. auto_translate_data.lua is loaded here with a stubbed get_mod, the
+-- same way DMF loads it.
+do
+    local real_get_mod = get_mod
+    get_mod = function() return { localize = function(_, key) return key end } end
+    local chunk = loadfile(here .. "/../scripts/mods/auto_translate/auto_translate_data.lua")
+    local data = chunk and chunk()
+    get_mod = real_get_mod
+
+    local shipped = {}
+    for _, widget in ipairs((data and data.options and data.options.widgets) or {}) do
+        if widget.setting_id and widget.default_value ~= nil then
+            shipped[widget.setting_id] = widget.default_value
+        end
+    end
+
+    check("settings: the custom URL ships with DeepL's endpoint",
+        shipped.custom_url, "https://api-free.deepl.com/v2/translate")
+    check("settings: the auth header ships as DeepL's",
+        shipped.custom_auth, "Authorization: DeepL-Auth-Key {key}")
+    check("settings: the body ships as DeepL's",
+        shipped.custom_body, "text={text}&source_lang={source}&target_lang={target}")
+    check("settings: the language codes ship in DeepL's spelling",
+        shipped.custom_langs ~= nil
+            and shipped.custom_langs:find("zh-cn=ZH-HANS", 1, true) ~= nil
+            and shipped.custom_langs:find("pt-br=PT-BR", 1, true) ~= nil, true)
+    -- Measured against the live endpoint: en=EN-US is refused as a *source* language
+    -- ("Value for 'source_lang' not supported"), and the mod only ever sends English as the
+    -- source. One mapping serves both positions, so the English entry has to be the base code.
+    check("settings: the language codes avoid the source-only trap (en=EN, not EN-US)",
+        shipped.custom_langs and shipped.custom_langs:find("en=EN-US", 1, true), nil)
+
+    -- The whole point of pre-filled fields: the shipped values, untouched, describe a spec
+    -- the module can actually send.
+    shipped.online_api_key = "key-from-the-settings-above"
+    local shipped_spec = cu.spec(fake_mod_with(shipped))
+    check("settings: the shipped defaults are a usable configuration", cu.problem(shipped_spec), nil)
+    check("settings: and the key lands in the header, not the body",
+        cu.build_headers(shipped_spec, cu.values(shipped_spec, "Ammo", "en", "zh-cn")),
+        "Authorization: DeepL-Auth-Key key-from-the-settings-above\r\n")
+    check("settings: and the body says what DeepL expects",
+        cu.build(shipped_spec, cu.values(shipped_spec, "Ammo", "en", "zh-cn")),
+        "text=Ammo&source_lang=EN&target_lang=ZH-HANS")
+end
+
+-- One key, entered once: an empty 'Custom: key' falls back to the API key, which is what
+-- makes the pre-filled DeepL defaults runnable without pasting the key twice.
+check("custom: an empty key falls back to the API key",
+    cu.spec(fake_mod_with({ custom_url = "https://a.example.com/x",
+                            online_api_key = "from-the-api-field" })).key, "from-the-api-field")
+check("custom: a key of its own wins over the API key",
+    cu.spec(fake_mod_with({ custom_url = "https://a.example.com/x",
+                            custom_key = "own-key",
+                            online_api_key = "from-the-api-field" })).key, "own-key")
+check("custom: with no key anywhere the field stays empty",
+    cu.spec(fake_mod_with({ custom_url = "https://a.example.com/x" })).key, "")
 
 -- Escaping follows the body format, not the method: a form body with a space or an
 -- ampersand in the text must be percent-encoded, or the request says something else.
@@ -787,6 +850,55 @@ check("custom: 404 is named as a URL problem", cu.error_key(404), "custom_not_fo
 check("custom: 429 is named as rate limiting", cu.error_key(429), "custom_rate_limited")
 check("custom: 500 is named as a server error", cu.error_key(500), "custom_server_error")
 check("custom: 400 has no special name", cu.error_key(400), nil)
+
+-- The service's own sentence about a failed request. Measured against the live DeepL
+-- endpoint: a 400 answers "Bad request. Reason: Value for 'source_lang' not supported.",
+-- and the mod used to report the response path instead - naming neither the parameter nor
+-- the value. The reply is the diagnosis; the status code is not.
+local err_buf = ffi.new("char[512]")
+local deepl_error = "{\"message\":\"Bad request. Reason: Value for 'source_lang' not supported.\"}"
+local message_core = {
+    -- Mirrors the real core: 1 means "found" (not a length), and the buffer is NUL-terminated.
+    at_json_string_at = function(body, path, out)
+        local said = body:match('"message"%s*:%s*"(.-)"')
+        if path ~= "message" or not said then
+            return 0
+        end
+        ffi.copy(out, said)
+        return 1
+    end,
+}
+check("custom: the service's own error sentence is read out",
+    cu.error_message(message_core, deepl_error, err_buf, 512, ffi.string),
+    "Bad request. Reason: Value for 'source_lang' not supported.")
+check("custom: a reply with no error sentence yields nothing",
+    cu.error_message({ at_json_string_at = function() return 0 end },
+                     "<html><body>502 Bad Gateway</body></html>", err_buf, 512, ffi.string), nil)
+check("custom: an empty body yields nothing",
+    cu.error_message(message_core, "", err_buf, 512, ffi.string), nil)
+
+-- string_at() is the one place that knows the core's contract: at_json_string_at() answers 1
+-- for "found" - a flag, not a length - and NUL-terminates the buffer. Reading the buffer with
+-- that 1 as a length truncated every custom translation to its first byte, which no parser
+-- test could see because the parsers were right.
+local flag_core = {
+    at_json_string_at = function(body, path, out)
+        if path ~= "translations.0.text" then
+            return 0
+        end
+        ffi.copy(out, "Reload Speed")
+        return 1
+    end,
+}
+check("custom: string_at reads the whole NUL-terminated string",
+    cu.string_at(flag_core, "translations.0.text", '{"translations":[{"text":"Reload Speed"}]}',
+                 err_buf, 512, ffi.string), "Reload Speed")
+check("custom: string_at measures it as a real length",
+    #(cu.string_at(flag_core, "translations.0.text", "{}", err_buf, 512, ffi.string)), 12)
+check("custom: string_at reports a wrong path as nothing",
+    cu.string_at(flag_core, "translations.9.text", "{}", err_buf, 512, ffi.string), nil)
+check("custom: string_at reports an empty body as nothing",
+    cu.string_at(flag_core, "translations.0.text", "", err_buf, 512, ffi.string), nil)
 
 -- ---------------------------------------------------------------------------
 -- The public API: every online.<name> the rest of the mod calls has to exist
