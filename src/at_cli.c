@@ -354,7 +354,8 @@ static int split_url(const char* url, char* host, int host_cap, char* path, int 
     return 1;
 }
 
-// Runs one GET and hands back the body. Returns 0 on success.
+// Runs one GET and hands back the body. Returns 0 when the request completed with
+// a 2xx status, non-zero otherwise.
 static int fetch(const char* host, const char* path, char* body_out, int cap, int* out_len)
 {
     int id = at_http_get(host, path);
@@ -368,25 +369,27 @@ static int fetch(const char* host, const char* path, char* body_out, int cap, in
     // 60 s ceiling; results are delivered by the worker thread.
     while (spins < 600) {
         int got_id = 0;
-        int status = 0;
+        int result = 0;
+        int http_code = 0;
         int len = 0;
         unsigned long win_error = 0;
-        int rc = at_http_poll(&got_id, &status, body_out, cap, &len, &win_error);
+        int rc = at_http_poll(&got_id, &result, &http_code, body_out, cap, &len, &win_error);
 
         if (rc < 0) {
             fprintf(stderr, "error: poll failed\n");
             return 3;
         }
         if (rc == 1) {
-            if (status != 0) {
-                printf("request id : %d\nstatus     : %d\n", got_id, status);
+            // transport failure
+            if (result != 0) {
+                printf("request id : %d\ntransport  : %d\n", got_id, result);
                 if (win_error) {
                     printf("win error  : %lu (%s)\n", win_error, at_win_error_text(win_error));
                 }
                 if (at_error() && at_error()[0]) {
                     printf("last error : %s\n", at_error());
                 }
-                // 12029 = cannot connect: almost always the proxy, not the code
+                // 12029 = cannot connect: almost always the proxy or a blocked host
                 if (win_error == 12029 || win_error == 12007) {
                     printf("proxy      : %s\n", at_proxy_in_use());
                     if (at_proxy_hint() && at_proxy_hint()[0]) {
@@ -398,6 +401,19 @@ static int fetch(const char* host, const char* path, char* body_out, int cap, in
                 }
                 return 3;
             }
+
+            // completed: the HTTP status decides
+            if (http_code < 200 || http_code >= 300) {
+                printf("request id : %d\nhttp status: %d\n", got_id, http_code);
+                if (len > 0) {
+                    int shown = len > 300 ? 300 : len;
+                    printf("--- body (first %d bytes) ---\n", shown);
+                    fwrite(body_out, 1, (size_t)shown, stdout);
+                    printf("\n");
+                }
+                return 3;
+            }
+
             if (out_len) {
                 *out_len = len;
             }

@@ -1,9 +1,10 @@
 // at_core.h — Auto Translate native core (HTTP + translation entry points)
 //
 // Async HTTP GET on a background thread so the game thread never blocks.
-//   at_http_get(host, path)                  -> request id (>0) or 0 on failure
-//   at_http_poll(&id, &status, buf, cap, &len, &win_error) -> 1 = a result was popped, 0 = none
-//                                                 status: 0 ok, >0 http code, <0 network error
+//   at_http_get(host, path) -> request id (>0) or 0 on failure
+//   at_http_poll(...)       -> 1 = a result was handed back, 0 = none yet, <0 = internal error
+// See the note on at_http_poll below: the transport outcome and the HTTP status
+// are separate values on purpose.
 #ifndef AT_CORE_H
 #define AT_CORE_H
 
@@ -19,12 +20,21 @@ AT_API const char* at_version(void);
 
 // Async HTTP GET (background thread).
 //
-// The host may carry a scheme prefix ("https://" is the default and what every
-// production call uses; "http://" exists so local endpoints can be smoke tested).
-// On failure the WinHTTP/Win32 code of the call that broke is handed back through
-// out_win_error, so a bare negative status is not a dead end.
+// `host` may be "name", "name:port", "scheme://name[:port]" or "[v6]:port"; the
+// port must be part of this string or omitted (never passed to WinHttpConnect
+// separately by the caller). "https://" is the default and what every production
+// call uses; "http://" exists so local endpoints can be smoke tested.
+//
+// at_http_poll returns 1 when it handed back a result, 0 when there is none yet,
+// <0 on an internal error. The two outcomes of a request are reported separately
+// and deliberately:
+//     out_result    0  = the request completed; read out_http_code
+//                   <0 = transport failure (-10..-15), and out_win_error is set
+//     out_http_code    the HTTP status (200, 404, ...) when out_result == 0
+// Keeping them apart matters: a single value where 0 means "no error" and 200
+// means "success" is how callers end up treating every 200 as a failure.
 AT_API int  at_http_get(const char* host_utf8, const char* path_utf8);
-AT_API int  at_http_poll(int* out_id, int* out_status, char* out_body, int out_cap,
+AT_API int  at_http_poll(int* out_id, int* out_result, int* out_http_code, char* out_body, int out_cap,
                          int* out_len, unsigned long* out_win_error);
 AT_API int  at_http_pending(void);
 

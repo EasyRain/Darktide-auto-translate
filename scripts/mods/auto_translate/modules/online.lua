@@ -40,7 +40,7 @@ int at_available(void);
 const char* at_error(void);
 const char* at_version(void);
 int at_http_get(const char*, const char*);
-int at_http_poll(int*, int*, char*, int, int*, unsigned long*);
+int at_http_poll(int*, int*, int*, char*, int, int*, unsigned long*);
 int at_http_pending(void);
 const char* at_win_error_text(unsigned long);
 int at_set_proxy(const char*);
@@ -138,7 +138,7 @@ local SMALL_CAP = 8192
 local PATH_CAP = 16384
 
 local ffi_ready = nil
-local body_buf, host_buf, path_buf, out_buf, id_buf, status_buf, len_buf, win_buf
+local body_buf, host_buf, path_buf, out_buf, id_buf, result_buf, code_buf, len_buf, win_buf
 
 local function ensure_buffers()
     if ffi_ready ~= nil then
@@ -154,7 +154,8 @@ local function ensure_buffers()
     path_buf = ffi.new("char[?]", PATH_CAP)
     out_buf = ffi.new("char[?]", SMALL_CAP)
     id_buf = ffi.new("int[1]")
-    status_buf = ffi.new("int[1]")
+    result_buf = ffi.new("int[1]")
+    code_buf = ffi.new("int[1]")
     len_buf = ffi.new("int[1]")
     win_buf = ffi.new("unsigned long[1]")
     ffi_ready = true
@@ -730,14 +731,15 @@ function M.update(mod, dt)
 
     -- 1. collect a finished response
     if inflight then
-        local rc = core.at_http_poll(id_buf, status_buf, body_buf, BODY_CAP, len_buf, win_buf)
+        local rc = core.at_http_poll(id_buf, result_buf, code_buf, body_buf, BODY_CAP, len_buf, win_buf)
 
         if rc == 1 then
             local req = inflight
             inflight = nil
-            local status = status_buf[0]
+            local result = result_buf[0]   -- 0 = completed, <0 = transport failure
+            local http_code = code_buf[0]  -- only meaningful when result == 0
 
-            if status == 0 then
+            if result == 0 and http_code >= 200 and http_code < 300 then
                 local len = len_buf[0]
                 local body = len > 0 and ffi.string(body_buf, len) or ""
                 local ok, why, transport = handle_response(mod, req, body)
@@ -746,12 +748,14 @@ function M.update(mod, dt)
                 else
                     fail_item(mod, req, why, 0, transport)
                 end
-            elseif status < 0 then
-                local win = win_buf[0]
-                local text = win ~= 0 and ffi.string(core.at_win_error_text(win)) or "network error"
-                fail_item(mod, req, string.format("network error %d (%s)", status, text), 0, true)
+            elseif result == 0 then
+                -- completed, but the service answered with an error status
+                fail_item(mod, req, string.format("HTTP %d", http_code), http_code, true)
             else
-                fail_item(mod, req, string.format("HTTP %d", status), status, true)
+                local win = win_buf[0]
+                local text = win ~= 0 and cstr(core.at_win_error_text(win)) or nil
+                fail_item(mod, req,
+                    string.format("network error %d (%s)", result, text or "no detail"), 0, true)
             end
         elseif rc < 0 then
             local req = inflight

@@ -27,7 +27,8 @@ typedef struct Job {
 
 typedef struct Result {
     int id;
-    int status;
+    int status;      // 0 = the request completed, <0 = transport failure (-10..-15)
+    int http_code;   // meaningful only when status == 0 (200, 404, ...)
     char* body;
     int len;
     DWORD win_error;
@@ -282,7 +283,7 @@ static char* dup_str(const char* s)
     return out;
 }
 
-static void push_result(int id, int status, char* body, int len, DWORD win_error)
+static void push_result(int id, int status, int http_code, char* body, int len, DWORD win_error)
 {
     Result* r = (Result*)malloc(sizeof(Result));
     if (!r) {
@@ -291,6 +292,7 @@ static void push_result(int id, int status, char* body, int len, DWORD win_error
     }
     r->id = id;
     r->status = status;
+    r->http_code = http_code;
     r->body = body;
     r->len = len;
     r->win_error = win_error;
@@ -352,7 +354,12 @@ static char* read_body(HINTERNET request, int* out_len)
     return buffer;
 }
 
-static void do_http_get(const char* host, const char* path, int* out_status, char** out_body, int* out_len)
+// `out_status` is 0 when the request completed and negative on a transport
+// failure; `out_http_code` carries the HTTP status in the completed case. They are
+// separate on purpose: one value meaning both "no error" and "the 200 we got" is
+// exactly how a caller ends up treating every successful response as a failure.
+static void do_http_get(const char* host, const char* path, int* out_status, int* out_http_code,
+                        char** out_body, int* out_len)
 {
     HINTERNET session = NULL;
     HINTERNET connect = NULL;
@@ -360,16 +367,18 @@ static void do_http_get(const char* host, const char* path, int* out_status, cha
     wchar_t whost[256];
     wchar_t wpath[2048];
     wchar_t headers[256];
+    char hbuf[256];
     INTERNET_PORT port = INTERNET_DEFAULT_HTTPS_PORT;
     DWORD flags = WINHTTP_FLAG_SECURE;
     const char* bare_host = host;
-    const char* scheme_note = "https";
     int status = 0;
+    int http_code = 0;
     int failure = 0;
     char* body = NULL;
     int len = 0;
 
     *out_status = -1;
+    *out_http_code = 0;
     *out_body = NULL;
     *out_len = 0;
     g_win_error = 0;
@@ -381,16 +390,54 @@ static void do_http_get(const char* host, const char* path, int* out_status, cha
         bare_host = host + 7;
         port = INTERNET_DEFAULT_HTTP_PORT;
         flags = 0;
-        scheme_note = "http";
     } else if (_strnicmp(host, "https://", 8) == 0) {
         bare_host = host + 8;
     }
-    (void)scheme_note;
 
-    if (MultiByteToWideChar(CP_UTF8, 0, bare_host, -1, whost, 256) <= 0) {
-        *out_status = -2;
-        return;
+    // An explicit ":port" (or "[v6]:port") overrides the scheme default. The port
+    // must be removed from the host string: WinHttpConnect takes the port as its
+    // own argument and would otherwise try to resolve "host:port" as a name.
+    // hbuf lives in the function scope because bare_host points into it.
+    {
+        size_t n = strlen(bare_host);
+        char* colon = NULL;
+
+        if (n >= sizeof(hbuf)) {
+            *out_status = -2;
+            return;
+        }
+        memcpy(hbuf, bare_host, n + 1);
+
+        if (hbuf[0] == '[') {
+            char* close = strchr(hbuf, ']');
+            if (close) {
+                colon = (close[1] == ':') ? close + 1 : NULL;
+                if (colon) {
+                    *close = 0; // drop the ']' so only the address remains
+                }
+            }
+        } else {
+            colon = strrchr(hbuf, ':');
+        }
+
+        if (colon) {
+            long parsed = strtol(colon + 1, NULL, 10);
+            if (parsed > 0 && parsed <= 65535) {
+                port = (INTERNET_PORT)parsed;
+                *colon = 0;
+            } else {
+                *out_status = -4; // malformed port
+                return;
+            }
+        }
+        bare_host = hbuf;
+
+        if (MultiByteToWideChar(CP_UTF8, 0, bare_host, -1, whost, 256) <= 0) {
+            *out_status = -2;
+            return;
+        }
     }
+
     if (MultiByteToWideChar(CP_UTF8, 0, path, -1, wpath, 2048) <= 0) {
         *out_status = -3;
         return;
@@ -447,7 +494,7 @@ static void do_http_get(const char* host, const char* path, int* out_status, cha
         DWORD size = sizeof(code);
         if (WinHttpQueryHeaders(request, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
                                 WINHTTP_HEADER_NAME_BY_INDEX, &code, &size, WINHTTP_NO_HEADER_INDEX)) {
-            status = (int)code;
+            http_code = (int)code;
         } else {
             failure = fail_with(-15);
             goto done;
@@ -468,7 +515,8 @@ done:
     }
 
     // never let a later assignment hide an earlier failure
-    *out_status = failure ? failure : status;
+    *out_status = failure ? failure : 0;
+    *out_http_code = failure ? 0 : http_code;
     *out_body = body;
     *out_len = len;
 }
@@ -502,14 +550,15 @@ static DWORD WINAPI worker_main(LPVOID param)
 
         {
             int status = 0;
+            int http_code = 0;
             char* body = NULL;
             int len = 0;
             DWORD win_error = 0;
-            do_http_get(job->host, job->path, &status, &body, &len);
+            do_http_get(job->host, job->path, &status, &http_code, &body, &len);
             if (status < 0) {
                 win_error = last_win_error();
             }
-            push_result(job->id, status, body, len, win_error);
+            push_result(job->id, status, http_code, body, len, win_error);
         }
 
         free(job->host);
@@ -620,8 +669,8 @@ int at_http_get(const char* host_utf8, const char* path_utf8)
     return id;
 }
 
-int at_http_poll(int* out_id, int* out_status, char* out_body, int out_cap, int* out_len,
-                 unsigned long* out_win_error)
+int at_http_poll(int* out_id, int* out_result, int* out_http_code, char* out_body, int out_cap,
+                 int* out_len, unsigned long* out_win_error)
 {
     Result* r = NULL;
 
@@ -646,8 +695,11 @@ int at_http_poll(int* out_id, int* out_status, char* out_body, int out_cap, int*
     if (out_id) {
         *out_id = r->id;
     }
-    if (out_status) {
-        *out_status = r->status;
+    if (out_result) {
+        *out_result = r->status;
+    }
+    if (out_http_code) {
+        *out_http_code = r->http_code;
     }
     if (out_len) {
         *out_len = r->len;
