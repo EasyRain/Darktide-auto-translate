@@ -2,3 +2,10 @@
 *.tmp
 *.bak
 models/
+
+# native build output (build.bat regenerates it)
+bin/
+*.obj
+*.exp
+*.lib
+*.pdb

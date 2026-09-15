@@ -14,7 +14,7 @@ mod files are never modified. Translations are cached locally in editable text f
 1. On `on_all_mods_loaded`, DMF's registry (`dmf.mods`) is enumerated.
 2. For each mod, its localization file is read (per the `mod_localization` field in its
    `.mod` file) and every key without a `zh-cn` entry is collected.
-3. Translations are looked up in the local library (`translations/<modid>.lua`).
+3. Translations are looked up in the local library (`translations/<language>/<modid>.lua`).
 4. The merged table is written back into DMF's in-memory registry via
    `dmf:initialize_mod_localization()`. **No file of the translated mod is touched.**
 5. Keys that still have no translation are handed to the selected engine (not implemented yet).
@@ -92,6 +92,50 @@ return {
 * Missing languages are welcome: add them as reliable sources appear (official localisation mods,
   localised wiki pages).
 * Use **Test glossary** in the options to see masking/restoring in the log.
+
+## Engines and language support
+
+The free online tier is a **list of providers**, not one service, and each provider is only used
+for languages it can actually produce.
+
+* **MyMemory always answers in Traditional Chinese**, even when the request asks for Simplified.
+  This is a documented MyMemory limitation (confirmed by the Lingua Imperialis author), not a bug
+  in this mod. So MyMemory is never used for a `zh-cn` target: nothing is written rather than
+  Traditional text being stored as Simplified. **For Simplified Chinese use the local model or an
+  official API key (e.g. Google), or set the target language to `zh-tw`.**
+* If the free tier cannot produce the requested language and an API key is configured,
+  `Automatic` prefers the official API over the free tier.
+* Repeated failures trip a circuit breaker after 3 attempts in a row (bad key, service down);
+  translation pauses and tells you instead of retrying forever.
+
+## Network
+
+All online engines use **WinHTTP**, which on Windows keeps its **own proxy configuration** — it does
+not read the "system proxy" that most VPN clients set for browsers. Consequences:
+
+* A VPN in **TUN / virtual-adapter mode works out of the box** (traffic is routed at the network
+  layer, so WinHTTP never needs to know about the proxy).
+* A VPN in **system-proxy-only mode will not be used by this mod.** Either switch it to TUN mode, or
+  point WinHTTP at it once from an elevated prompt:
+  `netsh winhttp set proxy 127.0.0.1:7890` (and `netsh winhttp reset proxy` to undo).
+* Plaintext `http://` is supported (used for local testing), but every real endpoint is `https://`.
+
+## Testing without launching the game
+
+`src/at_core.c` builds a native core (`bin/at_core.dll`) plus a command line front end
+(`bin/at_cli.exe`), so the networking/translation core can be exercised on its own. Build both with
+`build.bat` (Visual Studio 2022 + Windows SDK), then:
+
+```
+bin\at_cli.exe info                             # core version, model status, last error
+bin\at_cli.exe http https://api.github.com/zen   # GET, prints status / bytes / body
+bin\at_cli.exe http http://example.com/          # plaintext is fine for local endpoints
+bin\at_cli.exe translate ja "Keystone"           # one translation through the core API
+```
+
+Exit codes: `0` ok, `1` usage error, `2` core unavailable, `3` request or translation failed.
+A failed request prints the WinHTTP/Win32 code **and its decoded message**, which is normally all
+you need to tell "no network" from "TLS problem" from "wrong API key".
 
 ## Roadmap
 

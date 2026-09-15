@@ -90,6 +90,12 @@ return {
                 function_name = "test_glossary",
             },
             {
+                setting_id = "test_engines",
+                type = "button",
+                button_text = "test_engines",
+                function_name = "test_engines",
+            },
+            {
                 setting_id = "debug_logging",
                 type = "checkbox",
                 default_value = false,

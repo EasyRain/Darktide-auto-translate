@@ -87,6 +87,14 @@ return {
         en = "Test glossary",
         ["zh-cn"] = "术语表自检",
     },
+    test_engines = {
+        en = "Test engine routing",
+        ["zh-cn"] = "自检引擎路由",
+    },
+    test_engines_description = {
+        en = "Logs, for every target language, which engine and which online providers would be used. Shows why a language cannot be translated by the free service.",
+        ["zh-cn"] = "在日志中列出每种目标语言会用到哪个引擎、哪些在线服务商，并说明免费服务为何无法翻译某些语言。",
+    },
     -- NOTE for all term_export_* keys: placeholder order is always %d first, then %s.
     term_export_done = {
         en = "Auto Translate: exported %d term(s) for '%s'.",
@@ -155,6 +163,11 @@ return {
     engine_paused_failures = {
         en = "Auto Translate: translation paused after 3 failed requests in a row. Check your API key or connection, then change a setting or press 'Reload translation files' to resume.",
         ["zh-cn"] = "Auto Translate：连续 3 次请求失败，翻译已暂停。请检查 API 密钥或网络，然后修改设置或点「重新加载译文」以恢复。",
+    },
+    -- Arg order: engine, language it would actually return, requested language, requested language.
+    engine_language_gap = {
+        en = "Auto Translate: the '%s' engine would answer in '%s' and cannot be used for '%s'. Nothing was saved. Use the offline model or an API key, or set the target language to '%s'.",
+        ["zh-cn"] = "Auto Translate：「%s」引擎只会返回「%s」，无法用于「%s」，因此没有保存任何内容。请改用本地模型或填写密钥的正式 API，或把目标语言设为「%s」。",
     },
     download_model_small = {
         en = "Download small model",

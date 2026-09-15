@@ -69,6 +69,71 @@ function M.is_local_engine(name)
 end
 
 -- ---------------------------------------------------------------------------
+-- Online providers and what they can actually produce.
+--
+-- The "free" engine is a list of providers, tried in this order. MyMemory always
+-- answers in Traditional Chinese even when the request asks for zh-CN — the
+-- Lingua Imperialis author confirmed this is a MyMemory limitation, not a caller
+-- bug ("If you want to translate your outgoing messages to Chinese Simplified,
+-- use either Google Translate or the offline NLLB").
+--
+-- So a provider that returns the wrong script is removed for that language
+-- before any request is made. We would rather leave a key pending than store
+-- Traditional text in the zh-cn files: a wrong-but-present translation is worse
+-- than a missing one, because it is silently shipped to the player.
+-- ---------------------------------------------------------------------------
+M.FREE_PROVIDERS = { "google_gtx", "mymemory" }
+
+-- provider -> { requested language = language it returns instead }
+local PROVIDER_GAPS = {
+    mymemory = {
+        ["zh-cn"] = "zh-tw",
+    },
+}
+
+-- Language a provider cannot produce, or nil when it is fine.
+function M.provider_gap(provider, lang)
+    local gaps = PROVIDER_GAPS[provider]
+    if not gaps then
+        return nil
+    end
+    return gaps[lang]
+end
+
+-- Providers this engine may use for `lang`, in preference order. A provider that
+-- would answer in the wrong language for `lang` is filtered out here, which is
+-- the single enforcement point for the rule above: if this list runs empty there
+-- is simply no way to translate into `lang` with this engine.
+function M.providers_for(engine, lang)
+    local out = {}
+    if engine ~= "online_free" then
+        return out
+    end
+    for _, provider in ipairs(M.FREE_PROVIDERS) do
+        if not M.provider_gap(provider, lang) then
+            out[#out + 1] = provider
+        end
+    end
+    return out
+end
+
+-- Reason the engine cannot serve `lang`, or nil when it can.
+function M.gap(engine, lang)
+    if engine ~= "online_free" or lang == nil then
+        return nil
+    end
+    if #M.providers_for(engine, lang) > 0 then
+        return nil
+    end
+    return {
+        engine = engine,
+        target = lang,
+        -- the language it would hand back instead, if any provider is known to differ
+        actual = M.provider_gap("mymemory", lang),
+    }
+end
+
+-- ---------------------------------------------------------------------------
 -- Circuit breaker for translation engines.
 --
 -- A bad API key (or an unreachable service) would otherwise fail on every single
@@ -135,20 +200,31 @@ function M.note_success()
     end
 end
 
-function M.resolve(mod)
+function M.resolve(mod, lang)
     local wanted = mod:get("engine") or "auto"
-    if wanted == "auto" then
-        -- both models downloaded -> prefer the one with more parameters
-        if M.model_available("local_large") then
-            return "local_large"
-        end
-        if M.model_available("local_small") then
-            return "local_small"
-        end
-        -- no local model available -> fall back to the free online service
-        return "online_free"
+    if wanted ~= "auto" then
+        return wanted
     end
-    return wanted
+
+    -- both models downloaded -> prefer the one with more parameters
+    if M.model_available("local_large") then
+        return "local_large"
+    end
+    if M.model_available("local_small") then
+        return "local_small"
+    end
+
+    -- No local model. If the free service cannot produce this language at all,
+    -- a configured API key is the only way to get a correct result, so it wins
+    -- over a free provider that would answer in the wrong language.
+    if M.gap("online_free", lang) then
+        local key = mod:get("online_api_key")
+        if type(key) == "string" and key ~= "" then
+            return "online_api"
+        end
+    end
+
+    return "online_free"
 end
 
 function M.is_implemented(name)
@@ -158,11 +234,19 @@ end
 
 -- Placeholder runner: reports what would be translated.
 function M.run(mod, report, lang)
-    local engine = M.resolve(mod)
+    local engine = M.resolve(mod, lang)
     local pending = report.stats.pending
 
     if pending == 0 then
         util.info(mod, "nothing to translate (engine: %s, target: %s)", engine, tostring(lang))
+        return
+    end
+
+    -- Guard as well as report: callers must not be able to reach a request that
+    -- would come back in the wrong language.
+    local gap = M.gap(engine, lang)
+    if gap then
+        util.warn(mod, "engine '%s' has no provider for '%s' (would return '%s')", engine, tostring(lang), tostring(gap.actual))
         return
     end
 

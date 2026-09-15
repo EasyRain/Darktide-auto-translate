@@ -88,7 +88,7 @@ install_hook()
 
 -- Pauses translation and tells the player when the selected engine is not usable
 -- yet: tripped circuit breaker, missing local model, or missing API key.
-local function check_engine_settings()
+local function check_engine_settings(lang)
     -- tripped circuit breaker: stop hammering a failing service
     if engines.is_paused() then
         local _, _, reason = engines.failure_state()
@@ -96,12 +96,27 @@ local function check_engine_settings()
         return false
     end
 
-    local engine = engines.resolve(mod)
+    local engine = engines.resolve(mod, lang)
 
     -- local model selected but its files are not downloaded yet
     if engines.is_local_engine(engine) and not engines.model_available(engine) then
         util.warn(mod, "engine '%s' is selected but its model is not downloaded", engine)
         local message = mod:localize("model_missing")
+        if type(mod.notify) == "function" then
+            pcall(mod.notify, mod, message)
+        end
+        if type(mod.echo) == "function" then
+            pcall(mod.echo, mod, message)
+        end
+        return false
+    end
+
+    -- The engine has no provider that can produce this language. Storing the
+    -- wrong script would be worse than storing nothing, so refuse and say why.
+    local gap = engines.gap(engine, lang)
+    if gap then
+        util.warn(mod, "engine '%s' cannot produce '%s' (would return '%s'); nothing will be saved", engine, tostring(lang), tostring(gap.actual))
+        local message = mod:localize("engine_language_gap", engine, tostring(gap.actual), tostring(lang), tostring(gap.actual))
         if type(mod.notify) == "function" then
             pcall(mod.notify, mod, message)
         end
@@ -244,6 +259,34 @@ function mod.test_glossary()
     util.info(mod, "  restored: %s  (missing placeholders: %d)", restored, missing)
     if mod.echo then
         pcall(mod.echo, mod, string.format("[%s] %s", lang, restored))
+    end
+end
+
+-- Mod options: "Test engine routing" — shows, per target language, which engine
+-- and which online providers would actually be used. Makes the "MyMemory only
+-- returns Traditional" rule visible without reading the code or starting a
+-- translation run.
+function mod.test_engines()
+    local selected = mod:get("engine") or "auto"
+    local has_key = type(mod:get("online_api_key")) == "string" and mod:get("online_api_key") ~= ""
+
+    util.info(mod, "engine routing test (setting: %s, api key: %s):", selected, has_key and "set" or "none")
+    for _, lang in ipairs(util.LANGUAGES) do
+        local engine = engines.resolve(mod, lang)
+        local providers = engines.providers_for(engine, lang)
+        local gap = engines.gap(engine, lang)
+
+        if gap then
+            util.info(mod, "  %-6s -> %s  [NO PROVIDER: would return '%s']", lang, engine, tostring(gap.actual))
+        elseif #providers > 0 then
+            util.info(mod, "  %-6s -> %s  [%s]", lang, engine, table.concat(providers, ", "))
+        else
+            util.info(mod, "  %-6s -> %s", lang, engine)
+        end
+    end
+
+    if mod.echo then
+        pcall(mod.echo, mod, string.format("engine: %s (see log for the per-language table)", engines.resolve(mod, current_lang())))
     end
 end
 
