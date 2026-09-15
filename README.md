@@ -59,6 +59,9 @@ return {
   entries whose source text changed, are queued for machine translation.
 * When a hand written entry goes out of date, the fresh translation is stored and the old text is
   kept next to it as `zh_prev`, so nothing is lost.
+* Once **any** machine translation is stored in the file (a new key, or a stale entry being
+  refreshed), the file is no longer purely hand written and the `manual` flag is **cleared
+  automatically**. Add `manual = true` back by hand to protect it again.
 * `en` / `hash` are filled in automatically on the next run (they detect source changes).
 * Delete an entry (or the whole file) to have it translated again.
 

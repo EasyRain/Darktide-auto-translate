@@ -168,6 +168,11 @@ end
 -- When the source hash changed the hand written translation is out of date, so the
 -- new translation is accepted; the old text is kept in `zh_prev` so nothing is lost.
 -- Missing bookkeeping (en/hash) is always filled in.
+--
+-- As soon as a machine translation is actually stored (new key, or a stale entry
+-- being refreshed) the file is no longer purely hand written, so the file level
+-- `manual` flag is cleared automatically. Re-adding `manual = true` by hand
+-- protects the file again.
 function M.set_entry(data, key, en, hash, zh, src, ts)
     data = normalize(data)
     local prev = data.entries[key]
@@ -177,6 +182,7 @@ function M.set_entry(data, key, en, hash, zh, src, ts)
         local stale = type(prev.hash) == "string" and prev.hash ~= "" and prev.hash ~= hash
 
         if protected and not stale then
+            -- bookkeeping only: the translation itself is untouched
             if (prev.en == nil or prev.en == "") and en then
                 prev.en = en
             end
@@ -196,6 +202,11 @@ function M.set_entry(data, key, en, hash, zh, src, ts)
         prev.zh = zh
         prev.src = src or prev.src or "local"
         prev.ts = ts or now()
+
+        if data.manual == true then
+            data.manual = false
+            data.manual_cleared = true
+        end
         return true
     end
 
@@ -206,6 +217,11 @@ function M.set_entry(data, key, en, hash, zh, src, ts)
         src = src or "local",
         ts = ts or now(),
     }
+
+    if data.manual == true then
+        data.manual = false
+        data.manual_cleared = true
+    end
     return true
 end
 

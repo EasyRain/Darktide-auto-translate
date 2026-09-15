@@ -75,6 +75,10 @@ end
 function M.flush(mod)
     local saved = 0
     for name, data in pairs(dirty) do
+        if data.manual_cleared then
+            util.info(mod, "%s: machine translations were added, 'manual' flag cleared (add manual = true back to protect hand written text)", name)
+            data.manual_cleared = nil
+        end
         local ok = store.save(name, data)
         if ok then
             saved = saved + 1
