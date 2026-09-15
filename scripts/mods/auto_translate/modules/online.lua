@@ -43,6 +43,9 @@ int at_http_get(const char*, const char*);
 int at_http_poll(int*, int*, char*, int, int*, unsigned long*);
 int at_http_pending(void);
 const char* at_win_error_text(unsigned long);
+int at_set_proxy(const char*);
+const char* at_proxy_in_use(void);
+const char* at_proxy_hint(void);
 int at_online_provider_known(const char*);
 int at_online_needs_key(const char*);
 int at_online_host(const char*, char*, int);
@@ -51,6 +54,20 @@ int at_online_parse(const char*, const char*, char*, int);
 const char* at_online_error(void);
 int at_online_lang_code(const char*, char*, int);
 ]]
+
+-- Reads a C string safely: a NULL pointer is cdata (truthy!) in LuaJIT, so a
+-- plain nil check is not enough.
+local function cstr(ptr)
+    local ffi = Mods and Mods.lua and Mods.lua.ffi
+    if not (ffi and ptr) then
+        return nil
+    end
+    local ok, s = pcall(ffi.string, ptr)
+    if ok and type(s) == "string" then
+        return s
+    end
+    return nil
+end
 
 -- Loads the DLL once. Returns the library handle, or nil plus a reason.
 function M.load_core(mod)
@@ -305,6 +322,56 @@ function M.forget_cache()
 end
 
 -- ---------------------------------------------------------------------------
+-- Provider health
+--
+-- Some providers are simply unreachable from some networks (Google is blocked in
+-- mainland China, so google_gtx fails on every single key while mymemory works
+-- fine). Retrying a dead provider for every queued key would double the runtime
+-- and hide the real problem, so a provider that fails to connect repeatedly is
+-- dropped for the rest of the session and the log says so once.
+-- ---------------------------------------------------------------------------
+local PROVIDER_DISABLE_AFTER = 3
+
+local provider_failures = {}
+local disabled_providers = {}
+
+local function note_provider_transport_failure(mod, name, reason)
+    provider_failures[name] = (provider_failures[name] or 0) + 1
+    if provider_failures[name] >= PROVIDER_DISABLE_AFTER and not disabled_providers[name] then
+        disabled_providers[name] = reason or "unreachable"
+        util.warn(mod, "provider '%s' is unreachable (%s); skipping it for the rest of this session",
+            name, tostring(reason))
+        if name == "google_gtx" then
+            local hint = core and cstr(core.at_proxy_hint()) or nil
+            if hint and hint ~= "" then
+                util.warn(mod, "%s", hint)
+            end
+        end
+    end
+end
+
+local function note_provider_success(name)
+    if (provider_failures[name] or 0) > 0 then
+        provider_failures[name] = 0
+    end
+end
+
+function M.provider_health()
+    return disabled_providers, provider_failures
+end
+
+-- The providers of an item, minus the ones this session has given up on.
+local function usable_providers(list)
+    local out = {}
+    for _, name in ipairs(list) do
+        if not disabled_providers[name] then
+            out[#out + 1] = name
+        end
+    end
+    return out
+end
+
+-- ---------------------------------------------------------------------------
 -- Pacing
 -- ---------------------------------------------------------------------------
 local elapsed = 0
@@ -388,6 +455,26 @@ function M.start(mod, report, lang)
         return false
     end
 
+    -- Proxy: an address typed in the mod options wins, otherwise the Windows
+    -- setting is used when it is switched on. WinHTTP reads neither by itself.
+    local proxy = mod:get("proxy")
+    if type(proxy) ~= "string" then
+        proxy = ""
+    end
+    core.at_set_proxy(proxy)
+    util.info(mod, "proxy: %s", tostring(cstr(core.at_proxy_in_use())))
+    local hint = cstr(core.at_proxy_hint())
+    if hint and hint ~= "" then
+        util.warn(mod, "%s", hint)
+    end
+
+    -- drop providers this session already found to be unreachable
+    providers = usable_providers(providers)
+    if #providers == 0 then
+        util.warn(mod, "every online provider for '%s' has been unreachable this session", tostring(lang))
+        return false
+    end
+
     local queued, skipped = 0, 0
 
     for _, entry in ipairs(report.mods) do
@@ -467,9 +554,19 @@ local function dispatch(mod)
         return false
     end
 
-    local provider = item.providers[item.provider_index or 1]
+    local provider = nil
+    for i = item.provider_index or 1, #item.providers do
+        if not disabled_providers[item.providers[i]] then
+            provider = item.providers[i]
+            item.provider_index = i
+            break
+        end
+    end
+
     if not provider then
-        M.state.failed = M.state.failed + 1
+        -- every provider this language has was ruled out this session
+        M.state.refused = M.state.refused + 1
+        M.state.last_error = "no usable provider left"
         return false
     end
     M.state.provider = provider
@@ -562,8 +659,8 @@ end
 
 -- Retries the current item on the next provider, or gives up on it.
 -- `transport` marks a genuine engine problem (network/HTTP), which is what the
--- circuit breaker counts; a refused translation is a content problem and must not
--- pause the engine.
+-- provider health tracker and the circuit breaker count; a refused translation is
+-- a content problem and must not pause the engine.
 local function fail_item(mod, req, reason, http_status, transport)
     local item = req.item
 
@@ -576,10 +673,27 @@ local function fail_item(mod, req, reason, http_status, transport)
         return
     end
 
-    item.provider_index = (item.provider_index or 1) + 1
-    if item.providers[item.provider_index] then
+    if transport then
+        note_provider_transport_failure(mod, req.provider, reason)
+    else
+        note_provider_success(req.provider)
+    end
+
+    -- advance to the next provider that this session has not given up on
+    local next_index = nil
+    local index = item.provider_index or 1
+    while item.providers[index + 1] do
+        index = index + 1
+        if not disabled_providers[item.providers[index]] then
+            next_index = index
+            break
+        end
+    end
+
+    if next_index then
+        item.provider_index = next_index
         util.log(mod, "provider %s failed (%s); retrying with %s",
-            req.provider, tostring(reason), item.providers[item.provider_index])
+            req.provider, tostring(reason), item.providers[next_index])
         q_unshift(item)
         return
     end
@@ -670,6 +784,11 @@ end
 
 -- Progress snapshot for the HUD and for the options buttons.
 function M.status()
+    local disabled = {}
+    for name, reason in pairs(disabled_providers) do
+        disabled[#disabled + 1] = name .. " (" .. tostring(reason) .. ")"
+    end
+
     return {
         running = M.state.running,
         finished = M.state.finished,
@@ -684,6 +803,7 @@ function M.status()
         skipped = M.state.skipped,
         cooldown = math.max(0, math.floor(cooldown_until - elapsed)),
         last_error = M.state.last_error,
+        disabled_providers = table.concat(disabled, ", "),
     }
 end
 

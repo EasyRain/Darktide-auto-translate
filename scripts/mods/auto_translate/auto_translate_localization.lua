@@ -168,6 +168,18 @@ return {
         en = "Auto Translate: 'Online (official API)' is selected but no API key is set. Translation is paused until you fill it in (Mod Options).",
         ["zh-cn"] = "Auto Translate：已选择「在线（正式 API）」，但未填写 API 密钥。在你填写之前（模组设置内）不会进行翻译。",
     },
+    proxy = {
+        en = "Proxy (optional)",
+        ["zh-cn"] = "代理（可选）",
+    },
+    proxy_description = {
+        en = "Leave empty to use the Windows proxy setting automatically. Fill in host:port (e.g. 127.0.0.1:7890) if your VPN runs in TUN mode or its system proxy is off - WinHTTP does not read the Windows proxy setting by itself.",
+        ["zh-cn"] = "留空＝自动使用 Windows 的代理设置。若你的加速器是 TUN 模式、或系统代理开关是关的，请填 host:port（如 127.0.0.1:7890）——WinHTTP 自己不会读 Windows 的代理设置。",
+    },
+    proxy_notice = {
+        en = "Auto Translate: a proxy (%s) is configured in Windows but switched off. If you use a VPN, enter its address in this mod's 'Proxy' option - WinHTTP ignores the Windows proxy setting.",
+        ["zh-cn"] = "Auto Translate：Windows 里配置了代理（%s）但开关是关的。如果你在用加速器，请把该地址填进本模组的「代理」选项——WinHTTP 不会读 Windows 的代理设置。",
+    },
     engine_paused_failures = {
         en = "Auto Translate: translation paused after 3 failed requests in a row. Check your API key or connection, then change a setting or press 'Reload translation files' to resume.",
         ["zh-cn"] = "Auto Translate：连续 3 次请求失败，翻译已暂停。请检查 API 密钥或网络，然后修改设置或点「重新加载译文」以恢复。",

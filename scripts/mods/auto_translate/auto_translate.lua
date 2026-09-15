@@ -312,6 +312,9 @@ function mod.show_status()
     if s.last_error then
         util.info(mod, "last error: %s", tostring(s.last_error))
     end
+    if s.disabled_providers ~= "" then
+        util.info(mod, "providers dropped this session: %s", s.disabled_providers)
+    end
     util.info(mod, "native core: %s (%s)", core_state, tostring(core_reason or "-"))
 
     local message = string.format("Auto Translate: %d/%d translated, %d left", s.done, s.queued, s.left)

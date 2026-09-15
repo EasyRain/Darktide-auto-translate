@@ -31,6 +31,25 @@ AT_API int  at_http_pending(void);
 // Decodes a code from at_http_poll into a message (FormatMessage). Static buffer.
 AT_API const char* at_win_error_text(unsigned long code);
 
+// ---------------------------------------------------------------------------
+// Proxy
+//
+// WinHTTP does not read the Windows (WinINET) proxy settings, so on a machine
+// that needs a proxy to reach Google a direct connection simply fails with
+// 12029. The core therefore uses, in order: the address set here, then the
+// Windows setting when it is enabled, then a direct connection.
+//   at_set_proxy("127.0.0.1:7890")  -> use this
+//   at_set_proxy("")                -> back to automatic
+// ---------------------------------------------------------------------------
+AT_API int  at_set_proxy(const char* hostport_utf8);
+
+// What would actually be used, as a readable string ("none (direct connection)").
+AT_API const char* at_proxy_in_use(void);
+
+// Non-empty when Windows has a proxy configured but switched off - a hint worth
+// showing, because that is exactly the "my VPN is on but nothing works" case.
+AT_API const char* at_proxy_hint(void);
+
 // Local model inference (same entry point the CLI uses). Not implemented yet:
 // returns -1 and fills the error string, so callers/tests can be written now.
 //   > 0 = number of bytes written to out_text

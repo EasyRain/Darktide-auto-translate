@@ -132,14 +132,22 @@ for languages it can actually produce.
 ## Network
 
 All online engines use **WinHTTP**, which on Windows keeps its **own proxy configuration** — it does
-not read the "system proxy" that most VPN clients set for browsers. Consequences:
+not read the "system proxy" that most VPN clients set for browsers. This is the single most common
+cause of "nothing translates" on a machine where the browser works fine, so the mod handles it:
 
-* A VPN in **TUN / virtual-adapter mode works out of the box** (traffic is routed at the network
-  layer, so WinHTTP never needs to know about the proxy).
-* A VPN in **system-proxy-only mode will not be used by this mod.** Either switch it to TUN mode, or
-  point WinHTTP at it once from an elevated prompt:
-  `netsh winhttp set proxy 127.0.0.1:7890` (and `netsh winhttp reset proxy` to undo).
+* **A proxy typed in the mod's "Proxy" option wins** (e.g. `127.0.0.1:7890`). This is the reliable
+  fix for a VPN in TUN mode or with its system proxy switched off.
+* **Otherwise the Windows proxy setting is used automatically** when it is enabled.
+* If Windows has a proxy address configured but switched off, the log says so and names the address.
+* If a provider is unreachable it is **dropped for the rest of the session** after 3 connection
+  failures, so one blocked service does not double the runtime of every key.
+* Google's endpoints are **not reachable from mainland China without a VPN**. The free tier falls
+  back to MyMemory, which is reachable, so other target languages still work; `zh-cn` needs the
+  local model or an API key (see *Engines and language support*).
 * Plaintext `http://` is supported (used for local testing), but every real endpoint is `https://`.
+
+`at_cli.exe proxy` prints what would be used, and any command accepts `--proxy host:port` to
+override it — the quickest way to tell a proxy problem from a code problem.
 
 ## Testing without launching the game
 

@@ -12,7 +12,7 @@ if errorlevel 1 (
 if not exist bin mkdir bin
 
 cl /nologo /O2 /LD /utf-8 /DAT_CORE_BUILD src\at_core.c src\at_json.c src\at_online.c ^
-   /Fe:bin\at_core.dll /link winhttp.lib
+   /Fe:bin\at_core.dll /link winhttp.lib advapi32.lib
 if errorlevel 1 (
   echo FAILED: at_core.dll
   exit /b 1

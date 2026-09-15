@@ -18,6 +18,30 @@
 
 #define BODY_CAP (4 * 1024 * 1024)
 
+// argv with "--proxy <addr>" removed (it is handled once, before dispatch).
+static char* g_argv[64];
+static int g_argc = 0;
+
+static void strip_proxy_args(int argc, char** argv)
+{
+    int i;
+    g_argc = 0;
+    for (i = 0; i < argc; i++) {
+        if (_stricmp(argv[i], "--proxy") == 0 && i + 1 < argc) {
+            if (!at_set_proxy(argv[i + 1])) {
+                fprintf(stderr, "warning: %s\n", at_error());
+            } else {
+                printf("using proxy %s\n", argv[i + 1]);
+            }
+            i++;
+            continue;
+        }
+        if (g_argc < 63) {
+            g_argv[g_argc++] = argv[i];
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // small test harness
 // ---------------------------------------------------------------------------
@@ -316,6 +340,16 @@ static int fetch(const char* host, const char* path, char* body_out, int cap, in
                 if (at_error() && at_error()[0]) {
                     printf("last error : %s\n", at_error());
                 }
+                // 12029 = cannot connect: almost always the proxy, not the code
+                if (win_error == 12029 || win_error == 12007) {
+                    printf("proxy      : %s\n", at_proxy_in_use());
+                    if (at_proxy_hint() && at_proxy_hint()[0]) {
+                        printf("hint       : %s\n", at_proxy_hint());
+                    } else {
+                        printf("hint       : the host could not be reached. If you need a proxy to reach it,\n"
+                               "             pass --proxy 127.0.0.1:7890 (or turn on your VPN's TUN mode).\n");
+                    }
+                }
                 return 3;
             }
             if (out_len) {
@@ -536,6 +570,34 @@ static int cmd_translate(int argc, char** argv)
 }
 
 // ---------------------------------------------------------------------------
+// proxy — what would be used, and why
+// ---------------------------------------------------------------------------
+static int cmd_proxy(int argc, char** argv)
+{
+    const char* hint;
+
+    if (argc >= 3) {
+        if (!at_set_proxy(argv[2])) {
+            fprintf(stderr, "error: %s\n", at_error());
+            return 1;
+        }
+        printf("proxy set to: %s\n", argv[2]);
+    }
+
+    printf("proxy in use : %s\n", at_proxy_in_use());
+
+    hint = at_proxy_hint();
+    if (hint && hint[0]) {
+        printf("note         : %s\n", hint);
+    } else {
+        printf("note         : Windows has no proxy configured, or it is enabled and being used.\n");
+    }
+
+    printf("\nusage: at_cli.exe proxy [host:port]   (no argument = show, empty string = automatic)\n");
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
 // info
 // ---------------------------------------------------------------------------
 static int cmd_info(void)
@@ -550,6 +612,10 @@ static int cmd_info(void)
     printf("at_core version   : %s\n", at_version() ? at_version() : "(null)");
     printf("model status      : %d (%s)\n", status,
            (status >= 0 && status <= 2) ? names[status] : "unknown");
+    printf("proxy in use      : %s\n", at_proxy_in_use());
+    if (at_proxy_hint() && at_proxy_hint()[0]) {
+        printf("proxy note        : %s\n", at_proxy_hint());
+    }
     if (at_error() && at_error()[0]) {
         printf("last error        : %s\n", at_error());
     }
@@ -563,11 +629,13 @@ static void usage(void)
     printf("usage:\n");
     printf("  at_cli.exe info\n");
     printf("  at_cli.exe selftest                                    (offline, no network)\n");
+    printf("  at_cli.exe proxy [host:port]                           (show / set the proxy)\n");
     printf("  at_cli.exe http <url>\n");
     printf("  at_cli.exe http <host> <path>\n");
     printf("  at_cli.exe provider <name> <target-lang> <text...> [--key <api-key>]\n");
     printf("  at_cli.exe translate <target-lang> <text...>\n\n");
     printf("providers: google_gtx, mymemory, google_api\n");
+    printf("any command accepts --proxy <host:port> (e.g. --proxy 127.0.0.1:7890)\n");
 }
 
 int main(int argc, char** argv)
@@ -576,6 +644,10 @@ int main(int argc, char** argv)
 
     // Make UTF-8 output readable instead of mojibake on a non-UTF-8 console.
     SetConsoleOutputCP(CP_UTF8);
+
+    strip_proxy_args(argc, argv);
+    argc = g_argc;
+    argv = g_argv;
 
     if (argc < 2) {
         usage();
@@ -586,6 +658,8 @@ int main(int argc, char** argv)
         rc = cmd_info();
     } else if (_stricmp(argv[1], "selftest") == 0) {
         rc = cmd_selftest();
+    } else if (_stricmp(argv[1], "proxy") == 0) {
+        rc = cmd_proxy(argc, argv);
     } else if (_stricmp(argv[1], "http") == 0) {
         rc = cmd_http(argc, argv);
     } else if (_stricmp(argv[1], "provider") == 0) {

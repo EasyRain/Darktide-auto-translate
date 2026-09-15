@@ -46,6 +46,209 @@ static Result* g_results_tail = NULL;
 static char g_error[256] = { 0 };
 static DWORD g_win_error = 0;
 
+// ---------------------------------------------------------------------------
+// Proxy resolution
+//
+// WinHTTP keeps its own proxy configuration and does NOT read the Windows
+// (WinINET) settings that VPN clients write when you flip their "system proxy"
+// switch. On a machine that needs a proxy to reach Google, this is the difference
+// between working and a bare 12029 "cannot connect".
+//
+// So: if Windows has a proxy enabled, use it. If the player types one in the mod
+// options, that wins. If Windows has an address configured but switched off, say
+// so instead of leaving them guessing.
+// ---------------------------------------------------------------------------
+static wchar_t g_proxy[256] = { 0 };        // explicit override (from the mod/CLI)
+static wchar_t g_proxy_system[256] = { 0 }; // detected from the Windows settings
+static wchar_t g_proxy_bypass[512] = { 0 };
+static int g_proxy_system_enabled = 0;
+static int g_proxy_system_known = 0;
+static char g_proxy_hint[512] = { 0 };
+
+static void set_error(const char* msg);
+
+static void utf8_from_wide(const wchar_t* src, char* out, int cap)
+{
+    if (!out || cap <= 0) {
+        return;
+    }
+    out[0] = 0;
+    if (!src) {
+        return;
+    }
+    WideCharToMultiByte(CP_UTF8, 0, src, -1, out, cap, NULL, NULL);
+}
+
+// "http=1.2.3.4:80;https=1.2.3.4:443" -> "1.2.3.4:443". A bare "host:port" is
+// used as is. WinINET stores either form depending on the client.
+static int pick_proxy_from_list(const wchar_t* list, wchar_t* out, int cap)
+{
+    const wchar_t* p = list;
+    int out_len = 0;
+
+    out[0] = 0;
+
+    if (!list || !*list) {
+        return 0;
+    }
+    if (!wcschr(list, L'=')) {
+        wcsncpy_s(out, (size_t)cap, list, _TRUNCATE);
+        return out[0] != 0;
+    }
+
+    while (*p) {
+        const wchar_t* eq = wcschr(p, L'=');
+        const wchar_t* end;
+        size_t name_len;
+        int wanted = 0;
+
+        if (!eq) {
+            break;
+        }
+        end = wcschr(eq, L';');
+        if (!end) {
+            end = eq + wcslen(eq);
+        }
+
+        name_len = (size_t)(eq - p);
+        if (name_len == 5 && _wcsnicmp(p, L"https", 5) == 0) {
+            wanted = 1;
+        } else if (name_len == 4 && _wcsnicmp(p, L"http", 4) == 0 && out[0] == 0) {
+            wanted = 1; // fall back to the http entry when there is no https one
+        }
+
+        if (wanted) {
+            size_t n = (size_t)(end - (eq + 1));
+            if (n >= (size_t)cap) {
+                n = (size_t)cap - 1;
+            }
+            memcpy(out, eq + 1, n * sizeof(wchar_t));
+            out[n] = 0;
+            out_len = (int)n;
+            if (name_len == 5) {
+                return out_len > 0; // https entry is the best match, stop here
+            }
+        }
+
+        p = (*end == L';') ? end + 1 : end;
+    }
+
+    return out[0] != 0;
+}
+
+static void detect_system_proxy(void)
+{
+    HKEY key = NULL;
+    DWORD enable = 0;
+    DWORD size;
+    DWORD type;
+    wchar_t server[512];
+
+    if (g_proxy_system_known) {
+        return;
+    }
+    g_proxy_system_known = 1;
+
+    if (RegOpenKeyExW(HKEY_CURRENT_USER,
+                      L"Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings",
+                      0, KEY_READ, &key) != ERROR_SUCCESS) {
+        return;
+    }
+
+    size = sizeof(enable);
+    if (RegQueryValueExW(key, L"ProxyEnable", NULL, &type, (LPBYTE)&enable, &size) != ERROR_SUCCESS) {
+        enable = 0;
+    }
+
+    server[0] = 0;
+    size = sizeof(server);
+    if (RegQueryValueExW(key, L"ProxyServer", NULL, &type, (LPBYTE)server, &size) != ERROR_SUCCESS) {
+        server[0] = 0;
+    }
+
+    {
+        wchar_t bypass[512];
+        bypass[0] = 0;
+        size = sizeof(bypass);
+        if (RegQueryValueExW(key, L"ProxyOverride", NULL, &type, (LPBYTE)bypass, &size) == ERROR_SUCCESS) {
+            wcsncpy_s(g_proxy_bypass, 512, bypass, _TRUNCATE);
+        }
+    }
+
+    RegCloseKey(key);
+
+    if (server[0]) {
+        pick_proxy_from_list(server, g_proxy_system, 256);
+    }
+
+    if (enable && g_proxy_system[0]) {
+        g_proxy_system_enabled = 1;
+    } else if (!enable && g_proxy_system[0]) {
+        // Configured but switched off - the classic "Clash system proxy is off" trap.
+        _snprintf_s(g_proxy_hint, sizeof(g_proxy_hint), _TRUNCATE,
+                    "Windows has a proxy configured (%ls) but it is switched off. WinHTTP does not read the "
+                    "Windows proxy setting anyway: either turn the VPN's system proxy on and enter the same "
+                    "address in this mod's 'Proxy' option, or use the VPN's TUN mode.",
+                    g_proxy_system);
+    }
+}
+
+// 1 when a proxy will be used, and fills `out` with it (wide).
+static int effective_proxy(wchar_t* out, int cap)
+{
+    detect_system_proxy();
+    if (g_proxy[0]) {
+        wcsncpy_s(out, (size_t)cap, g_proxy, _TRUNCATE);
+        return 1;
+    }
+    if (g_proxy_system_enabled && g_proxy_system[0]) {
+        wcsncpy_s(out, (size_t)cap, g_proxy_system, _TRUNCATE);
+        return 1;
+    }
+    return 0;
+}
+
+int at_set_proxy(const char* hostport_utf8)
+{
+    wchar_t wide[256];
+
+    g_proxy[0] = 0;
+    if (hostport_utf8 && *hostport_utf8) {
+        if (MultiByteToWideChar(CP_UTF8, 0, hostport_utf8, -1, wide, 256) <= 0) {
+            set_error("proxy address is not valid UTF-8");
+            return 0;
+        }
+        wcsncpy_s(g_proxy, 256, wide, _TRUNCATE);
+    }
+    return 1;
+}
+
+const char* at_proxy_in_use(void)
+{
+    static char buffer[320];
+    wchar_t wide[256];
+
+    if (effective_proxy(wide, 256)) {
+        char narrow[256];
+        utf8_from_wide(wide, narrow, (int)sizeof(narrow));
+        _snprintf_s(buffer, sizeof(buffer), _TRUNCATE, "%s (%s)", narrow,
+                    g_proxy[0] ? "set in the mod options" : "from the Windows settings");
+    } else {
+        _snprintf_s(buffer, sizeof(buffer), _TRUNCATE, "none (direct connection)");
+    }
+    return buffer;
+}
+
+const char* at_proxy_hint(void)
+{
+    detect_system_proxy();
+    // moot once a proxy has been set explicitly
+    if (g_proxy[0]) {
+        return "";
+    }
+    return g_proxy_hint;
+}
+
 static void set_error(const char* msg)
 {
     strncpy_s(g_error, sizeof(g_error), msg ? msg : "unknown", _TRUNCATE);
@@ -200,6 +403,21 @@ static void do_http_get(const char* host, const char* path, int* out_status, cha
         return;
     }
     WinHttpSetTimeouts(session, AT_TIMEOUT_MS, AT_TIMEOUT_MS, AT_TIMEOUT_MS, AT_TIMEOUT_MS);
+
+    // A session-level proxy is the portable way to do this: WinHttpSetOption
+    // works on every supported Windows, unlike the AUTOMATIC_PROXY access type.
+    {
+        wchar_t proxy[256];
+        if (effective_proxy(proxy, 256)) {
+            WINHTTP_PROXY_INFO info;
+            info.dwAccessType = WINHTTP_ACCESS_TYPE_NAMED_PROXY;
+            info.lpszProxy = proxy;
+            info.lpszProxyBypass = g_proxy_bypass[0] ? g_proxy_bypass : NULL;
+            if (!WinHttpSetOption(session, WINHTTP_OPTION_PROXY, &info, sizeof(info))) {
+                g_win_error = GetLastError();
+            }
+        }
+    }
 
     connect = WinHttpConnect(session, whost, port, 0);
     if (!connect) {
