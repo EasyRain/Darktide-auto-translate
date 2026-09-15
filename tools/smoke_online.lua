@@ -1,4 +1,4 @@
--- smoke_online.lua -- load modules/online.lua outside the game and exercise the
+﻿-- smoke_online.lua -- load modules/online.lua outside the game and exercise the
 -- guards, with LuaJIT (the same runtime the game uses).
 --
 -- Why: a syntax check is not enough. Moving a helper above the `local` it depends on
@@ -381,7 +381,7 @@ engines.init({ MOD_DIR = ".", file_exists = function() return false end }, {})
 -- Which models are "on disk", so the rule can be exercised on its own. The 600M tier
 -- is gone: the smallest local model is the 1.3B, and it is what a player with no API
 -- key gets.
-local available = { local_large = true, local_base = true }
+local available = { local_base = true }
 engines.model_available = function(name) return available[name] == true end
 
 local function resolve_with(key, engine)
@@ -396,21 +396,16 @@ local function resolve_with(key, engine)
 end
 
 check("resolve(key, auto) prefers the API", resolve_with("sk-test", "auto"), "online_api")
--- The 1.3B is the default even when the 3.3B is installed: measured, the 3.3B kept the
--- batch markers in only 5 of 15 batches, and a lost batch turns every short label in it
--- back into a single-string request - the case these models handle worst.
-check("resolve(no key, auto, both models) picks the 1.3B",
-    resolve_with("", "auto"), "local_base")
-check("resolve(nil key, auto, both models) picks the 1.3B",
-    resolve_with(nil, "auto"), "local_base")
-available = { local_large = true }
-check("resolve(no key, auto, only the 3.3B)", resolve_with("", "auto"), "local_large")
-available = { local_base = true }
-check("resolve(no key, auto, only the 1.3B)", resolve_with("", "auto"), "local_base")
-check("resolve(key, explicit 1.3B) obeys the choice",
+check("resolve(no key, auto, model downloaded)", resolve_with("", "auto"), "local_base")
+check("resolve(nil key, auto, model downloaded)", resolve_with(nil, "auto"), "local_base")
+check("resolve(key, explicit local) obeys the choice",
     resolve_with("sk-test", "local_base"), "local_base")
-check("resolve(key, explicit 3.3B) obeys the choice",
-    resolve_with("sk-test", "local_large"), "local_large")
+-- The 3.3B tier was measured and removed: three times the memory and 2.2x the time for
+-- answers that differ but are not better, while it lost the batch markers in 10 of 15
+-- batches (against 1 of 15). A settings file that still says "local_large" has to keep
+-- working, which is what the alias covers.
+check("resolve(key, legacy local_large) maps to the 1.3B",
+    resolve_with("sk-test", "local_large"), "local_base")
 available = {}
 check("resolve(key, auto, no models)", resolve_with("sk-test", "auto"), "online_api")
 check("resolve(no key, auto, no models)", resolve_with("", "auto"), nil)
@@ -419,6 +414,7 @@ check("resolve(no key, auto, no models)", resolve_with("", "auto"), nil)
 -- It has to keep working (as the 1.3B), or the saved choice selects an engine that no
 -- longer exists and the queue silently never starts.
 check("legacy 'local_small' means the 1.3B", engines.canonical("local_small"), "local_base")
+check("legacy 'local_large' means the 1.3B too", engines.canonical("local_large"), "local_base")
 check("legacy engine is still a local engine", engines.is_local_engine("local_small"), true)
 check("unknown engine stays unknown", engines.is_local_engine("no_such_engine"), false)
 check("legacy engine maps to the base directory",

@@ -1,4 +1,4 @@
-return {
+﻿return {
     mod_name = {
         en = "Auto Translate",
         ["zh-cn"] = "自动翻译",
@@ -157,7 +157,7 @@ return {
         en = "Auto Translate: the automatic model download is not implemented yet. Place the 4 model files (model.bin, config.json, shared_vocabulary.json, sentencepiece.bpe.model) in: %s",
         ["zh-cn"] = "Auto Translate：自动下载功能尚未实现。请把 4 个模型文件（model.bin、config.json、shared_vocabulary.json、sentencepiece.bpe.model）放到：%s",
     },
-    -- Only one model fits in the game process (1.7 GB for the 1.3B, 3.8 GB for the 3.3B,
+    -- Only one model fits in the game process (1.7 GB resident),
     -- and the core never releases one), so switching engines mid-session cannot work.
     model_restart_needed = {
         en = "Auto Translate: the model already loaded is '%s'. Only one model fits in the game process, so switching models needs a restart - until then the loaded one keeps translating.",
@@ -183,10 +183,7 @@ return {
         en = "Local model 1.3B (offline fallback)",
         ["zh-cn"] = "本地模型 1.3B（离线保底）",
     },
-    engine_local_large = {
-        en = "Local model 3.3B (offline fallback, slow)",
-        ["zh-cn"] = "本地模型 3.3B（离线保底，较慢）",
-    },
+
     -- The local models are a fallback, and the engine list should say so: they are the
     -- only option without a network, and measurably the weakest one.
     engine_local_note = {
@@ -256,14 +253,7 @@ return {
         en = "Automatic download is not implemented yet - this switch does nothing at the moment. To use the 1.3B model, copy the four files into models/base inside the mod folder (the mod console and show_status report the exact path).",
         ["zh-cn"] = "自动下载功能尚未实现，此开关目前无作用。若要使用 1.3B 模型，请把 4 个模型文件手动放到本 mod 的 models/base 目录（日志与「显示状态」按钮会给出完整路径）。",
     },
-    download_model_large = {
-        en = "Download 3.3B model",
-        ["zh-cn"] = "下载 3.3B 模型",
-    },
-    download_model_large_description = {
-        en = "Automatic download is not implemented yet - this switch does nothing at the moment. To use the 3.3B model, copy the four files into models/large inside the mod folder (the mod console and show_status report the exact path).",
-        ["zh-cn"] = "自动下载功能尚未实现，此开关目前无作用。若要使用 3.3B 模型，请把 4 个模型文件手动放到本 mod 的 models/large 目录（日志与「显示状态」按钮会给出完整路径）。",
-    },
+
     progress_hud = {
         en = "Show progress",
         ["zh-cn"] = "显示进度",

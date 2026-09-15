@@ -1,4 +1,4 @@
--- scanner.lua — enumerates loaded mods, reads their localization tables and
+﻿-- scanner.lua — enumerates loaded mods, reads their localization tables and
 -- works out which keys still need a translation for the current target language.
 local M = {}
 
@@ -107,9 +107,9 @@ function M.scan_mod(name, lang, opts)
 end
 
 -- Whether a stored entry came from an offline model rather than from a service or a
--- human. The `src` values are the engine ids ("local_base", "local_large"); "unmasked" is
--- kept because stores written while that retry existed still contain it, and those
--- entries are offline answers just the same.
+-- human. The `src` values are the engine ids ("local_base", and the older "local_small" /
+-- "local_large" tiers); "unmasked" is kept because stores written while that retry existed
+-- still contain it. All of them are offline answers just the same.
 function M.is_local_source(src)
     if type(src) ~= "string" then
         return false

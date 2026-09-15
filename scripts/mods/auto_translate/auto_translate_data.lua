@@ -1,4 +1,4 @@
--- auto_translate_data.lua
+﻿-- auto_translate_data.lua
 local mod = get_mod("auto_translate")
 
 return {
@@ -52,7 +52,6 @@ return {
                     { text = "engine_auto",        value = "auto" },
                     { text = "engine_online_api",  value = "online_api" },
                     { text = "engine_local_base",  value = "local_base" },
-                    { text = "engine_local_large", value = "local_large" },
                 },
             },
             {
@@ -81,11 +80,7 @@ return {
                 type = "checkbox",
                 default_value = false,
             },
-            {
-                setting_id = "download_model_large",
-                type = "checkbox",
-                default_value = false,
-            },
+
             {
                 -- How many cores one offline translation may use. The default is
                 -- min(cores/2, 8); "all" is measurably the slowest choice *and* the one

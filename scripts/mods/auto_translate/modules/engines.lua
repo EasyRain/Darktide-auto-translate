@@ -4,17 +4,23 @@
 -- exist in the local files are injected by the injector. The actual machine
 -- translation engines are registered here in a later step:
 --   manual      - hand written entries (always used, never overwritten)
---   local_base  - NLLB-200 1.3B, CTranslate2 int8, ~1.4 GB  (the offline default)
---   local_large - NLLB-200 3.3B, CTranslate2 int8, ~3.4 GB  (optional, slower)
+--   local_base  - NLLB-200 1.3B, CTranslate2 int8, ~1.4 GB  (the offline fallback)
 --   online_free - free public endpoints (Google gtx / MyMemory), rate limited
 --   online_api  - official API with a user supplied key
 --
--- The 600M model is gone on purpose. Measured against the 1.3B on the same 68 real
--- strings (tools/model_probe.ps1): the 600M needed a fallback for 5 of 15 batches
--- because it lost the batch markers, and its answers were the worse ones in 34 cases
--- - it is the model behind 汽車 for "AUTO", 沒有任何問題 for "(auto)" and 發明方式 for
--- "INVENTORY MODE". A model that has to be rescued by the glossary and the guards is
--- not a cheaper engine, it is a source of wrong text.
+-- Only *one* offline model is shipped, and both bigger and smaller ones were tried:
+--
+--   * NLLB-200 distilled 600M was dropped first. Measured against the 1.3B on the same
+--     68 real strings (tools/model_probe.ps1): it lost the batch markers in 5 of 15
+--     batches against 1 of 15, and its answers were the worse ones in 34 cases - it is
+--     the model behind 汽車 for "AUTO", 沒有任何問題 for "(auto)" and 發明方式 for
+--     "INVENTORY MODE".
+--   * NLLB-200 3.3B was dropped after that measurement: three times the memory
+--     (3,813 MB against 1,663 MB) and ~2.2x the time per string (~1.36 s against
+--     ~0.60 s), for answers that differ but are not *better* - while it lost the batch
+--     markers in 10 of 15 batches, which pushes every short label back to a single-string
+--     request, the case these models handle worst. Twice the cost for no step change is
+--     not a tier worth downloading, so the local engine is the 1.3B and nothing else.
 local M = {}
 
 local util
@@ -27,23 +33,20 @@ end
 
 M.ENGINES = {
     manual = { name = "manual", implemented = true },
-    -- The local models run through modules/online.lua exactly like the API engines
-    -- do - same queue, same pacing, same anti-misalignment guards - and differ only
-    -- in transport: a submit/poll pair in the core instead of an HTTP job.
+    -- The local model runs through modules/online.lua exactly like the API engines do -
+    -- same queue, same pacing, same anti-misalignment guards - and differs only in
+    -- transport: a submit/poll pair in the core instead of an HTTP job.
     local_base = { name = "local_base", implemented = true },
-    local_large = { name = "local_large", implemented = true },
     online_free = { name = "online_free", implemented = false },
     online_api = { name = "online_api", implemented = true },
 }
 
 -- ---------------------------------------------------------------------------
--- Local model directories (CTranslate2 layout — the same four files Lingua ships):
+-- Local model directory (CTranslate2 layout — the same four files Lingua ships):
 --     models/base/    NLLB-200 1.3B int8
---     models/large/   NLLB-200 3.3B int8
 -- ---------------------------------------------------------------------------
 local MODEL_SUBDIR = {
     local_base = "base",
-    local_large = "large",
 }
 
 local REQUIRED_MODEL_FILES = {
@@ -53,12 +56,15 @@ local REQUIRED_MODEL_FILES = {
     "sentencepiece.bpe.model",
 }
 
--- A settings file written before the 600M tier was removed still says
--- engine = "local_small" (and download_model_small = true). That value has to keep
--- meaning the 1.3B: otherwise the player's saved choice selects an engine that no
--- longer exists and translation quietly never starts.
+-- Settings files written before the tiers were trimmed still contain the old ids:
+-- "local_small" (the 600M) and "local_large" (the 3.3B). Both have to keep meaning
+-- something usable, or a saved choice selects an engine that no longer exists and
+-- translation quietly never starts; the 1.3B is the only offline engine left, so both
+-- map to it. The model directories themselves may still be on disk (600 MB and 3.4 GB);
+-- nothing reads them, and deleting them is the player's call.
 local LEGACY_ENGINES = {
     local_small = "local_base",
+    local_large = "local_base",
 }
 
 function M.canonical(name)
@@ -254,17 +260,11 @@ end
 -- this rule. Measured on the real models: the 600M conversion truncated a 102
 -- character description to 13 characters and read "curios" as "curiosity", while
 -- DeepL gets the same string right - so a player who has a key should get the better
--- engine by default. The models stay as the fallback for players who do not.
+-- engine by default. The model stays as the fallback for players who do not.
 --
--- Between the two local models the *smaller* one wins, which is also the opposite of the
--- obvious rule. Measured over the same 68 strings (tools/model_probe.ps1): the 1.3B kept
--- the batch markers in 14 of 15 batches, the 3.3B in 5 of 15 - and a lost batch falls
--- back to translating each label on its own, where short labels are exactly what these
--- models get wrong ("EXIT" came back as 該國的國家, "(auto)" as 沒有任何相關的訊息). The
--- 3.3B words Traditional Chinese better when it does answer (預設/復位/適用 instead of
--- 默認/恢復/應用) and it does not emit the ⁇ unknown token, so it stays selectable - but
--- a model that cannot hold a numbered list together is the wrong default for a mod whose
--- text is mostly short labels.
+-- There is exactly one offline model to fall back to now (see the note at the top of the
+-- file): a bigger model was measured and did not earn its cost, and a smaller one was
+-- measured and was not good enough.
 function M.resolve(mod, lang)
     local wanted = mod:get("engine") or "auto"
     if wanted ~= "auto" then
@@ -278,9 +278,6 @@ function M.resolve(mod, lang)
 
     if M.model_available("local_base") then
         return "local_base"
-    end
-    if M.model_available("local_large") then
-        return "local_large"
     end
 
     return nil

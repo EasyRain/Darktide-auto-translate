@@ -1,4 +1,4 @@
-# Auto Translate (for Warhammer 40,000: Darktide)
+﻿# Auto Translate (for Warhammer 40,000: Darktide)
 
 Automatically translates the texts of your installed mods **in memory** — the original
 mod files are never modified. Translations are cached locally in editable text files.
@@ -135,7 +135,7 @@ run and makes the "refused" counter meaningless. The count is written into the s
 scanner then leaves the key alone *for that engine* and counts it as `parked` in the scan line.
 
 What that buys: **switching engines retries the work**, which is the point of treating the offline
-model as a fallback. Parked by `local_base`? Selecting `local_large`, or adding an API key (which
+model as a fallback. Parked by `local_base`? Adding an API key (which
 makes Automatic pick the API), scans it as pending again. A key parked by a *different* engine is
 never left behind, a changed source text is never parked (it deserves a fresh attempt), and storing
 a translation clears the marker. An entry the model simply cannot do costs three requests once,
@@ -155,7 +155,7 @@ Two engines, chosen with the **Translation engine** option:
 | --- | --- |
 | **Automatic** | The API when a key is set, otherwise the 1.3B offline model. The key comes first because the offline models are measurably weaker on longer text; with neither, translation stays paused and the mod says which two things would fix it. |
 | **Online (official API)** | Needs a key. Pick the service with **API service**: **DeepL** (default) or Google Cloud Translation. Best quality. |
-| **Local model 1.3B / 3.3B** | Offline NLLB-200 through CTranslate2 + SentencePiece, no network at all. The 1.3B is the offline default (~1.4 GB, ~1.7 GB RAM, ~0.4 s per short string); the 3.3B is the optional quality tier (~3.4 GB, slower). **There is no 600M tier any more** — see [The offline engine](#the-offline-engine-local-nllb-200). |
+| **Local model 1.3B** | Offline NLLB-200 through CTranslate2 + SentencePiece, no network at all: the fallback for when no API key is available (~1.4 GB on disk, 1.7 GB resident, ~0.3 s per short string). There is exactly one offline model — the 600M was too weak and the 3.3B cost twice as much for no step change. See [The offline engine](#the-offline-engine-local-nllb-200). |
 
 ## The offline engine (local NLLB-200)
 
@@ -164,30 +164,37 @@ engine is a single 1.9 MB DLL with no extra runtime files — a DLL's own direct
 not searched for its dependencies, so a separate `ctranslate2.dll` beside it would
 not reliably load inside the game anyway.
 
-Two models are offered, both CTranslate2 int8 conversions in the same four-file
-CTranslate2 layout (`model.bin`, `config.json`, `shared_vocabulary.json`,
-`sentencepiece.bpe.model`), both from `Wobin/lingua-imperialis-models`:
+One model is offered: the CTranslate2 int8 conversion of `facebook/nllb-200-1.3B` from
+`Wobin/lingua-imperialis-models`, in the usual four-file CTranslate2 layout
+(`model.bin`, `config.json`, `shared_vocabulary.json`, `sentencepiece.bpe.model`), in
+`models/base/`.
 
-| tier | directory | base model | `model.bin` | measured |
-| --- | --- | --- | --- | --- |
-| `local_base` | `models/base/` | `facebook/nllb-200-1.3B` | 1,381,827,201 B | 1,663 MB peak RAM, ~300 ms per short string, ~0.60 s per string over 68 strings; keeps batch markers in 14 of 15 batches |
-| `local_large` | `models/large/` | `facebook/nllb-200-3.3B` (OpenNMT int8 conversion) | 3,356,047,962 B | 3,813 MB peak RAM, ~660 ms per short string, ~1.36 s per string; keeps batch markers in **5** of 15 batches |
+| | |
+| --- | --- |
+| `model.bin` | 1,381,827,201 B |
+| resident | 1,663 MB peak working set |
+| speed | ~300 ms per short string, ~0.60 s per string over 68 strings |
+| batch markers | kept in 14 of 15 batches |
 
-`local_base` is what **Automatic** picks, even when the 3.3B is installed. The 3.3B words
-Traditional Chinese better when it answers (`預設`/`復位`/`適用` instead of
-`默認`/`恢復`/`應用`) and does not emit the `⁇` unknown token that makes the 1.3B refuse a
-few strings (`Badge X offset` → `標誌X的偏移`), but it loses the markers of a numbered
-batch far more often — and a lost batch is translated one label at a time, which is the
-case these models handle worst (`EXIT` → `該國的國家`, `(auto)` → `沒有任何相關的訊息`).
-Two thirds of the batches it broke were plain label lists with no placeholders in them, so
-it is not the masking or the marker format: `[1] …` and `1) …` both survive on plain
-labels and both fail on mixed ones. Select it by hand if you want to experiment.
+### Why there is only one size
 
-Note that the OpenNMT conversion does **not** ship `sentencepiece.bpe.model` (the four
-files it has are `model.bin`, `config.json`, `shared_vocabulary.json` and `tokenizer.json`).
-The SentencePiece model is identical in every NLLB-200 conversion, so copy the one from
-`models/base` next to it; the mod checks for the four CTranslate2 files and will report the
-directory as incomplete without it.
+Both other sizes were measured on the same 68 real strings, and neither earned its place.
+
+| | 600M | **1.3B (shipped)** | 3.3B |
+| --- | --- | --- | --- |
+| `model.bin` | 622,596,105 B | **1,381,827,201 B** | 3,356,047,962 B |
+| peak RAM | 935 MB | **1,663 MB** | 3,813 MB |
+| per short string | ~160 ms | **~300 ms** | ~660 ms |
+| batch markers kept | 5 / 15 | **14 / 15** | 5 / 15 |
+| verdict | too weak: it is the model behind 汽車 for "AUTO", 沒有任何問題 for "(auto)" and 發明方式 for "INVENTORY MODE" | shipped | twice the cost of the 1.3B for answers that differ but are not better |
+
+The 3.3B does word Traditional Chinese better when it answers (`預設`/`復位`/`適用`
+instead of `默認`/`恢復`/`應用`) and does not emit the `⁇` unknown token, but it loses the
+markers of a numbered batch far more often — and a lost batch is translated one label at a
+time, which is the case these models handle worst (`EXIT` → `該國的國家`, `(auto)` →
+`沒有任何相關的訊息`). Two thirds of the batches it broke were plain label lists with no
+placeholders, so it is neither the masking nor the marker format. A settings file that
+still says `local_small` or `local_large` keeps working: both map to the 1.3B.
 
 ### One model per process, and how many cores it may use
 
@@ -526,7 +533,7 @@ luajit tools\smoke_online.lua                    # loads modules/online.lua with
 luajit tools\check_zh_variants.lua <translations/zh-tw>   # simplified characters in a traditional store
 luajit tools\scan_line_breaks.lua <translations-dir>      # how many sources carry a line break
 powershell -File tools\batch_probe.ps1 -Store <store> -ModelDir <models/base>   # is batching better than solo?
-powershell -File tools\model_probe.ps1 -Store <store> -ModelA <models/base> -ModelB <models/large>   # is the bigger model better?
+powershell -File tools\model_probe.ps1 -Store <store> -ModelA <models/base> -ModelB <another-model>   # is another model better?
 ```
 
 `smoke_online.lua` is what catches a helper that was moved above the `local` it uses
@@ -559,8 +566,8 @@ not a bug — run `at_cli.exe` from a normal shell to check HTTPS.
 
 ## Roadmap
 
-* Local models: NLLB-200 1.3B (~1.4 GB) and 3.3B (~3.4 GB), int8 CTranslate2
-  conversions, downloaded on demand with resume + checksum.
+* Local model: NLLB-200 1.3B (~1.4 GB) int8 CTranslate2 conversion, downloaded on
+  demand with resume + checksum.
 * Online engines: free public endpoints (with back-off on 429/403) and official APIs.
 * Slow, continuous translation in the background with a progress bar; unfinished work
   resumes on the next launch.
