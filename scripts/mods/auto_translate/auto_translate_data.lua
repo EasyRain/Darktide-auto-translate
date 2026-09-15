@@ -15,7 +15,8 @@ return {
             {
                 setting_id = "auto_translate_enabled",
                 type = "checkbox",
-                default_value = true,
+                -- off by default: the first launch is for configuring engines and models
+                default_value = false,
             },
             {
                 setting_id = "target_language",

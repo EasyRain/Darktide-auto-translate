@@ -86,8 +86,8 @@ end
 
 install_hook()
 
--- The online API engine needs a key. Warn the player and pause translation when it
--- is selected without one (the setting may be left empty otherwise).
+-- Pauses translation and tells the player when the selected engine is not usable
+-- yet: tripped circuit breaker, missing local model, or missing API key.
 local function check_engine_settings()
     -- tripped circuit breaker: stop hammering a failing service
     if engines.is_paused() then
@@ -96,7 +96,22 @@ local function check_engine_settings()
         return false
     end
 
-    if engines.resolve(mod) ~= "online_api" then
+    local engine = engines.resolve(mod)
+
+    -- local model selected but its files are not downloaded yet
+    if engines.is_local_engine(engine) and not engines.model_available(engine) then
+        util.warn(mod, "engine '%s' is selected but its model is not downloaded", engine)
+        local message = mod:localize("model_missing")
+        if type(mod.notify) == "function" then
+            pcall(mod.notify, mod, message)
+        end
+        if type(mod.echo) == "function" then
+            pcall(mod.echo, mod, message)
+        end
+        return false
+    end
+
+    if engine ~= "online_api" then
         return true
     end
 

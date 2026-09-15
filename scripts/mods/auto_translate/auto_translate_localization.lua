@@ -112,6 +112,10 @@ return {
         en = "Translation engine",
         ["zh-cn"] = "翻译引擎",
     },
+    model_missing = {
+        en = "Auto Translate: a local model engine is selected but its model is not downloaded yet. Turn on the matching model download option (or switch to an online engine) to start translating.",
+        ["zh-cn"] = "Auto Translate：已选择本地模型引擎，但模型尚未下载。请打开对应模型的下载开关（或改用在线引擎），之后才会开始翻译。",
+    },
     engine_description = {
         en = "Which engine is used for new translations.",
         ["zh-cn"] = "选择用于翻译新文本的引擎。",

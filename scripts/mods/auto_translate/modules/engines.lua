@@ -27,6 +27,48 @@ M.ENGINES = {
 }
 
 -- ---------------------------------------------------------------------------
+-- Local model directories (CTranslate2 layout — the same four files Lingua ships):
+--     models/small/   NLLB-200 distilled 600M int8
+--     models/large/   NLLB-200 1.3B int8
+-- ---------------------------------------------------------------------------
+local MODEL_SUBDIR = {
+    local_small = "small",
+    local_large = "large",
+}
+
+local REQUIRED_MODEL_FILES = {
+    "model.bin",
+    "config.json",
+    "shared_vocabulary.json",
+    "sentencepiece.bpe.model",
+}
+
+function M.model_dir(name)
+    local sub = MODEL_SUBDIR[name]
+    if not sub then
+        return nil
+    end
+    return util.MOD_DIR .. "/models/" .. sub
+end
+
+function M.model_available(name)
+    local dir = M.model_dir(name)
+    if not dir then
+        return false
+    end
+    for _, file in ipairs(REQUIRED_MODEL_FILES) do
+        if not util.file_exists(dir .. "/" .. file) then
+            return false
+        end
+    end
+    return true
+end
+
+function M.is_local_engine(name)
+    return MODEL_SUBDIR[name] ~= nil
+end
+
+-- ---------------------------------------------------------------------------
 -- Circuit breaker for translation engines.
 --
 -- A bad API key (or an unreachable service) would otherwise fail on every single
@@ -96,8 +138,15 @@ end
 function M.resolve(mod)
     local wanted = mod:get("engine") or "auto"
     if wanted == "auto" then
-        -- later: pick local model if downloaded, else online
-        return "local_small"
+        -- both models downloaded -> prefer the one with more parameters
+        if M.model_available("local_large") then
+            return "local_large"
+        end
+        if M.model_available("local_small") then
+            return "local_small"
+        end
+        -- no local model available -> fall back to the free online service
+        return "online_free"
     end
     return wanted
 end
