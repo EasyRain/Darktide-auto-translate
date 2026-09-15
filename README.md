@@ -530,6 +530,18 @@ The defaults are the settings' own default values, and a *cleared* field is a mi
 is named (`custom_url_missing`, `custom_url_invalid`, `custom_path_missing`,
 `custom_body_missing`) rather than silently replaced by a guess.
 
+**Restore defaults** brings these fields back, because DMF's reset writes each widget's
+`default_value` — so the page returns to the DeepL configuration rather than to empty
+boxes. Two caveats worth knowing:
+
+* the two **key** fields are the exception. A key has no default, so the reset clears them
+  and the key has to be pasted once more; the rest of the page comes back on its own.
+* the framework writes a default only for a setting that is still *unset*
+  (`modules/core/options.lua`: `if mod:get(id) == nil`). A settings file that already holds
+  empty strings keeps them until the reset is pressed once — which is why a new default
+  reaches a fresh install immediately but an existing one only after a reset. If the URL or
+  the language codes look empty after an update, press **restore defaults** once.
+
 **One mapping serves both positions, and DeepL only accepts the regional variants as a
 target.** `en=EN-US` makes every request fail with `400 ... Value for 'source_lang' not
 supported` (measured against the live endpoint), because the mod always sends English as

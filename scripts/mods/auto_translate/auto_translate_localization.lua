@@ -158,8 +158,8 @@ return {
         ["zh-cn"] = "自定义：密钥",
     },
     custom_key_description = {
-        en = "The service's key. Leave it empty and the API key field above is used instead, so the pre-filled DeepL defaults run without pasting the same key twice. Substituted wherever {key} appears - in the auth header, the request template or the query template.",
-        ["zh-cn"] = "服务的密钥。留空则改用上面的「API 密钥」字段，这样预填的 DeepL 参数不用再粘一次密钥。它会被填到出现 {key} 的地方——鉴权头、请求参数模板或查询模板。",
+        en = "The service's key. Leave it empty and the API key field above is used instead, so the pre-filled DeepL defaults run without pasting the same key twice. Substituted wherever {key} appears - in the auth header, the request template or the query template. Note that 'restore defaults' clears a key field (there is no default for one), while the rest of this page comes back as DeepL's parameters.",
+        ["zh-cn"] = "服务的密钥。留空则改用上面的「API 密钥」字段，这样预填的 DeepL 参数不用再粘一次密钥。它会被填到出现 {key} 的地方——鉴权头、请求参数模板或查询模板。「恢复默认」会把密钥字段清空（密钥没有默认值），而本页其它字段都会恢复成 DeepL 的参数。",
     },
     custom_auth = {
         en = "Custom: auth header",
@@ -363,8 +363,8 @@ return {
         ["zh-cn"] = "API 密钥",
     },
     online_api_key_description = {
-        en = "Used by the 'Online (official API)' engine only. May be left empty. Stored in your local settings file.",
-        ["zh-cn"] = "仅供「在线（正式 API）」引擎使用，可留空。密钥保存在本机设置文件中。",
+        en = "Used by the 'Online (official API)' engine, and by the 'Custom' service when its own key field is empty. Stored in your local settings file. Careful: the framework's 'restore defaults' button has no default for a key field, so it clears this one - everything else on this page comes back, the key has to be pasted again.",
+        ["zh-cn"] = "供「在线（正式 API）」引擎使用；「自定义」服务自身的密钥字段为空时也用它。密钥保存在本机设置文件中。注意：框架的「恢复默认」对密钥类字段没有默认值，会把它清空——本页其它项都会自动恢复成 DeepL 的参数，只有密钥需要重新粘贴一次。",
     },
     api_key_missing = {
         en = "Auto Translate: 'Online (official API)' is selected but no API key is set. Translation is paused until you fill it in (Mod Options).",
