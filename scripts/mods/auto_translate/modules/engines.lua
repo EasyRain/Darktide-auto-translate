@@ -256,9 +256,15 @@ end
 -- DeepL gets the same string right - so a player who has a key should get the better
 -- engine by default. The models stay as the fallback for players who do not.
 --
--- Between the two local models the larger one wins, because it makes fewer mistakes:
--- with neither downloaded nothing is chosen, and the caller says so instead of
--- silently running on a model the player never picked.
+-- Between the two local models the *smaller* one wins, which is also the opposite of the
+-- obvious rule. Measured over the same 68 strings (tools/model_probe.ps1): the 1.3B kept
+-- the batch markers in 14 of 15 batches, the 3.3B in 5 of 15 - and a lost batch falls
+-- back to translating each label on its own, where short labels are exactly what these
+-- models get wrong ("EXIT" came back as 該國的國家, "(auto)" as 沒有任何相關的訊息). The
+-- 3.3B words Traditional Chinese better when it does answer (預設/復位/適用 instead of
+-- 默認/恢復/應用) and it does not emit the ⁇ unknown token, so it stays selectable - but
+-- a model that cannot hold a numbered list together is the wrong default for a mod whose
+-- text is mostly short labels.
 function M.resolve(mod, lang)
     local wanted = mod:get("engine") or "auto"
     if wanted ~= "auto" then
@@ -270,11 +276,11 @@ function M.resolve(mod, lang)
         return "online_api"
     end
 
-    if M.model_available("local_large") then
-        return "local_large"
-    end
     if M.model_available("local_base") then
         return "local_base"
+    end
+    if M.model_available("local_large") then
+        return "local_large"
     end
 
     return nil

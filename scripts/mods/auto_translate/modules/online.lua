@@ -434,6 +434,110 @@ local function q_clear()
 end
 
 -- ---------------------------------------------------------------------------
+-- Multi-line strings: translated one line at a time, then put back together
+--
+-- Real mod text is full of line breaks - Enhanced_descriptions joins its English
+-- descriptions with .."\n", IME_Enable ends its tooltip with "\n\n" - and a model given
+-- the whole block as one request moves the breaks, drops them, or translates the text
+-- on both sides of one as a single sentence ("... on Energised Hits. Immune to Ranged
+-- Attacks ..." becomes one line). The game then renders one long paragraph, or loses a
+-- line outright.
+--
+-- So the *masked* text is split at its breaks, each piece is translated on its own, and
+-- the pieces are joined again with the exact separators that were removed. Masking
+-- happens once for the whole string, which keeps one token list for it (no placeholders
+-- are ever introduced or lost by the split itself), and the reassembled text goes
+-- through accept_translation() exactly like a single-line answer, so every guard still
+-- applies to the whole string.
+--
+-- The escape forms are handled too: a literal backslash-n (the game expands it later,
+-- so it has to survive as written) and backslash-r-backslash-n.
+--
+-- (No pattern alternation here: Lua patterns have no "|", which is why this walks the
+-- bytes and asks line_break_at() about each position.)
+-- ---------------------------------------------------------------------------
+local function line_break_at(text, pos)
+    local c = text:sub(pos, pos)
+    if c == "\n" then
+        return "\n"
+    end
+    if c == "\r" then
+        if text:sub(pos + 1, pos + 1) == "\n" then
+            return "\r\n"
+        end
+        return "\r"
+    end
+    if c == "\\" then
+        local next_char = text:sub(pos + 1, pos + 1)
+        if next_char == "n" then
+            return "\\n"                     -- the two characters, backslash and n
+        end
+        if next_char == "r" and text:sub(pos + 2, pos + 3) == "\\n" then
+            return "\\r\\n"
+        end
+    end
+    return nil
+end
+
+local function has_line_break(text)
+    if type(text) ~= "string" then
+        return false
+    end
+    return text:find("\n", 1, true) ~= nil
+        or text:find("\r", 1, true) ~= nil
+        or text:find("\\n", 1, true) ~= nil
+        or text:find("\\r\\n", 1, true) ~= nil
+end
+
+-- Returns the pieces and the separators between them, so the original text can be
+-- rebuilt byte for byte: split_lines("a\r\nb") -> { "a", "b" }, { "\r\n" }.
+local function split_lines(text)
+    local segments, separators = {}, {}
+    local start, pos = 1, 1
+    while pos <= #text do
+        local sep = line_break_at(text, pos)
+        if sep then
+            segments[#segments + 1] = text:sub(start, pos - 1)
+            separators[#separators + 1] = sep
+            pos = pos + #sep
+            start = pos
+        else
+            pos = pos + 1
+        end
+    end
+    segments[#segments + 1] = text:sub(start)
+    return segments, separators
+end
+
+-- The next piece that actually needs the model, skipping the ones that do not: an
+-- empty line, and a piece that is only a placeholder or a key label ("[F10]"). Skipped
+-- pieces are remembered verbatim, so the reassembled string keeps them.
+local function next_line_segment(state, lang)
+    while state.index <= #state.segments do
+        local index = state.index
+        local segment = state.segments[index]
+        if segment == "" or not M.is_translatable(segment, lang) then
+            state.done[index] = segment
+            state.index = index + 1
+        else
+            return index, segment
+        end
+    end
+    return nil
+end
+
+local function assemble_lines(state)
+    local out = {}
+    for i, segment in ipairs(state.segments) do
+        out[#out + 1] = state.done[i] or segment
+        if state.separators[i] then
+            out[#out + 1] = state.separators[i]
+        end
+    end
+    return table.concat(out)
+end
+
+-- ---------------------------------------------------------------------------
 -- Batching short strings for the offline model
 --
 -- A label on its own has no context, and that is exactly what the model gets wrong:
@@ -460,7 +564,7 @@ local function batchable(item)
     end
     local text = item.en
     return type(text) == "string" and char_count(text) <= LOCAL_BATCH_ITEM_CHARS
-        and not text:find("\n", 1, true)
+        and not has_line_break(text)    -- multi-line text goes through dispatch_lines()
 end
 
 local function q_peek()
@@ -568,6 +672,8 @@ M.plan_batch_for_tests = function(items)
     return groups
 end
 M.split_batch_for_tests = split_batch
+M.split_lines_for_tests = split_lines
+M.has_line_break_for_tests = has_line_break
 M.batch_limits = { items = LOCAL_BATCH_MAX_ITEMS, chars = LOCAL_BATCH_MAX_CHARS, item_chars = LOCAL_BATCH_ITEM_CHARS }
 
 -- Exposed for tools/verify_batch.lua: the caps were chosen by measuring the real model
@@ -1031,6 +1137,9 @@ local function store_translation(mod, item, text, src)
 end
 
 -- Starts a request for one queued item. Returns false when nothing was started.
+-- dispatch_lines() is defined further down, next to the accept path it has to use.
+local dispatch_lines
+
 local function dispatch(mod)
     local ffi = Mods.lua.ffi
     local item = q_pop()
@@ -1062,6 +1171,12 @@ local function dispatch(mod)
                 finish(mod, "stopped: the offline model could not be loaded")
             end
             return false
+        end
+
+        -- A multi-line string never goes into a batch: it is sent one line at a time
+        -- and put back together verbatim (see the note above split_lines()).
+        if item.line or has_line_break(item.en) then
+            return dispatch_lines(mod, item)
         end
 
         local batch = take_batch(item)
@@ -1454,10 +1569,63 @@ local function handle_local_batch(mod, req, raw)
     end
 end
 
--- The offline engine has two inflight shapes: "local" for one string and "local_batch"
--- for several. Both are collected from the core's single result slot.
+-- The offline engine has three inflight shapes: "local" for one string, "local_batch"
+-- for several, "local_line" for one line of a multi-line string. All three are collected
+-- from the core's single result slot.
 local function is_local_request(kind)
-    return kind == "local" or kind == "local_batch"
+    return kind == "local" or kind == "local_batch" or kind == "local_line"
+end
+
+-- Sends the next line of a multi-line item, or stores the item once every line is in.
+-- The state lives on the item (item.line), so an item can go back into the queue between
+-- two lines without losing what was already translated.
+function dispatch_lines(mod, item)
+    local state = item.line
+    if not state then
+        local masked, tokens = glossary.mask(item.en, M.state.lang, true)
+        local segments, separators = split_lines(masked)
+        state = {
+            masked = masked,
+            tokens = tokens,
+            segments = segments,
+            separators = separators,
+            done = {},
+            index = 1,
+        }
+        item.line = state
+    end
+
+    local index, segment = next_line_segment(state, M.state.lang)
+    if not index then
+        -- Every line is translated (or did not need translating). The answer goes through
+        -- the same accept path as a single-line one, so the format-specifier, placeholder
+        -- and truncation guards see the whole string.
+        local req = { kind = "local", item = item, masked = state.masked, tokens = state.tokens }
+        local ok, why, transport = accept_translation(mod, req, assemble_lines(state), M.state.engine)
+        if ok then
+            engines.note_success()
+        else
+            fail_item(mod, req, why, 0, transport)
+        end
+        return true
+    end
+
+    local accepted = core.at_submit(segment, M.state.lang)
+    if accepted == 0 then
+        -- The core is still busy with the previous line; try again next frame. The item
+        -- keeps its state, so nothing already translated is lost.
+        q_unshift(item)
+        return false
+    end
+    if accepted < 0 then
+        local why = cstr(core.at_model_error()) or "the offline engine refused the text"
+        fail_item(mod, { kind = "local", item = item }, why, 0, false)
+        return true
+    end
+
+    inflight = { kind = "local_line", item = item, index = index }
+    next_slot = elapsed
+    return true
 end
 
 -- ---------------------------------------------------------------------------
@@ -1503,6 +1671,12 @@ function M.update(mod, dt)
             end
         elseif req.kind == "local_batch" then
             handle_local_batch(mod, req, ffi.string(out_buf, n))
+        elseif req.kind == "local_line" then
+            -- One line of a multi-line string: keep it and go back into the queue for
+            -- the next one. The item is only stored once every line is in (dispatch_lines).
+            req.item.line.done[req.index] = ffi.string(out_buf, n)
+            req.item.line.index = req.index + 1
+            q_unshift(req.item)
         else
             local ok, why, transport = accept_translation(mod, req, ffi.string(out_buf, n), M.state.engine)
             if ok then

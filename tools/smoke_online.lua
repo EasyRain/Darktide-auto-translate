@@ -198,6 +198,42 @@ check("batch part: placeholder kept -> usable",
 check("batch part: format specifier lost -> refused",
     refusal({ en = "Mastery %s" }, "Mastery %s", "掌握", {}) ~= nil, true)
 
+-- ---------------------------------------------------------------------------
+-- Multi-line strings (the mask-once, translate-each-line, join-back-verbatim path)
+--
+-- Real mod text carries line breaks (Enhanced_descriptions joins descriptions with
+-- .."\n"), and a model given the whole block as one request moves or drops them. The
+-- split has to keep the exact separator so the reassembled string is byte-identical
+-- outside the translated pieces - including the literal backslash-n form, which the
+-- game expands later and which must therefore survive as written.
+-- ---------------------------------------------------------------------------
+local function lines(text)
+    local segments, separators = online.split_lines_for_tests(text)
+    return table.concat(segments, "|") .. " ## " .. table.concat(separators, ",")
+end
+
+check("has_line_break('a\\nb')", online.has_line_break_for_tests("a\nb"), true)
+check("has_line_break('a\\\\nb') as text", online.has_line_break_for_tests("a\\nb"), true)
+check("has_line_break('a\\r\\nb')", online.has_line_break_for_tests("a\r\nb"), true)
+check("has_line_break('single line')", online.has_line_break_for_tests("single line"), false)
+check("has_line_break('')", online.has_line_break_for_tests(""), false)
+
+check("split_lines: two real breaks", lines("On Energised Attacks:\nHeavy Melee Damage,\nStacks 3 times."),
+    "On Energised Attacks:|Heavy Melee Damage,|Stacks 3 times. ## \n,\n")
+check("split_lines: CRLF is preserved", lines("first\r\nsecond"), "first|second ## \r\n")
+check("split_lines: the literal form", lines("line one\\nline two"), "line one|line two ## \\n")
+check("split_lines: trailing break keeps the empty piece", lines("only line\n"), "only line| ## \n")
+check("split_lines: no break at all", lines("plain"), "plain ## ")
+check("split_lines: placeholder-only line survives",
+    lines("\226\159\1660\226\159\167\nSome text"), "\226\159\1660\226\159\167|Some text ## \n")
+
+-- A multi-line string must never take part in a batch: its lines are the unit of work.
+check("plan: a multi-line string is alone",
+    plan({ "Ammo", "On Energised Attacks:\nDamage", "Block" }),
+    "Ammo / On Energised Attacks:\nDamage / Block")
+check("plan: the literal \\n form is alone too",
+    plan({ "Ammo", "one\\ntwo", "Block" }), "Ammo / one\\ntwo / Block")
+
 print(string.format("%d failure(s)", failures))
 
 -- ---------------------------------------------------------------------------
@@ -280,10 +316,15 @@ local function resolve_with(key, engine)
 end
 
 check("resolve(key, auto) prefers the API", resolve_with("sk-test", "auto"), "online_api")
-check("resolve(no key, auto, both models) picks the bigger",
-    resolve_with("", "auto"), "local_large")
-check("resolve(nil key, auto, both models) picks the bigger",
-    resolve_with(nil, "auto"), "local_large")
+-- The 1.3B is the default even when the 3.3B is installed: measured, the 3.3B kept the
+-- batch markers in only 5 of 15 batches, and a lost batch turns every short label in it
+-- back into a single-string request - the case these models handle worst.
+check("resolve(no key, auto, both models) picks the 1.3B",
+    resolve_with("", "auto"), "local_base")
+check("resolve(nil key, auto, both models) picks the 1.3B",
+    resolve_with(nil, "auto"), "local_base")
+available = { local_large = true }
+check("resolve(no key, auto, only the 3.3B)", resolve_with("", "auto"), "local_large")
 available = { local_base = true }
 check("resolve(no key, auto, only the 1.3B)", resolve_with("", "auto"), "local_base")
 check("resolve(key, explicit 1.3B) obeys the choice",

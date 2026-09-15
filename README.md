@@ -122,7 +122,7 @@ Two engines, chosen with the **Translation engine** option:
 
 | engine | notes |
 | --- | --- |
-| **Automatic** | The API when a key is set, otherwise the largest downloaded offline model. The key comes first because the offline models are measurably weaker on longer text; with neither, translation stays paused and the mod says which two things would fix it. |
+| **Automatic** | The API when a key is set, otherwise the 1.3B offline model. The key comes first because the offline models are measurably weaker on longer text; with neither, translation stays paused and the mod says which two things would fix it. |
 | **Online (official API)** | Needs a key. Pick the service with **API service**: **DeepL** (default) or Google Cloud Translation. Best quality. |
 | **Local model 1.3B / 3.3B** | Offline NLLB-200 through CTranslate2 + SentencePiece, no network at all. The 1.3B is the offline default (~1.4 GB, ~1.7 GB RAM, ~0.4 s per short string); the 3.3B is the optional quality tier (~3.4 GB, slower). **There is no 600M tier any more** — see [The offline engine](#the-offline-engine-local-nllb-200). |
 
@@ -139,8 +139,25 @@ CTranslate2 layout (`model.bin`, `config.json`, `shared_vocabulary.json`,
 
 | tier | directory | base model | `model.bin` | measured |
 | --- | --- | --- | --- | --- |
-| `local_base` | `models/base/` | `facebook/nllb-200-1.3B` | 1,381,827,201 B | 1,663 MB peak RAM, ~300 ms per short string, ~0.42 s per string over 84 strings |
-| `local_large` | `models/large/` | `facebook/nllb-200-3.3B` | 3,356,047,962 B | not measured here yet (~2.5x the 1.3B by parameter count) |
+| `local_base` | `models/base/` | `facebook/nllb-200-1.3B` | 1,381,827,201 B | 1,663 MB peak RAM, ~300 ms per short string, ~0.60 s per string over 68 strings; keeps batch markers in 14 of 15 batches |
+| `local_large` | `models/large/` | `facebook/nllb-200-3.3B` (OpenNMT int8 conversion) | 3,356,047,962 B | 3,813 MB peak RAM, ~660 ms per short string, ~1.36 s per string; keeps batch markers in **5** of 15 batches |
+
+`local_base` is what **Automatic** picks, even when the 3.3B is installed. The 3.3B words
+Traditional Chinese better when it answers (`預設`/`復位`/`適用` instead of
+`默認`/`恢復`/`應用`) and does not emit the `⁇` unknown token that makes the 1.3B refuse a
+few strings (`Badge X offset` → `標誌X的偏移`), but it loses the markers of a numbered
+batch far more often — and a lost batch is translated one label at a time, which is the
+case these models handle worst (`EXIT` → `該國的國家`, `(auto)` → `沒有任何相關的訊息`).
+Two thirds of the batches it broke were plain label lists with no placeholders in them, so
+it is not the masking or the marker format: `[1] …` and `1) …` both survive on plain
+labels and both fail on mixed ones. Select it by hand if you want to experiment.
+
+Note that the OpenNMT conversion does **not** ship `sentencepiece.bpe.model` (the four
+files it has are `model.bin`, `config.json`, `shared_vocabulary.json` and `tokenizer.json`).
+The SentencePiece model is identical in every NLLB-200 conversion, so copy the one from
+`models/base` next to it; the mod checks for the four CTranslate2 files and will report the
+directory as incomplete without it.
+
 
 ### Why the 600M model was dropped
 
@@ -321,6 +338,34 @@ powershell -File tools\batch_probe.ps1 -Store <translations store> -ModelDir <mo
 It drives the real planner, the real model and the real split/restore code and prints
 one line per key (solo answer next to the batched one) plus a summary.
 
+### Multi-line strings
+
+Real mod text is full of line breaks — `Enhanced_descriptions` joins its descriptions
+with `.."\n"`, `IME_Enable` ends its tooltip with `"\n\n"` — and a model given the whole
+block as one request moves the breaks, drops them, or translates the text on both sides
+of one as a single sentence. The game then renders one long paragraph, or loses a line.
+
+So a string that contains a line break is **translated one line at a time and put back
+together verbatim**:
+
+* the string is masked once (one glossary/placeholder token list for the whole string),
+  then split at its breaks;
+* each piece is translated on its own; empty pieces, and pieces with nothing to
+  translate (a lone `[F10]` label, a lone placeholder) are kept as they are;
+* the pieces are joined again with the exact separators that were removed, and the
+  reassembled text goes through the same accept path as any other answer — the
+  format-specifier, placeholder and truncation guards see the whole string;
+* the item goes back into the queue between two lines and keeps its state, so nothing
+  translated so far is lost if the run is stopped mid-string.
+
+Three break forms are handled, and they are rebuilt byte for byte: a real newline
+(`\n`), CRLF, and the **literal** `\n` (backslash + n), which the game expands later and
+which therefore has to survive translation exactly as written. Multi-line strings never
+take part in batching — the line is the unit of work there.
+
+`tools/scan_line_breaks.lua <translations-dir>` counts how many stored English sources
+carry each form, which is what to check before trusting a claim about line breaks.
+
 ## The online engine: API services
 
 **API service** — why DeepL is the default:
@@ -403,6 +448,7 @@ A syntax check never runs a line, so the Lua queue has more checks of its own:
 ```
 luajit tools\smoke_online.lua                    # loads modules/online.lua with stubs, runs ~50 assertions
 luajit tools\check_zh_variants.lua <translations/zh-tw>   # simplified characters in a traditional store
+luajit tools\scan_line_breaks.lua <translations-dir>      # how many sources carry a line break
 powershell -File tools\batch_probe.ps1 -Store <store> -ModelDir <models/base>   # is batching better than solo?
 powershell -File tools\model_probe.ps1 -Store <store> -ModelA <models/base> -ModelB <models/large>   # is the bigger model better?
 ```

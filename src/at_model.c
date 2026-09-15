@@ -32,11 +32,14 @@ static long long file_size(const char* path)
     if (!f) {
         return 0;
     }
-    if (fseek(f, 0, SEEK_END) != 0) {
+    // _fseeki64/_ftelli64, not fseek/ftell: on MSVC a long is 32 bits even in a 64-bit
+    // build, so plain ftell() fails on a file past 2 GB and the 3.3B model reported as
+    // "10.3 MB" - its model.bin (3,356,047,962 bytes) contributed zero.
+    if (_fseeki64(f, 0, SEEK_END) != 0) {
         fclose(f);
         return 0;
     }
-    size = (long long)ftell(f);
+    size = _ftelli64(f);
     fclose(f);
     return size > 0 ? size : 0;
 }
