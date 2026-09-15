@@ -25,6 +25,9 @@ engines.init(util, store)
 local glossary = mod:io_dofile(BASE .. "glossary")
 glossary.init(util)
 
+local online = mod:io_dofile(BASE .. "online")
+online.init(util, store, glossary, engines)
+
 local exporter = mod:io_dofile(BASE .. "exporter")
 exporter.init(util)
 
@@ -195,13 +198,53 @@ local function run_pipeline(reason)
     end
 
     if mod:get("auto_translate_enabled") then
-        if check_engine_settings() then
-            engines.run(mod, report, lang)
+        if check_engine_settings(lang) then
+            local engine = engines.resolve(mod, lang)
+            if engines.is_local_engine(engine) then
+                -- the local model path is still a stub; it reports what it would do
+                engines.run(mod, report, lang)
+            elseif not online.start(mod, report, lang) then
+                util.info(mod, "online translation was not started (see the warnings above)")
+            end
         else
             util.info(mod, "translation paused: the selected engine is not usable yet")
         end
     else
         util.info(mod, "auto translation paused by setting; %d key(s) left pending", st.pending)
+    end
+end
+
+-- Per-frame driver for the translation queue (one request in flight at a time).
+-- DMF calls this every frame once the mod is loaded.
+local injected_upto = 0
+
+local function reinject_finished()
+    local lang = current_lang()
+    local report = scanner.scan(mod, lang)
+    if report.error then
+        return
+    end
+    injector.apply(mod, report, lang)
+    injector.flush(mod, lang)
+    util.info(mod, "re-injected %d newly translated key(s); no restart needed", report.stats.ready)
+end
+
+function mod.update(dt)
+    local ok, err = pcall(online.update, mod, dt)
+    if not ok then
+        util.warn(mod, "online update error: %s", tostring(err))
+        return
+    end
+
+    -- Newly translated keys only reach the game once the merged table is pushed
+    -- back into DMF again, so do that when the queue drains.
+    local status = online.status()
+    if status.finished and status.done > injected_upto then
+        injected_upto = status.done
+        local iok, ierr = pcall(reinject_finished)
+        if not iok then
+            util.warn(mod, "could not re-inject finished translations: %s", tostring(ierr))
+        end
     end
 end
 
@@ -222,8 +265,14 @@ end
 
 -- Mod options: "Reload translation files"
 function mod.reload_translations()
+    -- keep whatever has already been translated before tearing the queue down
+    local flushed = online.flush(mod)
+    online.stop(mod)
     engines.reset(mod) -- give a paused engine another chance
     glossary.load(true)
+    if flushed > 0 then
+        util.info(mod, "saved %d translation file(s) before reloading", flushed)
+    end
     local ok, err = pcall(run_pipeline, "manual reload")
     if not ok then
         util.warn(mod, "reload error: %s", tostring(err))
@@ -234,6 +283,8 @@ end
 function mod.clear_cache()
     local oslib = (Mods and Mods.lua and Mods.lua.os) or os
     local lang = current_lang()
+    online.stop(mod)
+    online.forget_cache()
     local report = scanner.scan(mod, lang)
     local removed = 0
     for _, entry in ipairs(report.mods) do
@@ -244,6 +295,29 @@ function mod.clear_cache()
         end
     end
     util.info(mod, "cleared %d translation file(s) for '%s'; they will be rebuilt on demand", removed, lang)
+end
+
+-- Mod options: "Translation status" — what the queue is doing right now.
+function mod.show_status()
+    local s = online.status()
+    local core_state, core_reason = online.core_status()
+
+    util.info(mod, "status: running=%s finished=%s engine=%s provider=%s target=%s",
+        tostring(s.running), tostring(s.finished), tostring(s.engine), tostring(s.provider), tostring(s.lang))
+    util.info(mod, "queue: %d queued, %d left, %d translated, %d failed, %d refused, %d skipped",
+        s.queued, s.left, s.done, s.failed, s.refused, s.skipped)
+    if s.cooldown > 0 then
+        util.info(mod, "rate limited: resuming in %d s", s.cooldown)
+    end
+    if s.last_error then
+        util.info(mod, "last error: %s", tostring(s.last_error))
+    end
+    util.info(mod, "native core: %s (%s)", core_state, tostring(core_reason or "-"))
+
+    local message = string.format("Auto Translate: %d/%d translated, %d left", s.done, s.queued, s.left)
+    if mod.echo then
+        pcall(mod.echo, mod, message)
+    end
 end
 
 -- Mod options: "Test glossary" — shows what the term masking does.
@@ -294,6 +368,9 @@ mod.on_setting_changed = function(setting_id)
     if setting_id == "download_model_small" or setting_id == "download_model_large" then
         util.info(mod, "model download toggles are registered but the downloader is not implemented yet")
     elseif setting_id == "target_language" then
+        -- the queue was built for the previous language, so it must not continue
+        online.flush(mod)
+        online.stop(mod)
         util.info(mod, "target language set to: %s (press 'Reload translation files' to apply now)", tostring(mod:get("target_language")))
     elseif setting_id == "engine" or setting_id == "online_api_key" then
         if setting_id == "engine" then
@@ -302,10 +379,17 @@ mod.on_setting_changed = function(setting_id)
             -- a new key deserves a fresh attempt after a failure streak
             engines.reset(mod)
         end
-        check_engine_settings()
+        online.flush(mod)
+        online.stop(mod)
+        check_engine_settings(current_lang())
+    elseif setting_id == "auto_translate_enabled" and not mod:get("auto_translate_enabled") then
+        -- switching translation off must stop the queue, but keep what it produced
+        online.flush(mod)
+        online.stop(mod)
+        util.info(mod, "translation stopped by setting; %d key(s) already stored", online.status().done)
     elseif setting_id == "apply_translation" then
         util.info(mod, "master switch changed; use 'Reload translation files' to re-apply")
     end
 end
 
-util.log(mod, "framework loaded (v0.1.0)")
+util.log(mod, "framework loaded (v0.1.0, online engine wired)")

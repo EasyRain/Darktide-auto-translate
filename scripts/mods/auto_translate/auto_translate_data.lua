@@ -96,6 +96,12 @@ return {
                 function_name = "test_engines",
             },
             {
+                setting_id = "show_status",
+                type = "button",
+                button_text = "show_status",
+                function_name = "show_status",
+            },
+            {
                 setting_id = "debug_logging",
                 type = "checkbox",
                 default_value = false,

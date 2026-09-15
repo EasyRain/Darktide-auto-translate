@@ -95,6 +95,14 @@ return {
         en = "Logs, for every target language, which engine and which online providers would be used. Shows why a language cannot be translated by the free service.",
         ["zh-cn"] = "在日志中列出每种目标语言会用到哪个引擎、哪些在线服务商，并说明免费服务为何无法翻译某些语言。",
     },
+    show_status = {
+        en = "Translation status",
+        ["zh-cn"] = "翻译进度",
+    },
+    show_status_description = {
+        en = "Shows in the log what the translation queue is doing right now: progress, current provider, rate-limit cooldown, last error.",
+        ["zh-cn"] = "在日志中显示当前翻译队列的状态：进度、当前服务商、限流冷却、最近一次错误。",
+    },
     -- NOTE for all term_export_* keys: placeholder order is always %d first, then %s.
     term_export_done = {
         en = "Auto Translate: exported %d term(s) for '%s'.",
