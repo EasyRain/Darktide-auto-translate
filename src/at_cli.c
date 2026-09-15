@@ -123,6 +123,8 @@ static int cmd_selftest(void)
     expect_true("klingon is rejected", !at_online_lang_code("tlh", out, (int)sizeof(out)));
 
     printf("\n== request building ==\n");
+    expect_true("google_clients5 host",
+                at_online_host("google_clients5", out, (int)sizeof(out)) && strcmp(out, "clients5.google.com") == 0);
     expect_true("google_gtx host",
                 at_online_host("google_gtx", out, (int)sizeof(out)) && strcmp(out, "translate.googleapis.com") == 0);
     expect_true("mymemory host",
@@ -134,6 +136,10 @@ static int cmd_selftest(void)
     expect_true("gtx path",
                 at_online_path("google_gtx", NULL, "en", "zh-cn", "Hello", path, (int)sizeof(path)) &&
                     strcmp(path, "/translate_a/single?client=gtx&sl=en&tl=zh-CN&dt=t&q=Hello") == 0);
+
+    expect_true("clients5 path",
+                at_online_path("google_clients5", NULL, "en", "zh-cn", "Hello", path, (int)sizeof(path)) &&
+                    strcmp(path, "/translate_a/t?client=dict-chrome-ex&sl=en&tl=zh-CN&q=Hello") == 0);
 
     // a mod string containing &, | and a space must not be able to reshape the query
     expect_true("gtx path escapes & and spaces",
@@ -155,6 +161,29 @@ static int cmd_selftest(void)
     expect_true("gtx path encodes UTF-8 byte-wise",
                 at_online_path("google_gtx", NULL, "en", "ja", "\xE4\xBD\xA0\xE5\xA5\xBD", path, (int)sizeof(path)) &&
                     strstr(path, "q=%E4%BD%A0%E5%A5%BD") != NULL);
+
+    printf("\n== google_clients5 parsing ==\n");
+    expect_true("flat form (sl=en)",
+                at_online_parse("google_clients5",
+                                "[\"\xE3\x82\xAD\xE3\x83\xBC\xE3\x82\xB9\xE3\x83\x88\xE3\x83\xBC\xE3\x83\xB3\"]",
+                                out, (int)sizeof(out)) > 0 &&
+                    strcmp(out, "\xE3\x82\xAD\xE3\x83\xBC\xE3\x82\xB9\xE3\x83\x88\xE3\x83\xBC\xE3\x83\xB3") == 0);
+
+    // sl=auto adds the detected language next to the text
+    expect_true("detected-language form (sl=auto)",
+                at_online_parse("google_clients5",
+                                "[[\"\xE7\x9A\x87\xE5\xB8\x9D\",\"de\"]]",
+                                out, (int)sizeof(out)) > 0 &&
+                    strcmp(out, "\xE7\x9A\x87\xE5\xB8\x9D") == 0);
+
+    expect_true("escaped angle brackets and kept placeholders",
+                at_online_parse("google_clients5",
+                                "[\"%s deals \\u003Ctag\\u003E damage %\"]",
+                                out, (int)sizeof(out)) > 0 &&
+                    strcmp(out, "%s deals <tag> damage %") == 0);
+
+    expect_true("empty array fails",
+                at_online_parse("google_clients5", "[]", out, (int)sizeof(out)) < 0);
 
     printf("\n== google_gtx parsing ==\n");
     expect_true("single segment",
@@ -194,6 +223,21 @@ static int cmd_selftest(void)
                                 "\"responseDetails\":\"QUERY LENGTH LIMIT EXCEEDED\"}",
                                 out, (int)sizeof(out)) < 0 &&
                     strstr(at_online_error(), "QUERY LENGTH LIMIT EXCEEDED") != NULL);
+
+    // MyMemory reports refusals with responseStatus 200 and the message in
+    // translatedText. Storing that as a translation would look like success.
+    expect_true("a refusal hidden in translatedText is rejected",
+                at_online_parse("mymemory",
+                                "{\"responseData\":{\"translatedText\":\"'XX-YY' IS AN INVALID TARGET LANGUAGE\"},"
+                                "\"responseStatus\":200,\"responseDetails\":\"'XX-YY' IS AN INVALID\"}",
+                                out, (int)sizeof(out)) < 0 &&
+                    strstr(at_online_error(), "INVALID TARGET LANGUAGE") != NULL);
+
+    expect_true("an exhausted daily quota is rejected",
+                at_online_parse("mymemory",
+                                "{\"responseData\":{\"translatedText\":\"MYMEMORY WARNING: YOU USED ALL AVAILABLE "
+                                "FREE TRANSLATIONS FOR TODAY\"},\"quotaFinished\":true,\"responseStatus\":200}",
+                                out, (int)sizeof(out)) < 0);
 
     printf("\n== google_api parsing ==\n");
     expect_true("translatedText",
@@ -243,11 +287,13 @@ static int cmd_selftest(void)
                     strcmp(out, "x") == 0);
 
     printf("\n== provider table ==\n");
-    expect_true("known providers", at_online_provider_known("google_gtx") &&
+    expect_true("known providers", at_online_provider_known("google_clients5") &&
+                                       at_online_provider_known("google_gtx") &&
                                        at_online_provider_known("mymemory") &&
                                        at_online_provider_known("google_api"));
     expect_true("unknown provider rejected", !at_online_provider_known("deepl"));
-    expect_true("only google_api needs a key", !at_online_needs_key("google_gtx") &&
+    expect_true("only google_api needs a key", !at_online_needs_key("google_clients5") &&
+                                                   !at_online_needs_key("google_gtx") &&
                                                    !at_online_needs_key("mymemory") &&
                                                    at_online_needs_key("google_api"));
 
@@ -570,6 +616,158 @@ static int cmd_translate(int argc, char** argv)
 }
 
 // ---------------------------------------------------------------------------
+// probe — is each provider actually reachable from this machine?
+//
+// This is the check that answers "why is nothing translating": the difference
+// between a blocked host, a missing proxy and a broken parser, in one command.
+// ---------------------------------------------------------------------------
+static int cmd_probe(int argc, char** argv)
+{
+    static const char* PROVIDERS[] = { "google_clients5", "google_gtx", "mymemory", NULL };
+    const char* langs[2];
+    const char* sample = "Keystone unlocked";
+    int reachable = 0;
+    int i;
+    int l;
+
+    // With no argument, check the two languages that behave most differently.
+    if (argc >= 3) {
+        langs[0] = argv[2];
+        langs[1] = NULL;
+    } else {
+        langs[0] = "ja";
+        langs[1] = "zh-cn";
+    }
+
+    printf("proxy in use : %s\n", at_proxy_in_use());
+    if (at_proxy_hint() && at_proxy_hint()[0]) {
+        printf("note         : %s\n", at_proxy_hint());
+    }
+    printf("sample       : \"%s\"\n\n", sample);
+
+    for (i = 0; PROVIDERS[i]; i++) {
+        for (l = 0; langs[l]; l++) {
+            char host[256];
+            char* path;
+            char* body;
+            char out[8192];
+            int rc;
+
+            if (!at_online_host(PROVIDERS[i], host, (int)sizeof(host))) {
+                printf("%-15s %-6s  SKIPPED (%s)\n", PROVIDERS[i], langs[l], at_online_error());
+                continue;
+            }
+
+            path = (char*)malloc(16384);
+            body = (char*)malloc(BODY_CAP);
+            if (!path || !body) {
+                free(path);
+                free(body);
+                continue;
+            }
+
+            if (!at_online_path(PROVIDERS[i], "PROBE", "en", langs[l], sample, path, 16384)) {
+                printf("%-15s %-6s  SKIPPED (%s)\n", PROVIDERS[i], langs[l], at_online_error());
+                free(path);
+                free(body);
+                continue;
+            }
+
+            {
+                int len = 0;
+                rc = fetch(host, path, body, BODY_CAP, &len);
+                if (rc == 0) {
+                    body[len] = 0;
+                    {
+                        int n = at_online_parse(PROVIDERS[i], body, out, (int)sizeof(out));
+                        if (n > 0) {
+                            printf("%-15s %-6s  OK    %s\n", PROVIDERS[i], langs[l], out);
+                            reachable++;
+                        } else {
+                            printf("%-15s %-6s  PARSE FAILED (%s)\n", PROVIDERS[i], langs[l], at_online_error());
+                        }
+                    }
+                } else {
+                    printf("%-15s %-6s  UNREACHABLE\n", PROVIDERS[i], langs[l]);
+                }
+            }
+
+            free(path);
+            free(body);
+        }
+    }
+
+    printf("\n%d provider/language combination(s) work from this machine.\n", reachable);
+    if (reachable == 0) {
+        printf("Nothing is reachable. If you need a proxy, pass --proxy host:port (e.g. 127.0.0.1:7890).\n");
+        return 3;
+    }
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
+// parse — run the response parser over a saved body
+//
+// Real captured responses live in tests/fixtures/. Parsing those (rather than
+// only hand-written samples) is what turns "the shape looks right" into a fact,
+// and it needs neither the game nor the network.
+// ---------------------------------------------------------------------------
+static int cmd_parse(int argc, char** argv)
+{
+    FILE* f;
+    char* body;
+    long size;
+    char out[8192];
+    int n;
+
+    if (argc < 4) {
+        fprintf(stderr, "usage: at_cli.exe parse <provider> <file>\n");
+        return 1;
+    }
+
+    f = fopen(argv[3], "rb");
+    if (!f) {
+        fprintf(stderr, "error: cannot open %s\n", argv[3]);
+        return 1;
+    }
+    fseek(f, 0, SEEK_END);
+    size = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    if (size < 0 || size > BODY_CAP) {
+        fprintf(stderr, "error: file too large (%ld bytes)\n", size);
+        fclose(f);
+        return 1;
+    }
+
+    body = (char*)malloc((size_t)size + 1);
+    if (!body) {
+        fclose(f);
+        fprintf(stderr, "error: out of memory\n");
+        return 3;
+    }
+    if (fread(body, 1, (size_t)size, f) != (size_t)size) {
+        fclose(f);
+        free(body);
+        fprintf(stderr, "error: could not read %s\n", argv[3]);
+        return 1;
+    }
+    fclose(f);
+    body[size] = 0;
+
+    printf("provider : %s\nfile     : %s\nbytes    : %ld\n", argv[2], argv[3], size);
+
+    n = at_online_parse(argv[2], body, out, (int)sizeof(out));
+    free(body);
+
+    if (n < 0) {
+        fprintf(stderr, "parse failed: %s\n", at_online_error());
+        return 3;
+    }
+    printf("result   : %s\nbytes    : %d\n", out, n);
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
 // proxy — what would be used, and why
 // ---------------------------------------------------------------------------
 static int cmd_proxy(int argc, char** argv)
@@ -629,12 +827,14 @@ static void usage(void)
     printf("usage:\n");
     printf("  at_cli.exe info\n");
     printf("  at_cli.exe selftest                                    (offline, no network)\n");
+    printf("  at_cli.exe probe [target-lang]                         (is each provider reachable?)\n");
+    printf("  at_cli.exe parse <provider> <file>                     (parse a captured response)\n");
     printf("  at_cli.exe proxy [host:port]                           (show / set the proxy)\n");
     printf("  at_cli.exe http <url>\n");
     printf("  at_cli.exe http <host> <path>\n");
     printf("  at_cli.exe provider <name> <target-lang> <text...> [--key <api-key>]\n");
     printf("  at_cli.exe translate <target-lang> <text...>\n\n");
-    printf("providers: google_gtx, mymemory, google_api\n");
+    printf("providers: google_clients5, google_gtx, mymemory, google_api\n");
     printf("any command accepts --proxy <host:port> (e.g. --proxy 127.0.0.1:7890)\n");
 }
 
@@ -660,6 +860,10 @@ int main(int argc, char** argv)
         rc = cmd_selftest();
     } else if (_stricmp(argv[1], "proxy") == 0) {
         rc = cmd_proxy(argc, argv);
+    } else if (_stricmp(argv[1], "probe") == 0) {
+        rc = cmd_probe(argc, argv);
+    } else if (_stricmp(argv[1], "parse") == 0) {
+        rc = cmd_parse(argc, argv);
     } else if (_stricmp(argv[1], "http") == 0) {
         rc = cmd_http(argc, argv);
     } else if (_stricmp(argv[1], "provider") == 0) {

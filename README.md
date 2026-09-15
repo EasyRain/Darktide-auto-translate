@@ -116,18 +116,30 @@ return {
 
 ## Engines and language support
 
-The free online tier is a **list of providers**, not one service, and each provider is only used
-for languages it can actually produce.
+The free online tier is a **list of providers**, tried in order, and each provider is only used for
+languages it can actually produce (`google_clients5` → `google_gtx` → `mymemory`).
 
-* **MyMemory always answers in Traditional Chinese**, even when the request asks for Simplified.
-  This is a documented MyMemory limitation (confirmed by the Lingua Imperialis author), not a bug
-  in this mod. So MyMemory is never used for a `zh-cn` target: nothing is written rather than
-  Traditional text being stored as Simplified. **For Simplified Chinese use the local model or an
-  official API key (e.g. Google), or set the target language to `zh-tw`.**
-* If the free tier cannot produce the requested language and an API key is configured,
-  `Automatic` prefers the official API over the free tier.
-* Repeated failures trip a circuit breaker after 3 attempts in a row (bad key, service down);
-  translation pauses and tells you instead of retrying forever.
+| provider | host | notes |
+| --- | --- | --- |
+| `google_clients5` | `clients5.google.com` | **First choice.** Reachable from mainland China; answers `zh-CN` in Simplified and `zh-TW` in Traditional (verified). |
+| `google_gtx` | `translate.googleapis.com` | Same engine, but this host is **reset during the TLS handshake in China** (SNI filtering), so it is only the second choice. |
+| `mymemory` | `api.mymemory.translated.net` | Reachable in China, but **always answers in Traditional Chinese** whatever you ask for. That is a documented MyMemory limitation (confirmed by the Lingua Imperialis author), not a bug in this mod — so MyMemory is never used for a `zh-cn` target. |
+| `google_api` | `translation.googleapis.com` | Official Cloud Translation v2, needs a key (the "Online (official API)" engine). |
+
+* A provider that cannot produce the requested language is removed **before** any request is made, and
+  a translation that does not match the source's format placeholders is **refused, never stored** —
+  nothing wrong is silently shipped to the player.
+* A provider that fails to connect repeatedly is **dropped for the rest of the session**, so one
+  blocked host does not slow down every key.
+* Repeated failures across all providers trip a circuit breaker (3 in a row): translation pauses and
+  tells you, instead of retrying forever.
+
+Check what actually works on your machine — one command, real requests:
+
+```
+bin\at_cli.exe probe            # every provider × {ja, zh-cn}
+bin\at_cli.exe probe zh-cn
+```
 
 ## Network
 
@@ -139,11 +151,9 @@ cause of "nothing translates" on a machine where the browser works fine, so the 
   fix for a VPN in TUN mode or with its system proxy switched off.
 * **Otherwise the Windows proxy setting is used automatically** when it is enabled.
 * If Windows has a proxy address configured but switched off, the log says so and names the address.
-* If a provider is unreachable it is **dropped for the rest of the session** after 3 connection
-  failures, so one blocked service does not double the runtime of every key.
-* Google's endpoints are **not reachable from mainland China without a VPN**. The free tier falls
-  back to MyMemory, which is reachable, so other target languages still work; `zh-cn` needs the
-  local model or an API key (see *Engines and language support*).
+* **Google's `translate.*` hosts are blocked in mainland China** (the TLS handshake is reset), which
+  is why the free tier now starts with `clients5.google.com` — that host works. If every Google host
+  is unreachable for you, MyMemory still covers every language except `zh-cn`.
 * Plaintext `http://` is supported (used for local testing), but every real endpoint is `https://`.
 
 `at_cli.exe proxy` prints what would be used, and any command accepts `--proxy host:port` to
@@ -156,16 +166,23 @@ override it — the quickest way to tell a proxy problem from a code problem.
 `build.bat` (Visual Studio 2022 + Windows SDK), then:
 
 ```
-bin\at_cli.exe info                             # core version, model status, last error
-bin\at_cli.exe selftest                          # 32 checks, offline, no network, no game
-bin\at_cli.exe http https://api.github.com/zen   # GET, prints status / bytes / body
-bin\at_cli.exe provider google_gtx ja "Keystone" # build -> GET -> parse, end to end
+bin\at_cli.exe info                             # core version, model status, proxy, last error
+bin\at_cli.exe selftest                          # 40 checks, offline, no network, no game
+bin\at_cli.exe probe                             # are the providers reachable from here?
+bin\at_cli.exe http https://api.github.com/zen    # GET, prints status / bytes / body
+bin\at_cli.exe provider google_clients5 ja "Keystone"  # build -> GET -> parse, end to end
+bin\at_cli.exe parse mymemory tests\fixtures\mymemory_ja.json  # parse a captured response
 bin\at_cli.exe translate ja "Keystone"           # one translation through the local model API
 ```
 
 `selftest` is the useful one: it exercises the JSON reader, URL building, language code
 mapping, HTML entity decoding and every provider's response parsing — the same code the game
-runs — and exits non-zero on the first mismatch. Run it after touching `src/`.
+runs — and exits non-zero on the first mismatch.
+
+`tests\run_fixtures.bat` goes one step further and parses **real responses captured from the live
+services** (`tests\fixtures\*.json`). That is what caught MyMemory reporting a refusal with HTTP
+status 200 and the error message sitting in `translatedText` — which would otherwise have been
+stored as a translation.
 
 Exit codes: `0` ok, `1` usage error, `2` core unavailable, `3` request or translation failed.
 A failed request prints the WinHTTP/Win32 code **and its decoded message**, which is normally all

@@ -240,8 +240,8 @@ int at_online_provider_known(const char* provider)
     if (!provider) {
         return 0;
     }
-    return _stricmp(provider, "google_gtx") == 0 || _stricmp(provider, "mymemory") == 0 ||
-           _stricmp(provider, "google_api") == 0;
+    return _stricmp(provider, "google_clients5") == 0 || _stricmp(provider, "google_gtx") == 0 ||
+           _stricmp(provider, "mymemory") == 0 || _stricmp(provider, "google_api") == 0;
 }
 
 int at_online_needs_key(const char* provider)
@@ -256,7 +256,9 @@ int at_online_host(const char* provider, char* out, int cap)
     if (!provider || !out || cap <= 0) {
         return 0;
     }
-    if (_stricmp(provider, "google_gtx") == 0) {
+    if (_stricmp(provider, "google_clients5") == 0) {
+        host = "clients5.google.com";
+    } else if (_stricmp(provider, "google_gtx") == 0) {
         host = "translate.googleapis.com";
     } else if (_stricmp(provider, "mymemory") == 0) {
         host = "api.mymemory.translated.net";
@@ -306,7 +308,13 @@ int at_online_path(const char* provider, const char* api_key, const char* source
         return 0;
     }
 
-    if (_stricmp(provider, "google_gtx") == 0) {
+    if (_stricmp(provider, "google_clients5") == 0) {
+        // The dictionary endpoint. Unlike the others it needs no dt= flag, and
+        // "client=dict-chrome-ex" is what makes it answer with plain text.
+        written = _snprintf_s(out, (size_t)cap, _TRUNCATE,
+                              "/translate_a/t?client=dict-chrome-ex&sl=%s&tl=%s&q=%s",
+                              src, dst, encoded);
+    } else if (_stricmp(provider, "google_gtx") == 0) {
         // dt=t asks for the translated text; sl/tl pick the language pair.
         written = _snprintf_s(out, (size_t)cap, _TRUNCATE,
                               "/translate_a/single?client=gtx&sl=%s&tl=%s&dt=t&q=%s",
@@ -388,11 +396,27 @@ static int parse_google_gtx(const char* body, char* out, int cap)
 
 // mymemory:
 //   {"responseData":{"translatedText":"..."},"responseStatus":200,"responseDetails":""}
-// On quota problems responseStatus is 403/429 and responseDetails carries the reason.
+//
+// The trap: when MyMemory refuses a request it still reports responseStatus 200
+// and puts the *error message* into responseData.translatedText, e.g.
+//   "'XX-YY' IS AN INVALID TARGET LANGUAGE..."
+//   "MYMEMORY WARNING: YOU USED ALL AVAILABLE FREE TRANSLATIONS FOR TODAY..."
+// Storing that as a translation would look like a successful result and end up in
+// the player's files, so refusals are detected explicitly.
+static int mymemory_text_looks_like_a_refusal(const char* text)
+{
+    return _strnicmp(text, "MYMEMORY WARNING", 16) == 0 ||
+           strstr(text, "IS AN INVALID TARGET LANGUAGE") != NULL ||
+           strstr(text, "IS AN INVALID SOURCE LANGUAGE") != NULL ||
+           strstr(text, "YOU USED ALL AVAILABLE FREE TRANSLATIONS") != NULL ||
+           strstr(text, "QUERY LENGTH LIMIT EXCEEDED") != NULL;
+}
+
 static int parse_mymemory(const char* body, char* out, int cap)
 {
     JVal* root = json_parse(body);
     JVal* data;
+    JVal* quota;
     const char* text;
     const char* details;
     int status;
@@ -406,19 +430,32 @@ static int parse_mymemory(const char* body, char* out, int cap)
 
     status = json_int(json_get(root, "responseStatus"), 200);
     details = json_str(json_get(root, "responseDetails"));
+    quota = json_get(root, "quotaFinished");
     data = json_get(root, "responseData");
     text = data ? json_str(json_get(data, "translatedText")) : NULL;
 
-    if (!text || !*text) {
-        // keep the service's own explanation - it is usually about quota
-        if (details && *details) {
-            set_errorf("service refused the request: %s%s", details, "");
-        } else if (status != 200) {
-            _snprintf_s(g_error, sizeof(g_error), _TRUNCATE, "service returned status %d", status);
-        } else {
-            set_error("response contained no translated text");
-        }
+    if (status != 200) {
+        set_errorf("service refused the request: %s%s",
+                   (details && *details) ? details : "no reason given", "");
         json_free(root);
+        return -1;
+    }
+    if (quota && quota->type == J_BOOL && quota->bval) {
+        set_error("the free daily quota for this service is exhausted");
+        json_free(root);
+        return -1;
+    }
+    if (!text || !*text) {
+        set_errorf("service returned no text: %s%s",
+                   (details && *details) ? details : "no reason given", "");
+        json_free(root);
+        return -1;
+    }
+    if (mymemory_text_looks_like_a_refusal(text)) {
+        char message[256];
+        _snprintf_s(message, sizeof(message), _TRUNCATE, "%.200s", text);
+        json_free(root);
+        set_errorf("service refused the request: %s%s", message, "");
         return -1;
     }
 
@@ -493,6 +530,60 @@ static int parse_google_api(const char* body, char* out, int cap)
     return n;
 }
 
+// clients5.google.com answers with one of two shapes depending on sl:
+//   sl=en  -> ["译文"]                 (flat)
+//   sl=auto-> [["译文","de"]]          (the detected language rides along)
+// Both are accepted; a long input still comes back as a single string.
+static int parse_google_clients5(const char* body, char* out, int cap)
+{
+    JVal* root = json_parse(body);
+    int used = 0;
+    int i;
+
+    if (!root) {
+        set_error("response was not valid JSON");
+        return -1;
+    }
+    if (root->type != J_ARR) {
+        // an error body arrives as an object; surface something useful
+        json_free(root);
+        set_error("unexpected response shape (expected an array)");
+        return -1;
+    }
+
+    for (i = 0; i < root->count; i++) {
+        JVal* item = json_at(root, i);
+        const char* piece = json_str(item);
+
+        if (!piece) {
+            piece = json_str(json_at(item, 0)); // the sl=auto form
+        }
+        if (!piece) {
+            continue;
+        }
+
+        {
+            size_t n = strlen(piece);
+            if (used + (int)n + 1 > cap) {
+                json_free(root);
+                set_error("translated text does not fit the output buffer");
+                return -1;
+            }
+            memcpy(out + used, piece, n);
+            used += (int)n;
+        }
+    }
+
+    json_free(root);
+
+    if (used == 0) {
+        set_error("response contained no translated text");
+        return -1;
+    }
+    out[used] = 0;
+    return used;
+}
+
 int at_online_parse(const char* provider, const char* body_utf8, char* out, int cap)
 {
     if (!provider || !body_utf8 || !out || cap <= 0) {
@@ -501,6 +592,9 @@ int at_online_parse(const char* provider, const char* body_utf8, char* out, int 
     }
     out[0] = 0;
 
+    if (_stricmp(provider, "google_clients5") == 0) {
+        return parse_google_clients5(body_utf8, out, cap);
+    }
     if (_stricmp(provider, "google_gtx") == 0) {
         return parse_google_gtx(body_utf8, out, cap);
     }

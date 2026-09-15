@@ -71,18 +71,28 @@ end
 -- ---------------------------------------------------------------------------
 -- Online providers and what they can actually produce.
 --
--- The "free" engine is a list of providers, tried in this order. MyMemory always
--- answers in Traditional Chinese even when the request asks for zh-CN — the
--- Lingua Imperialis author confirmed this is a MyMemory limitation, not a caller
--- bug ("If you want to translate your outgoing messages to Chinese Simplified,
--- use either Google Translate or the offline NLLB").
+-- The "free" engine is a list of providers, tried in this order:
 --
--- So a provider that returns the wrong script is removed for that language
--- before any request is made. We would rather leave a key pending than store
--- Traditional text in the zh-cn files: a wrong-but-present translation is worse
--- than a missing one, because it is silently shipped to the player.
+--   google_clients5  clients5.google.com — the only free endpoint verified
+--                    reachable from mainland China, and it answers zh-CN in
+--                    Simplified and zh-TW in Traditional (verified 2026-09-15).
+--   google_gtx       translate.googleapis.com — same engine, but this host is
+--                    reset during the TLS handshake in China (SNI filtering),
+--                    so it is the second choice rather than the first.
+--   mymemory         reachable in China, but always answers in Traditional
+--                    Chinese whatever you ask for — the Lingua Imperialis author
+--                    confirmed this is a MyMemory limitation, not a caller bug
+--                    ("If you want to translate your outgoing messages to Chinese
+--                    Simplified, use either Google Translate or the offline NLLB").
+--
+-- So a provider that cannot produce the requested language is removed *before*
+-- any request is made, and a wrong-but-present translation is never stored: it
+-- would be silently shipped to the player as if it were correct.
+--
+-- Endpoint behaviour was measured, not assumed — see at_cli.exe selftest and the
+-- notes in src/at_online.c.
 -- ---------------------------------------------------------------------------
-M.FREE_PROVIDERS = { "google_gtx", "mymemory" }
+M.FREE_PROVIDERS = { "google_clients5", "google_gtx", "mymemory" }
 
 -- provider -> { requested language = language it returns instead }
 local PROVIDER_GAPS = {
