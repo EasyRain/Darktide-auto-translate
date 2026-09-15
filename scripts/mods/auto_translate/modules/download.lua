@@ -12,7 +12,7 @@
 local M = {}
 
 local mod, util, online, engines
-local ffi, core
+local ffi
 
 -- Same tree, two hosts. Which one is reachable depends on where the player is, and the
 -- core retries the other host once when the chosen one fails to connect.
@@ -48,7 +48,18 @@ function M.init(m, u, o, e)
     online = o
     engines = e
     ffi = Mods.lua.ffi
-    core = online.core()
+end
+
+-- The native library is loaded lazily - normally by the first translation run, and the
+-- downloader can be used before any run happens. Capturing the handle at init therefore
+-- captured **nil**, and every download or delete button press died with
+-- "attempt to index upvalue 'core'". So it is fetched at the point of use instead.
+local function native()
+    local handle, why = online.load_core(mod)
+    if not handle then
+        return nil, why or "the native core is not available"
+    end
+    return handle
 end
 
 -- Exposed for tools/smoke_online.lua: the file list is what the checksums protect, so it
@@ -113,7 +124,7 @@ local function stop(err)
 end
 
 -- Starts (or resumes) the next file that is not complete yet.
-local function next_file()
+local function next_file(core)
     local dir = model_dir()
 
     for i, file in ipairs(FILES) do
@@ -161,6 +172,12 @@ end
 
 -- The player turned the switch on: start, or continue where the last attempt stopped.
 function M.start(mod)
+    local core, why = native()
+    if not core then
+        util.warn(mod, "the model downloader needs the native core: %s", tostring(why))
+        notify("model_download_failed", "native core", tostring(why))
+        return false
+    end
     if M.state.active then
         return true
     end
@@ -175,7 +192,7 @@ function M.start(mod)
     M.state.done = false
     M.state.error = nil
 
-    if not next_file() then
+    if not next_file(core) then
         if M.state.error then
             notify("model_download_failed", tostring(M.state.name), tostring(M.state.error))
             return false
@@ -191,6 +208,10 @@ function M.start(mod)
 end
 
 function M.cancel(mod)
+    local core = native()
+    if not core then
+        return false
+    end
     if not M.state.active and core.at_download_status() ~= 1 then
         return false
     end
@@ -210,6 +231,13 @@ function M.update(mod)
         return
     end
 
+    local core = native()
+    if not core then
+        -- The core went away (or never loaded): stop claiming to be downloading.
+        stop("the native core is not available")
+        return
+    end
+
     local status = core.at_download_status()
     if status == 1 then
         M.state.received = tonumber(core.at_download_received()) or 0
@@ -222,7 +250,7 @@ function M.update(mod)
 
     if status == 2 then
         util.info(mod, "finished %s", tostring(M.state.name))
-        if next_file() then
+        if next_file(core) then
             return
         end
         M.state.active = false
@@ -247,6 +275,11 @@ end
 -- Deletes the model files. Used by the options button: with one model per process the
 -- memory is only released by a restart, and the notice has to say that.
 function M.delete(mod)
+    local core, why = native()
+    if not core then
+        util.warn(mod, "deleting the model needs the native core: %s", tostring(why))
+        return 0
+    end
     local dir = model_dir()
     local removed, kept = 0, 0
 

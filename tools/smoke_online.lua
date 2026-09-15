@@ -440,7 +440,13 @@ local fake_core = {
     at_download_error = function() return "" end,
     at_delete_file = function() return 1 end,
 }
-local fake_online = { core = function() return fake_core end }
+-- The core is loaded lazily, so the downloader must ask for it at the point of use.
+-- The first version captured it at init and crashed on every button press.
+local core_loaded = true
+local fake_online = {
+    core = function() return core_loaded and fake_core or nil end,
+    load_core = function() return core_loaded and fake_core or nil, "not loaded" end,
+}
 local fake_engines = { model_dir = function() return "." end }
 local fake_mod = {
     get = function(_, key) return key == "model_mirror" end,
@@ -524,6 +530,14 @@ end
 dl.update(fake_mod)
 check("download: finishing the last file ends the run", dl.status().active, false)
 check("download: and reports done", dl.status().done, true)
+
+-- And when the native core is not available at all, the downloader has to *say* so
+-- instead of indexing a nil handle (that was the crash the screenshots showed).
+core_loaded = false
+check("download: start without a core is refused", dl.start(fake_mod), false)
+check("download: delete without a core deletes nothing", dl.delete(fake_mod), 0)
+check("download: cancel without a core is a no-op", dl.cancel(fake_mod), false)
+core_loaded = true
 
 print(string.format("%d failure(s) in total", failures))
 os.exit(failures == 0 and 0 or 1)
