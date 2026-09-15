@@ -124,7 +124,7 @@ Two engines, chosen with the **Translation engine** option:
 | --- | --- |
 | **Automatic** | The API when a key is set, otherwise the largest downloaded offline model. The key comes first because the offline models are measurably weaker on longer text; with neither, translation stays paused and the mod says which two things would fix it. |
 | **Online (official API)** | Needs a key. Pick the service with **API service**: **DeepL** (default) or Google Cloud Translation. Best quality. |
-| **Local model (small / large)** | Offline NLLB-200 through CTranslate2 + SentencePiece, no network at all. **The small (600M) one is not recommended**: too few parameters, it invents text for short labels ("Right" became "這樣的情況") and truncates longer sentences. The large one is the offline fallback. See [The offline engine](#the-offline-engine-local-nllb-200). |
+| **Local model 1.3B / 3.3B** | Offline NLLB-200 through CTranslate2 + SentencePiece, no network at all. The 1.3B is the offline default (~1.4 GB, ~1.7 GB RAM, ~0.4 s per short string); the 3.3B is the optional quality tier (~3.4 GB, slower). **There is no 600M tier any more** — see [The offline engine](#the-offline-engine-local-nllb-200). |
 
 ## The offline engine (local NLLB-200)
 
@@ -133,9 +133,31 @@ engine is a single 1.9 MB DLL with no extra runtime files — a DLL's own direct
 not searched for its dependencies, so a separate `ctranslate2.dll` beside it would
 not reliably load inside the game anyway.
 
-The model is the CTranslate2 int8 conversion of `facebook/nllb-200-distilled-600M`
-used by Lingua Imperialis (`model.bin`, `config.json`, `shared_vocabulary.json`,
-`sentencepiece.bpe.model`; ~604 MB on disk, ~8 s to load, ~0.8 s per short string).
+Two models are offered, both CTranslate2 int8 conversions in the same four-file
+CTranslate2 layout (`model.bin`, `config.json`, `shared_vocabulary.json`,
+`sentencepiece.bpe.model`), both from `Wobin/lingua-imperialis-models`:
+
+| tier | directory | base model | `model.bin` | measured |
+| --- | --- | --- | --- | --- |
+| `local_base` | `models/base/` | `facebook/nllb-200-1.3B` | 1,381,827,201 B | 1,663 MB peak RAM, ~300 ms per short string, ~0.42 s per string over 84 strings |
+| `local_large` | `models/large/` | `facebook/nllb-200-3.3B` | 3,356,047,962 B | not measured here yet (~2.5x the 1.3B by parameter count) |
+
+### Why the 600M model was dropped
+
+It was the first engine that worked, and it was measurably the wrong default. Running
+both models over the same 68 real strings from the store
+(`tools/model_probe.ps1`, zh-tw):
+
+| | 600M | 1.3B |
+| --- | --- | --- |
+| batches whose markers the model lost | 5 of 15 | 1 of 15 |
+| strings with no usable answer | 4 | 8 (4 of them the model's `⁇` unknown token) |
+| answers that differ between the two | — | 34 (nearly all of them better: `(auto)` → `(自動)` instead of `沒有任何問題`, `Any Rarity` → `任何稀有`, `INVENTORY MODE` → `備品模式` instead of `發明方式`, `Unlock UI FPS` → `解鎖 UI FPS`) |
+
+A 600M model that has to be rescued by the glossary, the batching context and the
+guards is not a cheaper engine — it is a source of wrong text, and the glossary only
+ever hides the part of it that happens to contain a known term.
+
 
 ### The trap: this conversion needs a source EOS its own config.json denies
 
@@ -215,8 +237,8 @@ Nothing on the game thread ever waits: module loading is a background thread in 
 core (about a second warm, several seconds cold) and the HUD shows
 `hud_model_loading` while it lasts, and each string is submitted and collected a few
 frames later. The model is loaded **once per process and stays resident** — a
-deliberate choice, roughly 900 MB of RAM and no VRAM; it is never unloaded, so
-removing the files takes effect on the next launch.
+deliberate choice, 1,663 MB of peak working set for the 1.3B and no VRAM; it is never
+unloaded, so removing the files takes effect on the next launch.
 
 The single-slot result queue needs the same care as the HTTP one: `drain_local()`
 throws away whatever the previous run left behind, called from `stop()` and again at
@@ -287,12 +309,13 @@ Measured on 30 real short strings (`Weapon_XP_Farm`, zh-tw, 600M int8): 20 items
 their answer from a batch (16 of them a real translation), 10 fell back to solo because
 the model lost the markers or merged two items in one of the six batches, 4 parts were
 refused and retried, and 7 answers were identical either way. The fallback is not
-theoretical — **about one batch in three loses its markers** — which is why the batch
-answer is only ever accepted per part. `tools/batch_probe.ps1` re-runs the whole
-measurement:
+theoretical — with that model **about one batch in three lost its markers**, which is why
+the batch answer is only ever accepted per part. The 1.3B is steadier (1 of 15 batches in
+the same measurement), so on the model the mod actually ships the fallback is rare rather
+than routine. `tools/batch_probe.ps1` re-runs the whole measurement:
 
 ```
-powershell -File tools\batch_probe.ps1 -Store <translations store> -ModelDir <models/small> [ -MaxItems 48 ] [ -ItemsPerBatch 5 ]
+powershell -File tools\batch_probe.ps1 -Store <translations store> -ModelDir <models/base> [ -MaxItems 48 ] [ -ItemsPerBatch 5 ]
 ```
 
 It drives the real planner, the real model and the real split/restore code and prints
@@ -375,11 +398,13 @@ escape passes there and is rejected by the game.
 mapping, HTML entity decoding and every provider's response parsing — the same code the game
 runs — and exits non-zero on the first mismatch.
 
-A syntax check never runs a line, so the Lua queue has two more checks of its own:
+A syntax check never runs a line, so the Lua queue has more checks of its own:
 
 ```
 luajit tools\smoke_online.lua                    # loads modules/online.lua with stubs, runs ~50 assertions
-powershell -File tools\batch_probe.ps1 -Store <store> -ModelDir <models/small>
+luajit tools\check_zh_variants.lua <translations/zh-tw>   # simplified characters in a traditional store
+powershell -File tools\batch_probe.ps1 -Store <store> -ModelDir <models/base>   # is batching better than solo?
+powershell -File tools\model_probe.ps1 -Store <store> -ModelA <models/base> -ModelB <models/large>   # is the bigger model better?
 ```
 
 `smoke_online.lua` is what catches a helper that was moved above the `local` it uses
@@ -388,6 +413,13 @@ that are easy to get wrong: what counts as translatable, the format-specifier an
 truncation guards, the batch planner, the marker splitter and the "an unchanged part of a
 batch is refused" rule. `batch_probe.ps1` is the measurement behind the batching design —
 see [Batching short strings](#batching-short-strings).
+
+`model_probe.ps1` is the one that decided the model tiers: it runs two models over the
+same strings through the real planner, the real split/restore code and the real guards,
+then reports what each model would actually store per key, how often each lost its batch
+markers, and how many `⁇` unknown tokens each produced. `tools\build_probe_store.lua`
+builds its input from the deployed stores, so the comparison uses strings the mod really
+has to translate rather than hand-picked samples.
 
 `tests\run_fixtures.bat` goes one step further and parses **real responses captured from the live
 services** (`tests\fixtures\*.json`). That is what caught MyMemory reporting a refusal with HTTP
@@ -405,8 +437,8 @@ not a bug — run `at_cli.exe` from a normal shell to check HTTPS.
 
 ## Roadmap
 
-* Local models: NLLB-200 distilled 600M (~600 MB) and NLLB-200 1.3B (~1.3 GB),
-  int8 CTranslate2 conversions, downloaded on demand with resume + checksum.
+* Local models: NLLB-200 1.3B (~1.4 GB) and 3.3B (~3.4 GB), int8 CTranslate2
+  conversions, downloaded on demand with resume + checksum.
 * Online engines: free public endpoints (with back-off on 429/403) and official APIs.
 * Slow, continuous translation in the background with a progress bar; unfinished work
   resumes on the next launch.

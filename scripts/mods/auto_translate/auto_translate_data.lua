@@ -49,9 +49,9 @@ return {
                 -- when its model has not been downloaded.)
                 default_value = "auto",
                 options = {
-                    { text = "engine_auto",       value = "auto" },
+                    { text = "engine_auto",        value = "auto" },
                     { text = "engine_online_api",  value = "online_api" },
-                    { text = "engine_local_small", value = "local_small" },
+                    { text = "engine_local_base",  value = "local_base" },
                     { text = "engine_local_large", value = "local_large" },
                 },
             },
@@ -77,7 +77,7 @@ return {
                 max_length = 128,
             },
             {
-                setting_id = "download_model_small",
+                setting_id = "download_model_base",
                 type = "checkbox",
                 default_value = false,
             },

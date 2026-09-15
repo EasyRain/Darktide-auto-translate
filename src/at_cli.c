@@ -21,7 +21,13 @@
 #define BODY_CAP (4 * 1024 * 1024)
 
 // argv with "--proxy <addr>" removed (it is handled once, before dispatch).
-static char* g_argv[64];
+//
+// 64 used to be the cap and anything beyond it was dropped *silently*: `queue` with 68
+// strings reported "59 item(s), 0 problem(s)" and the last nine were never translated,
+// which quietly halved the size of an A/B run. The array is generously sized now and
+// exceeding it says so.
+#define MAX_ARGV 1024
+static char* g_argv[MAX_ARGV];
 static int g_argc = 0;
 
 // Windows hands `main` its arguments in the ANSI code page, so any non-ASCII text
@@ -44,8 +50,10 @@ static void use_utf8_argv(void)
     }
 
     g_argc = 0;
-    if (count > 63) {
-        count = 63;
+    if (count > MAX_ARGV) {
+        fprintf(stderr, "warning: %d arguments given, only the first %d are used\n",
+                count, MAX_ARGV);
+        count = MAX_ARGV;
     }
     for (i = 0; i < count; ++i) {
         const int bytes = WideCharToMultiByte(CP_UTF8, 0, wide[i], -1, NULL, 0, NULL, NULL);
@@ -77,9 +85,11 @@ static void strip_proxy_args(int argc, char** argv)
             i++;
             continue;
         }
-        if (g_argc < 63) {
-            g_argv[g_argc++] = argv[i];
+        if (g_argc >= MAX_ARGV) {
+            fprintf(stderr, "warning: more than %d arguments, the rest are ignored\n", MAX_ARGV);
+            break;
         }
+        g_argv[g_argc++] = argv[i];
     }
 }
 

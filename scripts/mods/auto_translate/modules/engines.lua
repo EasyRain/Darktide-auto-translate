@@ -4,10 +4,17 @@
 -- exist in the local files are injected by the injector. The actual machine
 -- translation engines are registered here in a later step:
 --   manual      - hand written entries (always used, never overwritten)
---   local_small - NLLB-200 distilled 600M, CTranslate2 int8, ~600 MB
---   local_large - NLLB-200 1.3B, CTranslate2 int8, ~1.3 GB
+--   local_base  - NLLB-200 1.3B, CTranslate2 int8, ~1.4 GB  (the offline default)
+--   local_large - NLLB-200 3.3B, CTranslate2 int8, ~3.4 GB  (optional, slower)
 --   online_free - free public endpoints (Google gtx / MyMemory), rate limited
 --   online_api  - official API with a user supplied key
+--
+-- The 600M model is gone on purpose. Measured against the 1.3B on the same 68 real
+-- strings (tools/model_probe.ps1): the 600M needed a fallback for 5 of 15 batches
+-- because it lost the batch markers, and its answers were the worse ones in 34 cases
+-- - it is the model behind 汽車 for "AUTO", 沒有任何問題 for "(auto)" and 發明方式 for
+-- "INVENTORY MODE". A model that has to be rescued by the glossary and the guards is
+-- not a cheaper engine, it is a source of wrong text.
 local M = {}
 
 local util
@@ -23,7 +30,7 @@ M.ENGINES = {
     -- The local models run through modules/online.lua exactly like the API engines
     -- do - same queue, same pacing, same anti-misalignment guards - and differ only
     -- in transport: a submit/poll pair in the core instead of an HTTP job.
-    local_small = { name = "local_small", implemented = true },
+    local_base = { name = "local_base", implemented = true },
     local_large = { name = "local_large", implemented = true },
     online_free = { name = "online_free", implemented = false },
     online_api = { name = "online_api", implemented = true },
@@ -31,11 +38,11 @@ M.ENGINES = {
 
 -- ---------------------------------------------------------------------------
 -- Local model directories (CTranslate2 layout — the same four files Lingua ships):
---     models/small/   NLLB-200 distilled 600M int8
---     models/large/   NLLB-200 1.3B int8
+--     models/base/    NLLB-200 1.3B int8
+--     models/large/   NLLB-200 3.3B int8
 -- ---------------------------------------------------------------------------
 local MODEL_SUBDIR = {
-    local_small = "small",
+    local_base = "base",
     local_large = "large",
 }
 
@@ -233,6 +240,10 @@ end
 -- character description to 13 characters and read "curios" as "curiosity", while
 -- DeepL gets the same string right - so a player who has a key should get the better
 -- engine by default. The models stay as the fallback for players who do not.
+--
+-- Between the two local models the larger one wins, because it makes fewer mistakes:
+-- with neither downloaded nothing is chosen, and the caller says so instead of
+-- silently running on a model the player never picked.
 function M.resolve(mod, lang)
     local wanted = mod:get("engine") or "auto"
     if wanted ~= "auto" then
@@ -244,12 +255,11 @@ function M.resolve(mod, lang)
         return "online_api"
     end
 
-    -- no key: the offline models, larger first because it makes fewer mistakes
     if M.model_available("local_large") then
         return "local_large"
     end
-    if M.model_available("local_small") then
-        return "local_small"
+    if M.model_available("local_base") then
+        return "local_base"
     end
 
     return nil

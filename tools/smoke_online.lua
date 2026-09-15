@@ -262,9 +262,11 @@ end
 local engines = engines_chunk()
 engines.init({ MOD_DIR = ".", file_exists = function() return false end }, {})
 
--- pretend both models are on disk, so only the rule decides
-local have_models = true
-engines.model_available = function() return have_models end
+-- Which models are "on disk", so the rule can be exercised on its own. The 600M tier
+-- is gone: the smallest local model is the 1.3B, and it is what a player with no API
+-- key gets.
+local available = { local_large = true, local_base = true }
+engines.model_available = function(name) return available[name] == true end
 
 local function resolve_with(key, engine)
     local fake_mod = {
@@ -278,11 +280,17 @@ local function resolve_with(key, engine)
 end
 
 check("resolve(key, auto) prefers the API", resolve_with("sk-test", "auto"), "online_api")
-check("resolve(no key, auto) uses a model", resolve_with("", "auto"), "local_large")
-check("resolve(nil key, auto) uses a model", resolve_with(nil, "auto"), "local_large")
-check("resolve(key, explicit small) obeys the choice",
-    resolve_with("sk-test", "local_small"), "local_small")
-have_models = false
+check("resolve(no key, auto, both models) picks the bigger",
+    resolve_with("", "auto"), "local_large")
+check("resolve(nil key, auto, both models) picks the bigger",
+    resolve_with(nil, "auto"), "local_large")
+available = { local_base = true }
+check("resolve(no key, auto, only the 1.3B)", resolve_with("", "auto"), "local_base")
+check("resolve(key, explicit 1.3B) obeys the choice",
+    resolve_with("sk-test", "local_base"), "local_base")
+check("resolve(key, explicit 3.3B) obeys the choice",
+    resolve_with("sk-test", "local_large"), "local_large")
+available = {}
 check("resolve(key, auto, no models)", resolve_with("sk-test", "auto"), "online_api")
 check("resolve(no key, auto, no models)", resolve_with("", "auto"), nil)
 

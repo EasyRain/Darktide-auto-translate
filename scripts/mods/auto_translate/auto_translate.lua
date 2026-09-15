@@ -443,12 +443,12 @@ function mod.test_glossary()
 end
 
 mod.on_setting_changed = function(setting_id)
-    if setting_id == "download_model_small" or setting_id == "download_model_large" then
+    if setting_id == "download_model_base" or setting_id == "download_model_large" then
         -- The downloader is not written yet. Logging that only was the wrong call: the
         -- player flips the switch, nothing happens, and there is no way to tell whether
         -- it is broken or simply absent. So the notice is player-visible and says what
         -- to do instead.
-        local which = setting_id == "download_model_large" and "large" or "small"
+        local which = setting_id == "download_model_large" and "large" or "base"
         local dir = util.MOD_DIR .. "/models/" .. which
         util.warn(mod, "the automatic model download is not implemented yet; place the 4 model files in %s", dir)
         if type(mod.notify) == "function" then

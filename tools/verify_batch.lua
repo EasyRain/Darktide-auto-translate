@@ -41,6 +41,9 @@ glossary.init(util)
 
 Mods = { lua = { ffi = { cdef = function() end, load = function() error("no core in this test") end } } }
 local online = assert(loadfile(mod_dir .. "/scripts/mods/auto_translate/modules/online.lua"))()
+-- online.lua takes its collaborators through init(); the batch rule below needs a
+-- glossary that can unmask, and text_is_safe() is the module's own.
+online.init(util, nil, glossary, nil, nil)
 
 local function read_file(path)
     local f = io.open(path, "rb")
@@ -166,7 +169,12 @@ local function prepare(store_path, lang, max_items, items_cap)
     local items = {}
     for _, key in ipairs(keys) do
         local entry = data.entries[key]
-        if type(entry) == "table" and type(entry.en) == "string" and entry.en ~= "" then
+        -- The queue itself filters these out before they ever reach an engine (key
+        -- labels like "[F10]", numbers, strings without ASCII letters), so sending them
+        -- here would compare both models on strings neither of them is ever asked to
+        -- translate.
+        if type(entry) == "table" and type(entry.en) == "string" and entry.en ~= ""
+            and online.is_translatable(entry.en, lang) then
             items[#items + 1] = { key = key, en = entry.en, old = entry.text or "" }
         end
     end
@@ -358,6 +366,176 @@ local function compare()
     print(string.format("%-18s %d", "items", index))
 end
 
+-- ---------------------------------------------------------------------------
+-- compare-models -- two models, same strings, same plan: which answer would be stored,
+-- and does the bigger model actually change it for the better?
+--
+-- Judging translation quality automatically is not possible here (there is no
+-- reference for most strings), so this prints what differs and counts the cases that
+-- need no judgement at all: an answer that fails the guards, an answer the model gave
+-- back unchanged (no translation), a batch whose markers were lost, and - for a
+-- traditional Chinese target - simplified characters leaking into the output.
+-- ---------------------------------------------------------------------------
+local SIMPLIFIED = {}
+do
+    local set = loadfile(here .. "/zh_simplified_chars.lua")
+    if set then
+        for _, c in ipairs(set()) do
+            SIMPLIFIED[c] = true
+        end
+    end
+end
+
+local function simplified_in(text)
+    local found = {}
+    -- A byte-wise scan cannot work here: Lua 5.1 strings are bytes, so text:sub(i, i)
+    -- returns one byte of a multi-byte character and never matches a character at all
+    -- (the first version of this check did exactly that and reported a clean 0%).
+    for c in pairs(SIMPLIFIED) do
+        if text:find(c, 1, true) then
+            found[#found + 1] = c
+        end
+    end
+    table.sort(found)
+    return table.concat(found, " ")
+end
+
+-- Reads one model's answers from tools/out/<tag>/.
+local function read_answers(tag, plan)
+    local dir = out_dir .. "/" .. tag
+    local answers = { batches = {}, solo = queue_results(read_file(dir .. "/solo.out.txt")) }
+    for _, batch in ipairs(plan.batches) do
+        local raw = read_file(string.format("%s/batch_%d.out.txt", dir, batch.index))
+        local result = result_of(raw)
+        answers.batches[batch.index] = result and online.split_batch_for_tests(result, #batch.items) or nil
+        answers.batches["raw" .. batch.index] = result
+    end
+    return answers
+end
+
+-- What the queue would end up storing for one item, including the fallback: a part the
+-- guards refuse is answered by the solo run instead. Returns source, stored text and
+-- how the answer was classified.
+local function effective(item, part, solo_raw)
+    if part then
+        local why = online.batch_part_refusal_for_tests(item, item.masked, part, item.tokens)
+        if not why then
+            local restored = glossary.unmask(part, item.tokens)
+            return "batch", restored, "translated"
+        end
+    end
+    if solo_raw then
+        local verdict, text = judge(item, solo_raw)
+        if verdict == "translated" or verdict == "unchanged" then
+            return "solo", text, verdict
+        end
+        return "solo", text, "dropped (" .. tostring(verdict) .. ")"
+    end
+    return "none", "", "no answer"
+end
+
+local function compare_models(tag_a, tag_b)
+    local plan = load_plan()
+    local a = read_answers(tag_a, plan)
+    local b = read_answers(tag_b, plan)
+
+    if not next(a.solo) or not next(b.solo) then
+        io.stderr:write("missing solo answers: run the queue for both models first\n")
+        os.exit(1)
+    end
+
+    local tally, rows, differences, index = {}, {}, {}, 0
+    local function count(name)
+        tally[name] = (tally[name] or 0) + 1
+    end
+
+    local heads = {}
+    for _, tag in ipairs({ tag_a, tag_b }) do
+        heads[tag] = { unsplit = 0, simplified = 0, unchanged = 0, dropped = 0, batches = 0 }
+    end
+
+    for _, batch in ipairs(plan.batches) do
+        for _, tag in ipairs({ tag_a, tag_b }) do
+            heads[tag].batches = heads[tag].batches + 1
+            if not (tag == tag_a and a.batches[batch.index] or tag == tag_b and b.batches[batch.index]) then
+                heads[tag].unsplit = heads[tag].unsplit + 1
+            end
+        end
+
+        for i, item in ipairs(batch.items) do
+            index = index + 1
+            local part_a = a.batches[batch.index] and a.batches[batch.index][i] or nil
+            local part_b = b.batches[batch.index] and b.batches[batch.index][i] or nil
+            local src_a, text_a, kind_a = effective(item, part_a, a.solo[index])
+            local src_b, text_b, kind_b = effective(item, part_b, b.solo[index])
+
+            -- Count what needs no judgement, per model, and flag simplified characters
+            -- in a traditional Chinese answer.
+            local function annotate(tag, text, kind)
+                if kind == "unchanged" then
+                    heads[tag].unchanged = heads[tag].unchanged + 1
+                elseif kind ~= "translated" then
+                    heads[tag].dropped = heads[tag].dropped + 1
+                end
+                local leaked = simplified_in(text)
+                if leaked ~= "" then
+                    heads[tag].simplified = heads[tag].simplified + 1
+                    return text .. "   << simplified: " .. leaked
+                end
+                return text
+            end
+            text_a = annotate(tag_a, text_a, kind_a)
+            text_b = annotate(tag_b, text_b, kind_b)
+
+            local effect
+            local usable_a = (kind_a == "translated")
+            local usable_b = (kind_b == "translated")
+            if usable_a and usable_b then
+                effect = (text_a == text_b) and "same" or "differ"
+            elseif usable_b then
+                effect = "B only"
+            elseif usable_a then
+                effect = "A only"
+            else
+                effect = "neither"
+            end
+            count(effect)
+
+            local row = string.format("%-8s %s\n    en : %s\n    A  : %s  [%s %s]\n    B  : %s  [%s %s]",
+                effect, item.key, item.en, text_a, src_a, kind_a, text_b, src_b, kind_b)
+            rows[#rows + 1] = row
+            if effect ~= "same" then
+                differences[#differences + 1] = row
+            end
+        end
+    end
+
+    local f = io.open(out_dir .. "/model-compare.txt", "wb")
+    if f then
+        f:write("A = " .. tag_a .. "\nB = " .. tag_b .. "\n\n")
+        f:write(table.concat(rows, "\n"))
+        f:write("\n")
+        f:close()
+    end
+
+    print(string.format("A = %s   B = %s   (%d string(s), %d batch(es))", tag_a, tag_b, index, #plan.batches))
+    for _, tag in ipairs({ tag_a, tag_b }) do
+        local h = heads[tag]
+        print(string.format("  %-8s batches with lost markers: %d/%d   no translation stored: %d   simplified leaks: %d",
+            tag, h.unsplit, h.batches, h.unchanged + h.dropped, h.simplified))
+    end
+    print("\n--- items where the two models would store different text ---")
+    print(table.concat(differences, "\n"))
+    print("\n--- summary ---")
+    local names = {}
+    for name in pairs(tally) do names[#names + 1] = name end
+    table.sort(names)
+    for _, name in ipairs(names) do
+        print(string.format("%-10s %d", name, tally[name]))
+    end
+    print(string.format("full table: %s", out_dir .. "/model-compare.txt"))
+end
+
 local command = arg[1]
 if command == "prepare" then
     if not arg[2] then
@@ -369,6 +547,12 @@ elseif command == "verify" then
     verify()
 elseif command == "compare" then
     compare()
+elseif command == "compare-models" then
+    if not (arg[2] and arg[3]) then
+        io.stderr:write("usage: luajit tools/verify_batch.lua compare-models <tagA> <tagB>\n")
+        os.exit(1)
+    end
+    compare_models(arg[2], arg[3])
 else
     io.stderr:write("usage: luajit tools/verify_batch.lua prepare|verify|compare ...\n")
     os.exit(1)

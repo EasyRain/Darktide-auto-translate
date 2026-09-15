@@ -173,13 +173,13 @@ return {
         en = "Online (official API)",
         ["zh-cn"] = "在线（正式 API）",
     },
-    engine_local_small = {
-        en = "Local model (small)",
-        ["zh-cn"] = "本地模型（小）",
+    engine_local_base = {
+        en = "Local model 1.3B (offline)",
+        ["zh-cn"] = "本地模型 1.3B（离线）",
     },
     engine_local_large = {
-        en = "Local model (large)",
-        ["zh-cn"] = "本地模型（大）",
+        en = "Local model 3.3B (offline, slow)",
+        ["zh-cn"] = "本地模型 3.3B（离线，较慢）",
     },
     online_api_key = {
         en = "API key",
@@ -210,23 +210,23 @@ return {
         en = "Auto Translate: the '%s' engine would answer in '%s' and cannot be used for '%s'. Nothing was saved. Use the offline model or an API key, or set the target language to '%s'.",
         ["zh-cn"] = "Auto Translate：「%s」引擎只会返回「%s」，无法用于「%s」，因此没有保存任何内容。请改用本地模型或填写密钥的正式 API，或把目标语言设为「%s」。",
     },
-    download_model_small = {
-        en = "Download small model",
-        ["zh-cn"] = "下载小模型",
+    download_model_base = {
+        en = "Download 1.3B model",
+        ["zh-cn"] = "下载 1.3B 模型",
     },
     -- The automatic downloader is not written yet, so these tooltips say what the
     -- switch does today instead of promising a download that never starts.
-    download_model_small_description = {
-        en = "Automatic download is not implemented yet - this switch does nothing at the moment. To use the small model, copy the four files into models/small inside the mod folder (the mod console and show_status report the exact path).",
-        ["zh-cn"] = "自动下载功能尚未实现，此开关目前无作用。若要使用小模型，请把 4 个模型文件手动放到本 mod 的 models/small 目录（日志与「显示状态」按钮会给出完整路径）。",
+    download_model_base_description = {
+        en = "Automatic download is not implemented yet - this switch does nothing at the moment. To use the 1.3B model, copy the four files into models/base inside the mod folder (the mod console and show_status report the exact path).",
+        ["zh-cn"] = "自动下载功能尚未实现，此开关目前无作用。若要使用 1.3B 模型，请把 4 个模型文件手动放到本 mod 的 models/base 目录（日志与「显示状态」按钮会给出完整路径）。",
     },
     download_model_large = {
-        en = "Download large model",
-        ["zh-cn"] = "下载大模型",
+        en = "Download 3.3B model",
+        ["zh-cn"] = "下载 3.3B 模型",
     },
     download_model_large_description = {
-        en = "Automatic download is not implemented yet - this switch does nothing at the moment. To use the large model, copy the four files into models/large inside the mod folder (the mod console and show_status report the exact path).",
-        ["zh-cn"] = "自动下载功能尚未实现，此开关目前无作用。若要使用大模型，请把 4 个模型文件手动放到本 mod 的 models/large 目录（日志与「显示状态」按钮会给出完整路径）。",
+        en = "Automatic download is not implemented yet - this switch does nothing at the moment. To use the 3.3B model, copy the four files into models/large inside the mod folder (the mod console and show_status report the exact path).",
+        ["zh-cn"] = "自动下载功能尚未实现，此开关目前无作用。若要使用 3.3B 模型，请把 4 个模型文件手动放到本 mod 的 models/large 目录（日志与「显示状态」按钮会给出完整路径）。",
     },
     progress_hud = {
         en = "Show progress",
