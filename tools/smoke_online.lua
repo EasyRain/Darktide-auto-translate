@@ -912,11 +912,140 @@ check("custom: string_at reports an empty body as nothing",
 -- that is the failure the player hit ("attempt to call field 'probe' (a nil value)").
 do
     local probe_popups = {}
+    online.set_core_for_tests(nil)
     online.init({ popup = function(_, key) probe_popups[#probe_popups + 1] = key end,
                   info = function() end, warn = function() end, log = function() end },
                 nil, fake_glossary, nil, nil)
     check("probe without a native core returns false", online.probe(fake_mod, "zh-tw"), false)
     check("probe says why it cannot run", probe_popups[1], "custom_test_failed")
+end
+
+-- ---------------------------------------------------------------------------
+-- The test button's reply has to be collected even though no *run* is in progress
+--
+-- M.probe() stops the run before it sends, and M.update() used to return immediately when
+-- no run was in progress - so the reply was never read. The request went out, the player saw
+-- nothing, and every later press answered "a request is already in flight" (that is what the
+-- game log showed: the request line, then nothing but that message). This drives the whole
+-- path against a fake core that has its answer ready.
+-- ---------------------------------------------------------------------------
+do
+    local seen = {}
+    local probe_util = {
+        popup = function(_, key, ...) seen[#seen + 1] = { key = key, args = { ... } } end,
+        info = function() end, warn = function() end, log = function() end,
+    }
+    local probe_glossary = { mask = function(text) return text, {} end }
+    local probe_engines = { api_provider = function() return "custom" end,
+                            model_dir = function() return "." end }
+
+    local reply = '{"translations":[{"text":"\233\135\141\232\163\133\233\128\159\229\186\166"}]}'
+    local ready = false
+    local posted = nil
+    local fake_http_core = {
+        at_http_post = function(host, path, content_type, headers, body)
+            posted = { host = host, path = path, headers = headers, body = body }
+            ready = true
+            return 7
+        end,
+        at_http_poll = function(id, result, code, body, cap, len)
+            if not ready then
+                return 0
+            end
+            ready = false
+            id[0], result[0], code[0] = 7, 0, 200
+            ffi.copy(body, reply)
+            len[0] = #reply
+            return 1
+        end,
+        at_poll = function() return 0 end,
+        at_error = function() return "" end,
+        at_proxy_in_use = function() return "" end,
+        at_proxy_hint = function() return "" end,
+        at_json_string_at = function(body, path, out)
+            if path ~= "translations.0.text" then
+                return 0
+            end
+            ffi.copy(out, "\233\135\141\232\163\133\233\128\159\229\186\166")
+            return 1
+        end,
+    }
+
+    local shipped = {}
+    do
+        local real_get_mod = get_mod
+        get_mod = function() return { localize = function(_, key) return key end } end
+        local data = assert(loadfile(here .. "/../scripts/mods/auto_translate/auto_translate_data.lua"))()
+        get_mod = real_get_mod
+        for _, widget in ipairs((data.options and data.options.widgets) or {}) do
+            if widget.setting_id and widget.default_value ~= nil then
+                shipped[widget.setting_id] = widget.default_value
+            end
+        end
+    end
+    shipped.online_api_key = "key-from-the-settings"
+
+    local probe_mod = {
+        get = function(_, key) return shipped[key] end,
+        localize = function(_, key) return key end,
+    }
+
+    online.set_core_for_tests(fake_http_core)
+    online.init(probe_util, nil, probe_glossary, probe_engines, nil, cu)
+    online.state.running = false
+
+    check("probe: the button is accepted with no run in progress",
+        online.probe(probe_mod, "zh-cn"), true)
+    check("probe: it built a DeepL request from the shipped defaults",
+        posted ~= nil and posted.host == "https://api-free.deepl.com"
+            and posted.headers:find("DeepL-Auth-Key key-from-the-settings", 1, true) ~= nil
+            and posted.body:find("target_lang=ZH-HANS", 1, true) ~= nil, true)
+
+    -- Nothing is visible yet: the answer is only collected by update().
+    check("probe: no notice before update runs", #seen, 0)
+    online.update(probe_mod, 0.016)
+    check("probe: update collects the reply with the run stopped", #seen, 1)
+    check("probe: and shows it as the successful test", seen[1] and seen[1].key, "custom_test_ok")
+    check("probe: with the sample and the translation",
+        seen[1] and seen[1].args[1] == "Reload Speed" and seen[1].args[2] == "重装速度", true)
+
+    -- The slot is free again, so a second press is not refused as "already in flight".
+    ready = false
+    check("probe: a second press is accepted", online.probe(probe_mod, "zh-cn"), true)
+    online.update(probe_mod, 0.016)
+    check("probe: and reported too", #seen, 2)
+
+    -- A 400 with a service sentence on it: what the player sees is that sentence, not the
+    -- response path.
+    local fail_util = {
+        popup = function(_, key, ...) seen[#seen + 1] = { key = key, args = { ... } } end,
+        info = function() end, warn = function() end, log = function() end,
+    }
+    online.init(fail_util, nil, probe_glossary, probe_engines, nil, cu)
+    fake_http_core.at_http_poll = function(id, result, code, body, cap, len)
+        if not ready then
+            return 0
+        end
+        ready = false
+        id[0], result[0], code[0] = 7, 0, 400
+        local said = '{"message":"Bad request. Reason: Value for \'source_lang\' not supported."}'
+        ffi.copy(body, said)
+        len[0] = #said
+        return 1
+    end
+    fake_http_core.at_json_string_at = function(body, path, out)
+        local said = body:match('"message"%s*:%s*"(.-)"')
+        if path ~= "message" or not said then
+            return 0
+        end
+        ffi.copy(out, said)
+        return 1
+    end
+    online.probe(probe_mod, "zh-cn")
+    online.update(probe_mod, 0.016)
+    check("probe: a 400 shows the service's own sentence",
+        seen[3] and seen[3].args[1], "HTTP 400: Bad request. Reason: Value for 'source_lang' not supported.")
+    online.set_core_for_tests(nil)
 end
 
 do

@@ -1711,6 +1711,13 @@ end
 M.retry_after_refusal_for_tests = retry_after_refusal
 M.max_local_refusals = MAX_LOCAL_REFUSALS
 M.is_fully_protected_for_tests = is_fully_protected
+-- The native core is loaded lazily and cannot be loaded outside the game (the DLL is x64 and
+-- the smoke test's ffi.load refuses), so the test button's whole request/reply path - the one
+-- whose reply was stranded because the collection was gated on a run being in progress - can
+-- only be exercised by handing the module a core.
+M.set_core_for_tests = function(fake)
+    core = fake
+end
 
 -- Retries the current item on the next provider, or gives up on it.
 -- `transport` marks a genuine engine problem (network/HTTP), which is what the
@@ -1976,9 +1983,6 @@ end
 -- Per-frame driver
 -- ---------------------------------------------------------------------------
 function M.update(mod, dt)
-    if not M.state.running then
-        return
-    end
     if not core then
         M.state.running = false
         return
@@ -1988,6 +1992,19 @@ function M.update(mod, dt)
     elapsed = elapsed + (dt or 0)
 
     -- 1. collect a finished response
+    --
+    -- This runs whether or not a translation run is in progress, because the test button's
+    -- request is not part of a run: M.probe() stops the run before sending it. Gating the
+    -- collection on M.state.running stranded that reply - the request went out, nothing ever
+    -- read it, and every later press was answered "a request is already in flight". Measured
+    -- in the game log: the first press logged its request and no reply ever followed.
+    --
+    -- A local (offline model) request is different: the model's slot belongs to a run, so a
+    -- stopped run has no answer to collect and no item to give it to.
+    if inflight and is_local_request(inflight.kind) and not M.state.running then
+        inflight = nil
+    end
+
     if inflight and is_local_request(inflight.kind) then
         local n = core.at_poll(out_buf, SMALL_CAP)
 
@@ -2126,6 +2143,13 @@ function M.update(mod, dt)
             -- still waiting; one request in flight at a time
             return
         end
+    end
+
+    -- Everything below drives a *run* (pacing, queue, dispatch); a probe stops here, having
+    -- shown its reply above. This gate used to sit at the top of the function, where it also
+    -- skipped the collection of a probe's reply.
+    if not M.state.running then
+        return
     end
 
     -- 2. pacing and cooldown
