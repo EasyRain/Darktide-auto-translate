@@ -1,10 +1,14 @@
--- custom.lua — a translation endpoint the player describes themselves.
+﻿-- custom.lua — a translation endpoint the player describes themselves.
 --
--- Everything about it is unknown in advance: URL, key, auth header, method, content type,
--- request template, system prompt, extra headers and where the translation sits in the
--- reply. So the request is *built here*, in Lua, and only two things are delegated to the
--- core: the HTTP call (at_http_get/at_http_post) and reading one string out of the JSON
--- response (at_json_string_at, which understands "choices.0.message.content").
+-- This is a *machine translation service* described by settings, not a chat endpoint: a
+-- URL, a text parameter, a source and a target language, one key, and a reply that holds
+-- the translation somewhere. That shape covers DeepL, Google v2, LibreTranslate, Yandex,
+-- Baidu/Tencent/Youdao-style services and anything self-hosted that looks like them.
+--
+-- Everything about the endpoint is unknown in advance, so the request is *built here*, in
+-- Lua, and only two things are delegated to the core: the HTTP call
+-- (at_http_get/at_http_post) and reading one string out of the JSON response
+-- (at_json_string_at, which understands "translations.0.text" and friends).
 --
 -- What is deliberately NOT configurable is the safety around it: the glossary masking, the
 -- placeholder count, the format-specifier check, the truncation guard and the "unchanged"
@@ -14,26 +18,27 @@
 local M = {}
 
 -- Placeholders the templates may use. Only these are substituted; anything else is left
--- alone (a JSON body with { } braces of its own is therefore safe as long as the keys are
--- not one of these names).
-local PLACEHOLDERS = { "text", "source", "target", "key", "system" }
+-- alone (a template with braces of its own is therefore safe as long as the keys are not
+-- one of these names).
+local PLACEHOLDERS = { "text", "source", "target", "key" }
 
--- A body template that works with any OpenAI-compatible chat endpoint, so the field is
--- never empty for a first attempt. The model name is literal: it is the endpoint's own
--- spelling and there is no sensible default for it.
-local DEFAULT_BODY =
-    '{"model":"gpt-4o-mini","temperature":0,'
-    .. '"messages":[{"role":"system","content":"{system}"},'
-    .. '{"role":"user","content":"Translate the following text into {target}. '
-    .. 'Reply with the translation only, no quotes, no explanation.\\n\\n{text}"}]}'
-
-local DEFAULT_PROMPT =
-    "You are a translator for the video game Warhammer 40,000: Darktide. "
-    .. "Translate the user's text into the requested language, keeping game terminology, "
-    .. "placeholders and formatting exactly as they are. Reply with the translation only."
+-- The shipped defaults describe an ordinary machine-translation service, because that is
+-- what this engine is for: a URL, a text parameter, a source and a target language, one
+-- key. The body below is the DeepL/Google-v2/LibreTranslate shape, and the response path
+-- is the most common one ({"translations":[{"text":"..."}]}).
+--
+-- A chat-style JSON endpoint is still reachable - the body is a free-text template and the
+-- response path is yours to set - but nothing here is built around it, and there is no
+-- prompt field: a translation service takes text and languages, not instructions.
+local DEFAULT_BODY = "text={text}&source_lang={source}&target_lang={target}&key={key}"
+local DEFAULT_PATH = "translations.0.text"
 
 function M.defaults()
-    return { body = DEFAULT_BODY, prompt = DEFAULT_PROMPT, content_type = "application/json" }
+    return {
+        body = DEFAULT_BODY,
+        path = DEFAULT_PATH,
+        content_type = "application/x-www-form-urlencoded",
+    }
 end
 
 -- The current configuration, with the defaults filled in.
@@ -53,7 +58,6 @@ function M.spec(mod)
         method = text("custom_method"),
         content_type = text("custom_content_type"),
         body = text("custom_body"),
-        prompt = text("custom_prompt"),
         headers = text("custom_headers"),
         path = text("custom_path"),
     }
@@ -61,15 +65,9 @@ function M.spec(mod)
     if spec.method ~= "get" then
         spec.method = "post"
     end
-    if spec.content_type == "" then
-        spec.content_type = "application/json"
-    end
-    if spec.body == "" and spec.method == "post" then
-        spec.body = DEFAULT_BODY
-    end
-    if spec.prompt == "" then
-        spec.prompt = DEFAULT_PROMPT
-    end
+    -- Nothing is substituted here on purpose: the defaults are the settings' own
+    -- default_value, so the fields arrive filled in already, and a field the player has
+    -- *cleared* is a mistake worth naming rather than a value to guess at.
     return spec
 end
 
@@ -84,7 +82,7 @@ function M.problem(spec)
     if spec.path == "" then
         return "custom_path_missing"
     end
-    if spec.method == "post" and spec.body == "" then
+    if spec.body == "" then
         return "custom_body_missing"
     end
     return nil
@@ -150,17 +148,28 @@ function M.values(spec, text, source, target)
         source = source or "en",
         target = target or "en",
         key = spec.key,
-        system = spec.prompt,
     }
+end
+
+-- How a value has to be escaped depends on the *format* of the body, not on the method:
+-- a form body (application/x-www-form-urlencoded - what DeepL and most services take) and
+-- a query string are percent-encoded, while a JSON body is JSON-escaped. Getting this
+-- wrong corrupts every value containing &, =, +, % or a quote: the request still arrives,
+-- it just says something else.
+local function escape_for(spec)
+    if spec.method == "get" then
+        return percent_escape
+    end
+    local content_type = tostring(spec.content_type or ""):lower()
+    if content_type:find("x-www-form-urlencoded", 1, true) then
+        return percent_escape
+    end
+    return json_escape
 end
 
 -- The request body (POST) or the query string to append (GET).
 function M.build(spec, values)
-    if spec.method == "get" then
-        return fill(spec.body ~= "" and spec.body or "q={text}&source={source}&target={target}",
-                    values, percent_escape)
-    end
-    return fill(spec.body, values, json_escape)
+    return fill(spec.body, values, escape_for(spec))
 end
 
 -- For a GET the template may be a bare query ("q={text}") or a whole URL; only what comes

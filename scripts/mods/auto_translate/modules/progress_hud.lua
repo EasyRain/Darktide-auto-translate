@@ -1,4 +1,4 @@
-﻿-- progress_hud.lua — the translation progress text in the bottom-right corner.
+-- progress_hud.lua — the translation progress text in the bottom-right corner.
 --
 -- Deliberately plain: a couple of lines of text, no panel, no bar. The mod works
 -- while the player is playing, so the point is only to say what it is doing

@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """A local stand-in for a translation endpoint, for testing the custom API engine.
 
 Answers two shapes, so both halves of the configuration can be exercised without a real
@@ -41,27 +41,39 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         length = int(self.headers.get("Content-Length") or 0)
-        raw = self.rfile.read(length)
-        try:
-            data = json.loads(raw.decode("utf-8"))
-        except Exception as exc:  # the point of the test: the body must parse
-            self._fail(400, f"invalid JSON body: {exc}")
+        raw = self.rfile.read(length).decode("utf-8", "replace")
+        content_type = (self.headers.get("Content-Type") or "").lower()
+
+        # A form body is what a DeepL-shaped request sends; a JSON body is accepted too, so
+        # the template field stays general. Anything else is a 400 - which is exactly the
+        # signal the test wants when the mod's escaping is wrong.
+        if "json" in content_type:
+            try:
+                data = json.loads(raw)
+            except Exception as exc:
+                self._fail(400, f"invalid JSON body: {exc}")
+                return
+            messages = data.get("messages") or []
+            text = next((m.get("content", "") for m in messages if m.get("role") == "user"), "")
+            if not text:
+                text = data.get("text") or data.get("q") or ""
+            system = next((m.get("content", "") for m in messages if m.get("role") == "system"), "")
+            self._send({
+                "choices": [{"index": 0, "message": {"role": "assistant", "content": f"{MARK} {text}"}}],
+                "received": {"system": system, "text": text},
+            })
             return
 
-        messages = data.get("messages") or []
-        text = ""
-        system = ""
-        for message in messages:
-            if message.get("role") == "system":
-                system = message.get("content", "")
-            elif message.get("role") == "user":
-                text = message.get("content", "")
-        if not text and isinstance(data.get("text"), str):
-            text = data["text"]
-
+        values = {}
+        for pair in raw.split("&"):
+            if "=" in pair:
+                key, value = pair.split("=", 1)
+                values[unquote(key)] = unquote(value)
+        text = values.get("text") or values.get("q") or ""
         self._send({
-            "choices": [{"index": 0, "message": {"role": "assistant", "content": f"{MARK} {text}"}}],
-            "received": {"model": data.get("model"), "system": system, "text": text},
+            "translations": [{"detected_source_language": values.get("source_lang", "EN").upper(),
+                              "text": f"{MARK} {text}"}],
+            "received": values,
         })
 
     def do_GET(self) -> None:

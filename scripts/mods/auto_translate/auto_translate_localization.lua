@@ -1,4 +1,4 @@
-﻿return {
+return {
     mod_name = {
         en = "Auto Translate",
         ["zh-cn"] = "自动翻译",
@@ -134,8 +134,8 @@
         ["zh-cn"] = "API 服务商",
     },
     api_provider_description = {
-        en = "Which service the 'Online API' engine talks to. DeepL has a free tier (500,000 characters per month) and is reachable from mainland China. Custom is any HTTP endpoint you describe yourself (an LLM API, a self-hosted service): URL, key, request template and where the reply keeps the translation are all settings.",
-        ["zh-cn"] = "「在线（正式 API）」引擎要连哪家服务。DeepL 有免费额度（每月 50 万字符）且国内可直连。自定义＝你自己描述的任意 HTTP 接口（大模型 API、自建服务都可以）：网址、密钥、请求模板、响应里译文的位置都由你填写。",
+        en = "Which translation service the 'Online API' engine talks to. DeepL has a free tier (500,000 characters per month) and is reachable from mainland China. Custom is any translation service you describe yourself (a self-hosted engine, another provider, a service behind your own gateway): URL, key, request template and where the reply keeps the translation are all settings.",
+        ["zh-cn"] = "「在线（正式 API）」引擎要连哪家翻译服务。DeepL 有免费额度（每月 50 万字符）且国内可直连。自定义＝你自己描述的任意翻译服务（自建引擎、其他供应商、走自己网关的服务）：网址、密钥、请求模板、响应里译文的位置都由你填写。",
     },
     api_deepl = {
         en = "DeepL (recommended)",
@@ -150,24 +150,24 @@
         ["zh-cn"] = "自定义：接口网址",
     },
     custom_url_description = {
-        en = "The full URL of your endpoint, e.g. https://api.deepseek.com/chat/completions (an OpenAI-compatible chat API), https://api-free.deepl.com/v2/translate, or your own server. Used only by the 'Custom' service.",
-        ["zh-cn"] = "接口的完整网址，例如 https://api.deepseek.com/chat/completions（OpenAI 兼容的对话接口）、https://api-free.deepl.com/v2/translate，或你自己的服务地址。仅在「自定义」服务下使用。",
+        en = "The full URL of the translation service, e.g. https://api-free.deepl.com/v2/translate (DeepL), https://translation.googleapis.com/language/translate/v2 (Google v2), http://localhost:5000/translate (LibreTranslate), or your own server. Used only by the 'Custom' service.",
+        ["zh-cn"] = "翻译服务的完整网址，例如 https://api-free.deepl.com/v2/translate（DeepL）、https://translation.googleapis.com/language/translate/v2（Google v2）、http://localhost:5000/translate（LibreTranslate），或你自己的服务。仅在「自定义」服务下使用。",
     },
     custom_key = {
         en = "Custom: key",
         ["zh-cn"] = "自定义：密钥",
     },
     custom_key_description = {
-        en = "The API key for your endpoint. May be left empty for a local service that needs none. Substituted where {key} appears in the auth header, the body template or the query template.",
-        ["zh-cn"] = "你的接口密钥。本地服务不需要密钥时可以留空。它会被填到鉴权头、请求体模板或查询模板里的 {key} 处。",
+        en = "The service's key. May be left empty for a self-hosted service that needs none. Substituted wherever {key} appears - in the auth header, the request template or the query template.",
+        ["zh-cn"] = "服务的密钥。自建服务不需要密钥时可留空。它会被填到出现 {key} 的地方——鉴权头、请求参数模板或查询模板。",
     },
     custom_auth = {
         en = "Custom: auth header",
         ["zh-cn"] = "自定义：鉴权头",
     },
     custom_auth_description = {
-        en = "The header that carries the key, e.g. 'Authorization: Bearer {key}', 'x-api-key: {key}', or empty for an endpoint that needs none.",
-        ["zh-cn"] = "携带密钥的请求头，例如 'Authorization: Bearer {key}'、'x-api-key: {key}'；接口不需要鉴权就留空。",
+        en = "The header that carries the key, for services that want it there: 'Authorization: DeepL-Auth-Key {key}' (DeepL), 'Authorization: Bearer {key}', 'x-api-key: {key}'. Empty by default, because the shipped request template passes the key as a parameter instead - use whichever your service documents.",
+        ["zh-cn"] = "把密钥放在请求头里的服务用它：'Authorization: DeepL-Auth-Key {key}'（DeepL）、'Authorization: Bearer {key}'、'x-api-key: {key}'。默认为空，因为内置模板是把密钥当参数传的——按服务文档二选一。",
     },
     custom_method = {
         en = "Custom: request method",
@@ -182,8 +182,8 @@
         ["zh-cn"] = "GET（查询模板）",
     },
     method_post_json_description = {
-        en = "POST with the body template below. This is what an LLM API or any JSON service wants.",
-        ["zh-cn"] = "POST，请求体由下面的模板生成。大模型 API 和大多数 JSON 服务用这种。",
+        en = "POST with the request template below. DeepL, LibreTranslate and most services take their parameters this way.",
+        ["zh-cn"] = "POST，参数由下面的模板生成。DeepL、LibreTranslate 与多数服务用这种。",
     },
     method_get_query_description = {
         en = "GET: the template becomes the query string, appended to the URL (e.g. 'q={text}&source={source}&target={target}'). Text and keys are percent-encoded.",
@@ -194,24 +194,16 @@
         ["zh-cn"] = "自定义：Content-Type",
     },
     custom_content_type_description = {
-        en = "The Content-Type of a POST body: application/json for most endpoints, application/x-www-form-urlencoded for a DeepL-style form body.",
-        ["zh-cn"] = "POST 请求体的 Content-Type：多数接口是 application/json；DeepL 那种表单式的用 application/x-www-form-urlencoded。",
+        en = "The Content-Type of a POST body. application/x-www-form-urlencoded for DeepL and most services (the default); application/json for a JSON body (Google v2, some self-hosted APIs).",
+        ["zh-cn"] = "POST 请求体的 Content-Type。DeepL 与多数服务用 application/x-www-form-urlencoded（默认）；JSON 请求体（Google v2、部分自建服务）用 application/json。",
     },
     custom_body = {
         en = "Custom: body template",
         ["zh-cn"] = "自定义：请求体模板",
     },
     custom_body_description = {
-        en = "The request body, with {text} {source} {target} {key} {system} replaced (values are JSON-escaped). Empty = a ready-made OpenAI-compatible chat template. Example for a form-style service: text={text}&target_lang={target}&auth_key={key}",
-        ["zh-cn"] = "请求体模板，其中 {text} {source} {target} {key} {system} 会被替换（值为 JSON 转义）。留空＝内置的 OpenAI 兼容对话模板。表单式接口示例：text={text}&target_lang={target}&auth_key={key}",
-    },
-    custom_prompt = {
-        en = "Custom: system prompt",
-        ["zh-cn"] = "自定义：系统提示词",
-    },
-    custom_prompt_description = {
-        en = "Filled into {system}. Defaults to a Darktide translator prompt that asks the model to keep terminology, placeholders and formatting, and to reply with the translation only. Tune it for your model - this is the one place where a bigger model is told what the mod expects.",
-        ["zh-cn"] = "填入 {system}。默认是一段 Darktide 翻译提示：要求保留术语、占位符与格式，并且只回复译文。可按你的模型调整——这是告诉大模型本 mod 期望什么的地方。",
+        en = "The request parameters, with {text} {source} {target} {key} replaced (JSON-escaped in a JSON body, percent-encoded in a query). Empty = the shipped DeepL-shaped default: text={text}&source_lang={source}&target_lang={target}&key={key}. DeepL itself wants 'text={text}&target_lang={target}' with the key in the auth header; LibreTranslate wants 'q={text}&source={source}&target={target}'.",
+        ["zh-cn"] = "请求参数模板，其中 {text} {source} {target} {key} 会被替换（JSON 体里做 JSON 转义，查询串里做百分号编码）。留空＝内置的 DeepL 形状默认值：text={text}&source_lang={source}&target_lang={target}&key={key}。DeepL 本身用 'text={text}&target_lang={target}' 且密钥放鉴权头；LibreTranslate 用 'q={text}&source={source}&target={target}'。",
     },
     custom_headers = {
         en = "Custom: extra headers",
@@ -226,8 +218,8 @@
         ["zh-cn"] = "自定义：响应取值路径",
     },
     custom_path_description = {
-        en = "Where the translation is in the reply, as a path with dots and array indices. Examples: choices.0.message.content (OpenAI-compatible), data.translations.0.translatedText (DeepL), translatedText, responseData.translatedText. Numeric steps index arrays.",
-        ["zh-cn"] = "译文在响应里的位置，用点号和数组下标表示。示例：choices.0.message.content（OpenAI 兼容）、data.translations.0.translatedText（DeepL）、translatedText、responseData.translatedText。数字表示数组下标。",
+        en = "Where the translation is in the reply, as a path with dots and array indices. Default: translations.0.text (DeepL and services that copy it). Google v2: data.translations.0.translatedText. LibreTranslate: translatedText. Baidu: trans_result.0.dst.",
+        ["zh-cn"] = "译文在响应里的位置，用点号和数组下标表示。默认 translations.0.text（DeepL 及沿用其格式的服务）。Google v2：data.translations.0.translatedText。LibreTranslate：translatedText。百度：trans_result.0.dst。",
     },
     test_custom_api = {
         en = "Test the online engine",

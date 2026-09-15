@@ -1,4 +1,4 @@
-﻿-- engines.lua — translation engines.
+-- engines.lua — translation engines.
 --
 -- This framework build only ships the "library" path: translations that already
 -- exist in the local files are injected by the injector. The actual machine

@@ -1,4 +1,4 @@
-﻿-- exporter.lua — collects official terminology for the current game language.
+-- exporter.lua — collects official terminology for the current game language.
 --
 -- Why: the game can only be switched to another language through Steam + a
 -- restart, so instead of asking for that repeatedly, every launch writes out the

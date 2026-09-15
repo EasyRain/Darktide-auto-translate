@@ -1,4 +1,4 @@
-﻿-- online.lua — drives the machine translation queue, one request at a time.
+-- online.lua — drives the machine translation queue, one request at a time.
 --
 -- The game thread must never block, so this is a poll loop rather than a function
 -- that runs to completion: mod.update() calls M.update(mod, dt) once per frame,

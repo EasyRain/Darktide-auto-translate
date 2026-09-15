@@ -673,8 +673,7 @@ local spec = cu.spec(fake_mod_with({
     custom_auth = "Authorization: Bearer {key}",
     custom_method = "post",
     custom_content_type = "application/json",
-    custom_body = '{"text":"{text}","from":"{source}","to":"{target}","sys":"{system}"}',
-    custom_prompt = "translate carefully",
+    custom_body = '{"text":"{text}","from":"{source}","to":"{target}"}',
     custom_headers = "x-a: 1;; x-b: 2",
     custom_path = "choices.0.message.content",
 }))
@@ -689,7 +688,7 @@ check("custom: nothing missing in a complete spec", cu.problem(spec), nil)
 local values = cu.values(spec, "Reload Speed", "en", "zh-tw")
 check("custom: the body substitutes everything",
     cu.build(spec, values),
-    '{"text":"Reload Speed","from":"en","to":"zh-tw","sys":"translate carefully"}')
+    '{"text":"Reload Speed","from":"en","to":"zh-tw"}')
 -- quotes and newlines have to survive inside a JSON string
 local nasty = cu.values(spec, 'say "hi"\nnow', "en", "zh-tw")
 check("custom: a quote and a newline are escaped",
@@ -719,15 +718,49 @@ check("custom: no URL is its own problem",
     cu.problem(cu.spec(fake_mod_with({}))), "custom_url_missing")
 check("custom: a broken URL is its own problem",
     cu.problem(cu.spec(fake_mod_with({ custom_url = "not a url", custom_path = "x" }))), "custom_url_invalid")
+-- An empty field is a mistake to name, not a value to guess at: the defaults are the
+-- settings' own default_value, so these only happen after the player clears something.
+local bare = { custom_url = "https://a.example.com/x" }
 check("custom: no response path is its own problem",
-    cu.problem(cu.spec(fake_mod_with({ custom_url = "https://a.example.com/x" }))), "custom_path_missing")
--- defaults: an empty body/prompt/content-type still produces a usable OpenAI-style request
-local defaulted = cu.spec(fake_mod_with({ custom_url = "https://a.example.com/x", custom_path = "choices.0.message.content" }))
-check("custom: an empty body gets the default template",
-    defaulted.body:find('"messages"', 1, true) ~= nil, true)
-check("custom: an empty prompt gets the default one",
-    defaulted.prompt:find("Darktide", 1, true) ~= nil, true)
-check("custom: an empty content type becomes JSON", defaulted.content_type, "application/json")
+    cu.problem(cu.spec(fake_mod_with(bare))), "custom_path_missing")
+check("custom: an empty body is its own problem",
+    cu.problem(cu.spec(fake_mod_with({ custom_url = "https://a.example.com/x",
+                                       custom_path = "translations.0.text" }))), "custom_body_missing")
+
+-- The shipped default is an ordinary translation service: parameters in a form body, the
+-- translation under translations.0.text, key as a parameter.
+local defaults = cu.defaults()
+check("custom: the default body is the DeepL shape",
+    defaults.body:find("text={text}", 1, true) ~= nil
+        and defaults.body:find("target_lang={target}", 1, true) ~= nil, true)
+check("custom: the default path is translations.0.text", defaults.path, "translations.0.text")
+check("custom: the default content type is a form",
+    defaults.content_type, "application/x-www-form-urlencoded")
+
+-- Escaping follows the body format, not the method: a form body with a space or an
+-- ampersand in the text must be percent-encoded, or the request says something else.
+local form = cu.spec(fake_mod_with({ custom_url = "https://a.example.com/x",
+                                     custom_method = "post",
+                                     custom_content_type = "application/x-www-form-urlencoded",
+                                     custom_body = "text={text}&target_lang={target}",
+                                     custom_path = "translations.0.text" }))
+check("custom: a form body is percent-encoded",
+    cu.build(form, cu.values(form, "Ammo & More", "en", "zh-tw")),
+    "text=Ammo%20%26%20More&target_lang=zh-tw")
+local json_spec = cu.spec(fake_mod_with({ custom_url = "https://a.example.com/x",
+                                          custom_method = "post",
+                                          custom_content_type = "application/json",
+                                          custom_body = '{"q":"{text}"}',
+                                          custom_path = "translations.0.text" }))
+check("custom: a JSON body is JSON-escaped",
+    cu.build(json_spec, cu.values(json_spec, 'Ammo "X"', "en", "zh-tw")),
+    '{"q":"Ammo \\"X\\""}')
+-- {system} is gone with the prompt field: a template that still uses it keeps it literal
+-- rather than silently sending an empty string where an instruction was expected.
+check("custom: {system} is not a placeholder any more",
+    cu.build(cu.spec(fake_mod_with({ custom_url = "https://a.example.com/x",
+                                     custom_body = "s={system}&text={text}" })), values)
+        :find("{system}", 1, true) ~= nil, true)
 
 check("custom: 401/403 is named as an auth problem", cu.error_key(401), "custom_auth_failed")
 check("custom: 404 is named as a URL problem", cu.error_key(404), "custom_not_found")

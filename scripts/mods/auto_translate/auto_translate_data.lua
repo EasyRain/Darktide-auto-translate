@@ -87,9 +87,12 @@ return {
                 max_length = 256,
             },
             {
+                -- Empty by default: the shipped body template carries the key as a
+                -- parameter, which is what DeepL-style services do. The tooltip shows the
+                -- header form for the ones that want it.
                 setting_id = "custom_auth",
                 type = "text",
-                default_value = "Authorization: Bearer {key}",
+                default_value = "",
                 max_length = 256,
             },
             {
@@ -104,21 +107,18 @@ return {
             {
                 setting_id = "custom_content_type",
                 type = "text",
-                default_value = "application/json",
+                default_value = "application/x-www-form-urlencoded",
                 max_length = 128,
             },
             {
                 setting_id = "custom_body",
                 type = "text",
-                default_value = "",
+                -- The DeepL/Google-v2/LibreTranslate shape; see the tooltip for the two
+                -- variants those services prefer.
+                default_value = "text={text}&source_lang={source}&target_lang={target}&key={key}",
                 max_length = 1024,
             },
-            {
-                setting_id = "custom_prompt",
-                type = "text",
-                default_value = "",
-                max_length = 1024,
-            },
+
             {
                 setting_id = "custom_headers",
                 type = "text",
@@ -128,7 +128,7 @@ return {
             {
                 setting_id = "custom_path",
                 type = "text",
-                default_value = "",
+                default_value = "translations.0.text",
                 max_length = 128,
             },
             {

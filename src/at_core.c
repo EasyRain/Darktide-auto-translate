@@ -1,4 +1,4 @@
-﻿// at_core.c — Auto Translate native core.
+// at_core.c — Auto Translate native core.
 //
 // Part 1 (this file): async HTTP GET on a worker thread via WinHTTP, so the Lua
 // side can just enqueue requests and poll for results once per frame.

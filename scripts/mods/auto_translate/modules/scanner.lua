@@ -1,4 +1,4 @@
-﻿-- scanner.lua — enumerates loaded mods, reads their localization tables and
+-- scanner.lua — enumerates loaded mods, reads their localization tables and
 -- works out which keys still need a translation for the current target language.
 local M = {}
 

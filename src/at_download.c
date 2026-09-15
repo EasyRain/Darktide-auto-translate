@@ -1,4 +1,4 @@
-﻿// at_download.c — streaming model download: resume, progress, cancel, checksum.
+// at_download.c — streaming model download: resume, progress, cancel, checksum.
 //
 // Design notes worth keeping:
 //

@@ -1,4 +1,4 @@
-﻿# lua_syntax_check.py -- parse every Lua file in this mod and report syntax errors.
+# lua_syntax_check.py -- parse every Lua file in this mod and report syntax errors.
 #
 # The mod runs inside the game, so a missing `end` or a reserved word used as a table
 # key only shows up as a mod that silently fails to load. There is no game here, so

@@ -1,4 +1,4 @@
-﻿// at_model.h — the offline NLLB-200 engine: model files, language codes, inference.
+// at_model.h — the offline NLLB-200 engine: model files, language codes, inference.
 //
 // Kept apart from at_online.c because the two halves have nothing in common: this
 // one never touches the network, and it owns the CTranslate2/SentencePiece side.

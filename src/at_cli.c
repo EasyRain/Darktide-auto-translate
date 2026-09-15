@@ -1,4 +1,4 @@
-﻿// at_cli.c — command line front end for the Auto Translate native core.
+// at_cli.c — command line front end for the Auto Translate native core.
 //
 // Lets the core be tested without launching the game:
 //   at_cli.exe info

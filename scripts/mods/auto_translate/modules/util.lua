@@ -1,4 +1,4 @@
-﻿-- util.lua — shared helpers: paths, hashing, file IO, logging.
+-- util.lua — shared helpers: paths, hashing, file IO, logging.
 -- No dependencies; every other module receives this table via init().
 local M = {}
 

@@ -494,29 +494,41 @@ carry each form, which is what to check before trusting a claim about line break
 
 ### Custom endpoints
 
-Nothing about a custom endpoint is known in advance, so everything is a setting: URL, key,
-auth header, method, content type, request template, system prompt, extra headers and where
-the translation sits in the reply. `modules/custom.lua` builds the request (the core only
-knows the services it ships) and the core does the two things Lua cannot: the HTTP call and
-reading one string out of the JSON reply.
+This is for a **machine translation service** the mod does not ship: a URL, a text
+parameter, a source and a target language, one key, and a reply that holds the translation
+somewhere. That one shape covers DeepL, Google v2, LibreTranslate, Yandex and anything
+self-hosted that looks like them. It is not a chat interface — there is no prompt field,
+because a translation service takes text and languages, not instructions. (A JSON body and
+a response path still let you point it at one if you want to, but nothing is built around
+that.)
 
-| field | example |
-| --- | --- |
-| URL | `https://api.deepseek.com/chat/completions` |
-| auth header | `Authorization: Bearer {key}` |
-| method | POST (body template) or GET (query template) |
-| content type | `application/json`, or `application/x-www-form-urlencoded` for a form body |
-| body template | `{"model":"…","messages":[{"role":"system","content":"{system}"},{"role":"user","content":"{text}"}]}` |
-| system prompt | filled into `{system}`; defaults to a Darktide translator prompt |
-| extra headers | separated by `;;` or a literal `\n` (the box is one line) |
-| response path | `choices.0.message.content`, `data.translations.0.translatedText`, `translatedText` |
+`modules/custom.lua` builds the request (the core only knows the services it ships) and
+the core does the two things Lua cannot: the HTTP call and reading one string out of the
+JSON reply.
 
-Placeholders are `{text}` `{source}` `{target}` `{key}` `{system}`; values are JSON-escaped
-in a POST body and percent-encoded in a GET query. Whatever is *not* configurable is the
-safety around it: glossary masking (a custom endpoint never gets rich-text markup
-unmasked), the placeholder count, the format-specifier and truncation guards and the
-"unchanged" tagging all run exactly as they do for DeepL — a user-supplied endpoint is the
-one most likely to answer with something unexpected.
+| field | default | example |
+| --- | --- | --- |
+| URL | — | `https://api-free.deepl.com/v2/translate` |
+| key | — | your key; empty for a self-hosted service that needs none |
+| auth header | empty | `Authorization: DeepL-Auth-Key {key}` — empty because the shipped template passes the key as a parameter |
+| method | POST | POST (parameters) or GET (query string) |
+| content type | `application/x-www-form-urlencoded` | `application/json` for a JSON body |
+| request template | `text={text}&source_lang={source}&target_lang={target}&key={key}` | DeepL: `text={text}&target_lang={target}`; LibreTranslate: `q={text}&source={source}&target={target}` |
+| extra headers | empty | separated by `;;` or a literal `\n` (the box is one line) |
+| response path | `translations.0.text` | Google v2: `data.translations.0.translatedText`; LibreTranslate: `translatedText`; Baidu: `trans_result.0.dst` |
+
+Placeholders are `{text}` `{source}` `{target}` `{key}`. Values are **percent-encoded in a
+form body or a query string and JSON-escaped in a JSON body** — the format decides, not the
+method, because a form body carrying a raw `&` or `=` would say something else entirely.
+
+The defaults are the settings' own default values, and a *cleared* field is a mistake that
+is named (`custom_url_missing`, `custom_url_invalid`, `custom_path_missing`,
+`custom_body_missing`) rather than silently replaced by a guess.
+
+What is *not* configurable is the safety around it: glossary masking (a custom endpoint
+never gets rich-text markup unmasked), the placeholder count, the format-specifier and
+truncation guards and the "unchanged" tagging all run exactly as they do for DeepL — a
+user-supplied endpoint is the one most likely to answer with something unexpected.
 
 Mistakes are named instead of looking alike: a missing URL or response path pauses the run
 with a notice naming the field, and HTTP 401/403, 404, 429 and 5xx each have their own

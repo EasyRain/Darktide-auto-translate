@@ -1,4 +1,4 @@
-﻿-- download.lua — fetching the offline model, one file at a time.
+-- download.lua — fetching the offline model, one file at a time.
 --
 -- The files are 1.4 GB together, they come from a host that mainland China cannot reach
 -- without the mirror, and a transfer has to survive a cancelled game and a dropped

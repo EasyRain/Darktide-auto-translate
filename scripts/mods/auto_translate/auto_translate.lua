@@ -1,4 +1,4 @@
-﻿-- auto_translate.lua — main entry point.
+-- auto_translate.lua — main entry point.
 --
 -- Pipeline on startup (and on demand):
 --   1. scan every loaded mod's localization table (DMF's registry) for the target language

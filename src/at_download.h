@@ -1,4 +1,4 @@
-﻿// at_download.h — streaming model download (WinHTTP) with resume and a checksum
+// at_download.h — streaming model download (WinHTTP) with resume and a checksum
 //
 // The model files are 1.4 GB, they come from a host that is unreachable from mainland
 // China without the mirror, and the download has to survive a cancelled game, a dropped

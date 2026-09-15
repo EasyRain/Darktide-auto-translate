@@ -1,4 +1,4 @@
-﻿// at_core.h — Auto Translate native core (HTTP + translation entry points)
+// at_core.h — Auto Translate native core (HTTP + translation entry points)
 //
 // Async HTTP GET on a background thread so the game thread never blocks.
 //   at_http_get(host, path) -> request id (>0) or 0 on failure
