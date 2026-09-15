@@ -1,4 +1,4 @@
-// at_download.c — streaming model download: resume, progress, cancel, checksum.
+﻿// at_download.c — streaming model download: resume, progress, cancel, checksum.
 //
 // Design notes worth keeping:
 //
@@ -44,6 +44,15 @@ static volatile LONG64 g_received = 0;
 static volatile LONG64 g_total = 0;
 static volatile LONG g_cancel = 0;
 static volatile LONG g_running = 0;      // a worker thread exists
+
+// -1 = decide per host (default), 0 = never use the proxy, 1 = use it when one is set.
+//
+// The mirror and the proxy are alternatives, not allies: hf-mirror.com exists for players
+// inside China and only serves a Chinese IP, so sending it through a VPN (whose exit is
+// abroad) is the one way to make it fail. huggingface.co is the other way round - from
+// China it is unreachable without the proxy. So the route follows the host, and the
+// fallback between the two hosts is then a fallback between two different routes.
+static volatile LONG g_proxy_mode = -1;
 static char g_error[512] = { 0 };
 static char g_path[1024] = { 0 };
 static char g_url[2048] = { 0 };
@@ -179,6 +188,24 @@ done:
     return ok;
 }
 
+static int host_is_mirror(const char* url)
+{
+    return url && strstr(url, HOST_HF_MIRROR) != NULL;
+}
+
+// 1 when this URL should go through the configured proxy.
+static int want_proxy(const char* url)
+{
+    const int mode = (int)InterlockedCompareExchange(&g_proxy_mode, 0, 0);
+    if (mode == 0) {
+        return 0;
+    }
+    if (mode == 1) {
+        return 1;
+    }
+    return !host_is_mirror(url);
+}
+
 static int hex_equal(const char* a, const char* b)
 {
     if (!a || !b) {
@@ -274,7 +301,11 @@ static int split_url(const char* url_utf8, wchar_t* host, int host_cap, wchar_t*
 // ---------------------------------------------------------------------------
 // Returns 0 on success, -1 on a transport failure (worth retrying on the other host),
 // -2 on a definitive failure (bad status, disk error, checksum).
-static int transfer(const char* url, const char* out_path, const char* sha256_hex)
+// `restart` = 1 ignores the file on disk and fetches from the beginning. It exists for the
+// case where the range request is not satisfiable: "Range: bytes=<size>-" on a file that is
+// already complete is a 416, and a complete-but-wrong file is exactly what a checksum is
+// supposed to catch. Without it, a downloader that resumes can never repair such a file.
+static int transfer(const char* url, const char* out_path, const char* sha256_hex, int restart)
 {
     wchar_t host[256] = { 0 };
     wchar_t path[1024] = { 0 };
@@ -284,7 +315,7 @@ static int transfer(const char* url, const char* out_path, const char* sha256_he
     int has_proxy;
     HINTERNET session = NULL, connection = NULL, request = NULL;
     DWORD status_code = 0, status_size = sizeof(status_code);
-    long long existing = at_file_size64(out_path);
+    long long existing = restart ? 0 : at_file_size64(out_path);
     long long received = 0;
     long long total = 0;
     FILE* out = NULL;
@@ -301,11 +332,19 @@ static int transfer(const char* url, const char* out_path, const char* sha256_he
     }
     received = existing;
 
-    has_proxy = at_proxy_wide(proxy, 256);
-    session = WinHttpOpen(L"auto_translate/1.0", has_proxy ? WINHTTP_ACCESS_TYPE_NAMED_PROXY
-                                                           : WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
-                          has_proxy ? proxy : WINHTTP_NO_PROXY_NAME,
-                          has_proxy ? WINHTTP_NO_PROXY_BYPASS : NULL, 0);
+    {
+        const int use_proxy = want_proxy(url);
+        has_proxy = use_proxy && at_proxy_wide(proxy, 256);
+        // use_proxy == 0 must mean *direct*, not "let WinHTTP decide": AUTOMATIC_PROXY would
+        // pick the system proxy right back up, which is how a mirror download ends up going
+        // out through the VPN.
+        session = WinHttpOpen(L"auto_translate/1.0",
+                              !use_proxy ? WINHTTP_ACCESS_TYPE_NO_PROXY
+                                         : (has_proxy ? WINHTTP_ACCESS_TYPE_NAMED_PROXY
+                                                      : WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY),
+                              (use_proxy && has_proxy) ? proxy : WINHTTP_NO_PROXY_NAME,
+                              WINHTTP_NO_PROXY_BYPASS, 0);
+    }
     if (!session) {
         set_error("could not open an HTTP session");
         return -1;
@@ -350,6 +389,13 @@ static int transfer(const char* url, const char* out_path, const char* sha256_he
                              WINHTTP_HEADER_NAME_BY_INDEX, &status_code, &status_size,
                              WINHTTP_NO_HEADER_INDEX)) {
         set_error("the download host did not report a status");
+        goto done;
+    }
+    if (status_code == 416 && existing > 0) {
+        // The file is already at least as long as the resource: the range starts past the
+        // end. Tell the caller to start over instead of failing.
+        set_error("the file on disk is already complete; fetching it again");
+        rc = -3;
         goto done;
     }
     if (status_code != 200 && status_code != 206) {
@@ -485,14 +531,22 @@ static DWORD WINAPI worker(LPVOID param)
 
     _snprintf_s(url, sizeof(url), _TRUNCATE, "%s", g_url);
 
-    rc = transfer(url, g_path, sha);
+    rc = transfer(url, g_path, sha, 0);
+    if (rc == -3) {
+        // A 416: whatever is on disk cannot be resumed into the right file. Start over -
+        // transfer() opens with "wb" when it is not resuming, which truncates it.
+        rc = transfer(url, g_path, sha, 1);
+    }
     if (rc == -1 && swap_host(url, alternate, (int)sizeof(alternate))) {
         // One retry against the other Hugging Face host: which of the two is reachable
         // depends on where the player is, and they serve the same tree. Whatever the first
         // attempt wrote is resumed, not thrown away.
         long long keep = at_file_size64(g_path);
         g_received = keep > 0 ? keep : 0;
-        rc = transfer(alternate, g_path, sha);
+        rc = transfer(alternate, g_path, sha, 0);
+        if (rc == -3) {
+            rc = transfer(alternate, g_path, sha, 1);
+        }
     }
 
     if (rc == 0) {
@@ -516,6 +570,16 @@ int at_download_start(const char* url_utf8, const char* out_path_utf8, const cha
     if (!url_utf8 || !url_utf8[0] || !out_path_utf8 || !out_path_utf8[0]) {
         set_error("a download needs a URL and a destination file");
         return -1;
+    }
+    // A cancelled worker is still closing its handles for a moment after the status says
+    // "cancelled"; starting again immediately used to fail with "a download is already
+    // running", which is not something the player can do anything about. Give it a moment.
+    {
+        int waited = 0;
+        while (waited < 300 && InterlockedCompareExchange(&g_running, 0, 0) != 0) {
+            Sleep(10);
+            waited += 10;
+        }
     }
     if (InterlockedCompareExchange(&g_running, 1, 0) != 0) {
         set_error("a download is already running");
@@ -579,4 +643,23 @@ const char* at_download_error(void)
 const char* at_download_path(void)
 {
     return g_path;
+}
+
+// -1 = per host (default: the mirror direct, huggingface.co through the proxy),
+//  0 = never, 1 = whenever one is configured.
+int at_download_use_proxy(int mode)
+{
+    InterlockedExchange(&g_proxy_mode, mode < 0 ? -1 : (mode ? 1 : 0));
+    return 1;
+}
+
+int at_download_proxy_mode(void)
+{
+    return (int)InterlockedCompareExchange(&g_proxy_mode, 0, 0);
+}
+
+// What this URL will do, for the log: 1 = through the proxy, 0 = direct.
+int at_download_route_is_proxied(const char* url)
+{
+    return want_proxy(url);
 }

@@ -1,4 +1,4 @@
-// at_download.h — streaming model download (WinHTTP) with resume and a checksum
+﻿// at_download.h — streaming model download (WinHTTP) with resume and a checksum
 //
 // The model files are 1.4 GB, they come from a host that is unreachable from mainland
 // China without the mirror, and the download has to survive a cancelled game, a dropped
@@ -41,6 +41,17 @@ AT_API int at_download_cancel(void);
 // Human readable failure reason ("" when there is none), and what is being fetched.
 AT_API const char* at_download_error(void);
 AT_API const char* at_download_path(void);
+
+// Which route a download takes: <0 = decide per host (the default), 0 = never use the
+// proxy, 1 = use it whenever one is configured.
+//
+// The default is the important one: hf-mirror.com only serves a Chinese IP, so it must go
+// *direct*, while huggingface.co from China needs the proxy - routing the mirror through a
+// VPN is the one reliable way to break it. at_download_route_is_proxied() reports what a
+// given URL will do, for the log.
+AT_API int at_download_use_proxy(int mode);
+AT_API int at_download_proxy_mode(void);
+AT_API int at_download_route_is_proxied(const char* url_utf8);
 
 // SHA-256 of a file as lowercase hex; 1 on success. Used to verify a finished download
 // and by the CLI/tests to check a directory by hand.

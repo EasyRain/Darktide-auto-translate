@@ -1,4 +1,4 @@
-# lua_syntax_check.py -- parse every Lua file in this mod and report syntax errors.
+﻿# lua_syntax_check.py -- parse every Lua file in this mod and report syntax errors.
 #
 # The mod runs inside the game, so a missing `end` or a reserved word used as a table
 # key only shows up as a mod that silently fails to load. There is no game here, so
@@ -26,6 +26,9 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, "..", "scripts"))
 PARSER_LUA = os.path.join(HERE, "luajit_parse.lua")
 
+# The tree at D:\Tools\Lua\luajit is built for x64 (tools\build_luajit64.bat), which is what
+# the game runs and what can load the x64 at_core.dll through the FFI. A 32-bit luajit.exe
+# parses these files just as well, but cannot test anything that calls into the core.
 KNOWN_LUAJIT = [
     os.environ.get("LUA_SYNTAX_LUAJIT", ""),
     shutil.which("luajit") or "",

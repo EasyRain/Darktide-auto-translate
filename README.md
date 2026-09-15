@@ -184,6 +184,14 @@ leaving something that looks like a model.
 `huggingface.co`; whatever is chosen, a failed connection is retried once against the
 other host, because which one is reachable depends on where the player is.
 
+The route follows the host, and that is deliberate: **the mirror is fetched directly, and
+`huggingface.co` goes through the proxy**. hf-mirror.com exists for players inside China
+and only serves a Chinese IP, so sending it out through a VPN whose exit is abroad is the
+one reliable way to break it — while huggingface.co is exactly the host a player in China
+cannot reach without one. The log line names the route ("from hf-mirror.com, direct"), so
+a download that will not start says which of the two things to change.
+`at_cli.exe fetch … --proxy-mode auto|direct|proxy` overrides it for measuring.
+
 Measured with `at_cli.exe fetch` against the mirror: a full 4,852,054-byte file downloaded
 and verified (`checksum: ok`), a deliberately truncated 1,000,000-byte file resumed
 (`resuming: 1000000 byte(s) already there`) and ended at the exact size with the same
@@ -538,8 +546,18 @@ The Lua side has its own check, because a syntax error there only shows up as a 
 that quietly fails to load:
 
 ```
-python tools\lua_syntax_check.py                 # parses all 13 files, runs nothing
+python tools\lua_syntax_check.py                 # parses all 14 files, runs nothing
+python tools\check_exports.py                    # every at_* name in the Lua CDEF exists in the DLL
 ```
+
+`check_exports.py` exists because a missing export is invisible until the game calls it: the
+C side compiles and links happily while the Lua CDEF declares a name nobody defines, and the
+symptom is "attempt to call a nil value" in the middle of a run.
+
+For anything that calls into the core through the FFI (the downloader, the model entry
+points), the LuaJIT used for testing has to be **x64** like the game's - a 32-bit
+`luajit.exe` cannot load the DLL at all ("%1 is not a valid Win32 application").
+`tools\build_luajit64.bat` builds one from the source tree the tooling sits next to.
 
 It parses with **LuaJIT when one is available** (`D:\Tools\Lua\luajit\src\luajit.exe`
 is found even when it is not on PATH, or set `LUA_SYNTAX_LUAJIT`), because LuaJIT is

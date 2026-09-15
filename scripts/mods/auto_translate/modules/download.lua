@@ -99,11 +99,38 @@ local function notify(key, ...)
     end
 end
 
+-- "hf-mirror.com, direct" / "huggingface.co via 127.0.0.1:7890": the route is part of the
+-- log because it is the thing a player has to change when a download will not start.
+local function host_label(core, url)
+    local host = tostring(url):match("^https?://([^/]+)") or "?"
+    if core.at_download_route_is_proxied(url) == 1 then
+        local proxy = ffi.string(core.at_proxy_in_use())
+        return string.format("%s via %s", host, tostring(proxy))
+    end
+    return host .. ", direct"
+end
+
 local function host_base()
     if mod:get("model_mirror") == false then
         return HOSTS.direct
     end
     return HOSTS.mirror
+end
+
+-- Is the file on disk the file we asked for? Size alone is not enough: a truncated
+-- download that happened to end at the right length, or a file from another model with the
+-- same name, would be skipped forever and the engine would load garbage. Hashing 1.4 GB
+-- costs a few seconds, once, when the download switch is turned on.
+local function file_matches(core, path, file)
+    local size = tonumber(core.at_file_size64(path)) or -1
+    if size ~= file.size then
+        return false, size
+    end
+    local hex = ffi.new("char[65]")
+    if core.at_sha256_file(path, hex, 65) ~= 1 then
+        return false, size
+    end
+    return ffi.string(hex) == file.sha256, size
 end
 
 local function model_dir()
@@ -130,19 +157,17 @@ local function next_file(core)
     for i, file in ipairs(FILES) do
         if i > M.state.index then
             local path = dir .. "/" .. file.name
-            local on_disk = tonumber(core.at_file_size64(path)) or -1
+            local complete, on_disk = file_matches(core, path, file)
 
-            -- A file that is already the right size is skipped: a cancelled download then
-            -- only fetches what is missing, and a re-run after a checksum failure
-            -- re-fetches just that file. A file that is *longer* than expected cannot be
-            -- resumed into anything sane, so it goes first (the checksum would have
-            -- rejected it, and that is what the .bad name is for).
+            -- Only a file that *verifies* is skipped, so a cancelled download resumes into
+            -- just the missing parts and a corrupt one is fetched again. A file longer than
+            -- expected cannot be resumed into anything sane, so it goes first.
             if on_disk > file.size then
                 core.at_delete_file(path)
                 on_disk = -1
             end
 
-            if on_disk ~= file.size then
+            if not complete then
                 M.state.index = i
                 M.state.name = file.name
                 M.state.received = on_disk > 0 and on_disk or 0
@@ -151,13 +176,18 @@ local function next_file(core)
                 M.state.cancelled = false
                 M.state.done = false
 
-                if core.at_download_start(host_base() .. file.name, path, file.sha256) == 1 then
+                local url = host_base() .. file.name
+                if core.at_download_start(url, path, file.sha256) == 1 then
                     M.state.active = true
-                    util.info(mod, "downloading %s (%d of %d, %.0f MB)%s", file.name, i, #FILES,
+                    -- Say which route this is: the mirror is fetched *direct* (it only
+                    -- serves a Chinese IP, so a VPN exit abroad breaks it) while
+                    -- huggingface.co goes through the configured proxy if there is one.
+                    util.info(mod, "downloading %s (%d of %d, %.0f MB)%s from %s", file.name, i, #FILES,
                         file.size / (1024 * 1024),
                         M.state.received > 0
                             and string.format(" - resuming at %.1f MB", M.state.received / (1024 * 1024))
-                            or "")
+                            or "",
+                        host_label(core, url))
                     return true
                 end
 

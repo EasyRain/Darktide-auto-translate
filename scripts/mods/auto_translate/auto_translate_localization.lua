@@ -256,8 +256,8 @@
         ["zh-cn"] = "优先使用 Hugging Face 镜像",
     },
     model_mirror_description = {
-        en = "Use hf-mirror.com instead of huggingface.co for the model download. Mainland China usually needs this; the downloader retries the other host once if the chosen one cannot be reached, so a wrong choice costs a few seconds rather than the download.",
-        ["zh-cn"] = "下载模型时使用 hf-mirror.com（而不是 huggingface.co）。国内通常需要打开；若所选主机连不上，下载器会自动改用另一个重试一次，所以选错只是多等几秒。",
+        en = "Download from hf-mirror.com instead of huggingface.co. Mainland China usually needs this. The mirror is fetched DIRECTLY (it only serves a Chinese IP, so having it go out through a VPN that exits abroad is the one reliable way to break it), while huggingface.co is fetched through the proxy set above. If the chosen host cannot be reached the other one is tried once, so a wrong choice costs seconds rather than the download.",
+        ["zh-cn"] = "从 hf-mirror.com 而不是 huggingface.co 下载。国内通常需要打开。**镜像站走直连**（它只接受国内 IP，经过落地在境外的代理反而会失败），而 huggingface.co 走上面设置的代理。所选主机连不上时会自动改用另一个重试一次，所以选错只浪费几秒。",
     },
     delete_model = {
         en = "Delete the model files",

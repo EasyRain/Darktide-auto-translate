@@ -14,7 +14,23 @@ local path = here .. "/../scripts/mods/auto_translate/modules/online.lua"
 
 -- The module touches these only when its functions run; stub enough for the calls
 -- made below.
-Mods = { lua = { ffi = { cdef = function() end, load = function() error("no core in the smoke test") end } } }
+-- The module touches these only when its functions run, so the *real* FFI library is used
+-- (LuaJIT is the runtime here anyway) with a `load` that refuses: the DLL is x64 and this
+-- tooling may not be able to load it, and nothing below needs it. ffi.new/ffi.copy have to
+-- be the real ones - modules/download.lua allocates its checksum buffer with them.
+local ffi = require("ffi")
+Mods = {
+    lua = {
+        ffi = setmetatable({}, {
+            __index = function(_, key)
+                if key == "load" then
+                    return function() error("no native core in the smoke test") end
+                end
+                return ffi[key]
+            end,
+        }),
+    },
+}
 
 local chunk, err = loadfile(path)
 if not chunk then
@@ -430,16 +446,50 @@ check("the model lives directly in models/",
 -- again), skipping the one that is missing, or dropping the checksum that makes a
 -- truncated mirror answer detectably wrong.
 -- ---------------------------------------------------------------------------
+local dl = assert(loadfile(here .. "/../scripts/mods/auto_translate/modules/download.lua"))()
+local dl_files = dl.files()
+
+-- What the fake machine believes is on disk (name -> size), and the hashing that the skip
+-- check performs: a file is only skipped when its checksum matches, which is what makes a
+-- corrupt-but-right-sized file get fetched again instead of being trusted forever.
+local disk = {}
+for _, file in ipairs(dl_files) do
+    disk[file.name] = -1
+end
+
+local last_url = nil
 local fake_core = {
-    at_file_size64 = function() return -1 end,
-    at_download_start = function() return 1 end,
+    at_file_size64 = function(path)
+        for _, file in ipairs(dl_files) do
+            if path:find(file.name, 1, true) then
+                return disk[file.name] or -1
+            end
+        end
+        return -1
+    end,
+    at_download_start = function(url) last_url = url; return 1 end,
     at_download_status = function() return 0 end,
     at_download_received = function() return 0 end,
     at_download_total = function() return 0 end,
     at_download_cancel = function() return 1 end,
     at_download_error = function() return "" end,
     at_delete_file = function() return 1 end,
+    at_proxy_in_use = function() return "127.0.0.1:7890" end,
+    at_download_route_is_proxied = function(url)
+        -- same rule as the core: the mirror direct, huggingface.co through the proxy
+        return url:find("hf%-mirror") and 0 or 1
+    end,
+    at_sha256_file = function(path, hex, cap)
+        for _, file in ipairs(dl_files) do
+            if path:find(file.name, 1, true) and disk[file.name] == file.size then
+                ffi.copy(hex, file.sha256, #file.sha256)
+                return 1
+            end
+        end
+        return 0
+    end,
 }
+
 -- The core is loaded lazily, so the downloader must ask for it at the point of use.
 -- The first version captured it at init and crashed on every button press.
 local core_loaded = true
@@ -461,7 +511,6 @@ local fake_util = {
     log = function() end,
 }
 
-local dl = assert(loadfile(here .. "/../scripts/mods/auto_translate/modules/download.lua"))()
 dl.init(fake_mod, fake_util, fake_online, fake_engines)
 
 local files = dl.files()
@@ -485,51 +534,74 @@ check("download: the mirror is the default host",
 check("download: both hosts serve the same path",
     dl.hosts().mirror:gsub("^https://[^/]+", ""), dl.hosts().direct:gsub("^https://[^/]+", ""))
 
--- Everything already on disk: nothing is fetched, and the state says so.
-fake_core.at_file_size64 = function(path)
-    for _, file in ipairs(files) do
-        if path:find(file.name, 1, true) then
-            return file.size
-        end
-    end
-    return -1
+-- Everything already on disk and verifying: nothing is fetched, and the state says so.
+for _, file in ipairs(files) do
+    disk[file.name] = file.size
 end
 dl.start(fake_mod)
 check("download: a complete model needs no transfer", dl.status().active, false)
 check("download: and is reported as done", dl.status().done, true)
 
 -- One file missing: exactly that one is started.
-local started = nil
-fake_core.at_download_start = function(url, path)
-    started = url
-    return 1
-end
-fake_core.at_file_size64 = function(path)
-    for _, file in ipairs(files) do
-        if path:find(file.name, 1, true) then
-            return file.name == "shared_vocabulary.json" and -1 or file.size
-        end
-    end
-    return -1
-end
+disk["shared_vocabulary.json"] = -1
+last_url = nil
 dl.start(fake_mod)
 check("download: only the missing file is started",
-    started ~= nil and started:find("shared_vocabulary.json", 1, true) ~= nil, true)
+    last_url ~= nil and last_url:find("shared_vocabulary.json", 1, true) ~= nil, true)
 check("download: the transfer is marked active", dl.status().active, true)
 
--- Finishing that file completes the model.
-fake_core.at_download_status = function() return 2 end
-fake_core.at_file_size64 = function(path)
-    for _, file in ipairs(files) do
-        if path:find(file.name, 1, true) then
-            return file.size
+-- Right size, wrong content: the checksum decides, not the size. The state machine is
+-- driven by update() in the mod, so a test that pokes start() has to clear it first
+-- (start() is a no-op while a transfer is marked active).
+local state = dl.state_for_tests()
+state.active, state.index, state.done = false, 0, false
+disk["shared_vocabulary.json"] = files[3].size
+local real_hash = fake_core.at_sha256_file
+fake_core.at_sha256_file = function(path, hex, cap)
+    for _, file in ipairs(dl_files) do
+        if path:find(file.name, 1, true) and disk[file.name] == file.size then
+            if file.name == "shared_vocabulary.json" then
+                -- Same length, different digest: exactly the case a size check misses.
+                ffi.copy(hex, string.rep("0", 64), 64)
+            else
+                ffi.copy(hex, file.sha256, #file.sha256)
+            end
+            return 1
         end
     end
-    return -1
+    return 0
 end
+last_url = nil
+dl.start(fake_mod)
+check("download: a corrupt file is fetched again",
+    last_url ~= nil and last_url:find("shared_vocabulary.json", 1, true) ~= nil, true)
+fake_core.at_sha256_file = real_hash
+
+-- Finishing that file completes the model.
+disk["shared_vocabulary.json"] = files[3].size
+fake_core.at_download_status = function() return 2 end
 dl.update(fake_mod)
 check("download: finishing the last file ends the run", dl.status().active, false)
 check("download: and reports done", dl.status().done, true)
+
+-- The route is logged, so a player whose download will not start can see whether the
+-- mirror went direct (it must) or through their VPN (which breaks it).
+do
+    local logged = {}
+    fake_util.info = function(_, fmt, ...)
+        logged[#logged + 1] = string.format(fmt, ...)
+    end
+    local state = dl.state_for_tests()
+    state.active, state.index, state.done = false, 0, false
+    disk["config.json"] = -1
+    last_url = nil
+    dl.start(fake_mod)
+    local line = logged[1] or ""
+    check("download: the log names the mirror and says direct",
+        line:find("from hf-mirror.com, direct", 1, true) ~= nil, true)
+    state.active, state.index, state.done = false, 0, false
+end
+fake_util.info = function() end
 
 -- And when the native core is not available at all, the downloader has to *say* so
 -- instead of indexing a nil handle (that was the crash the screenshots showed).

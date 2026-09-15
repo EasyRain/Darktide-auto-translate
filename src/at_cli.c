@@ -1227,11 +1227,26 @@ static int cmd_fetch(int argc, char** argv)
             sha = argv[++i];
         } else if (_stricmp(argv[i], "--cancel-after") == 0 && i + 1 < argc) {
             cancel_after = atoi(argv[++i]);
+        } else if (_stricmp(argv[i], "--proxy-mode") == 0 && i + 1 < argc) {
+            const char* mode = argv[++i];
+            if (_stricmp(mode, "auto") == 0) {
+                at_download_use_proxy(-1);
+            } else if (_stricmp(mode, "direct") == 0) {
+                at_download_use_proxy(0);
+            } else if (_stricmp(mode, "proxy") == 0) {
+                at_download_use_proxy(1);
+            } else {
+                fprintf(stderr, "--proxy-mode takes auto, direct or proxy\n");
+                return 1;
+            }
         }
     }
 
     printf("fetching   : %s\n", url);
     printf("to         : %s\n", out_path);
+    printf("route      : %s%s\n",
+           at_download_route_is_proxied(url) ? "through the proxy " : "direct ",
+           at_download_proxy_mode() < 0 ? "(decided by host)" : "(forced)");
     {
         long long existing = at_file_size64(out_path);
         if (existing > 0) {
@@ -1515,6 +1530,7 @@ static void usage(void)
     printf("  at_cli.exe load <model-dir> [target-lang] [text...]    (async load + submit/poll)\n");
     printf("  at_cli.exe switch <dir-a> <dir-b> [target-lang]        (what a second load does)\n");
     printf("  at_cli.exe fetch <url> <out-path> [--sha256 <hex>] [--cancel-after <ms>]\n");
+    printf("             [--proxy-mode auto|direct|proxy]   (default: by host - the mirror direct)\n");
     printf("  at_cli.exe hash <file>\n\n");
     printf("providers: google_clients5, google_gtx, mymemory, google_api\n");
     printf("any command accepts --proxy <host:port> (e.g. --proxy 127.0.0.1:7890)\n");
