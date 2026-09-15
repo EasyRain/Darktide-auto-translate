@@ -249,6 +249,26 @@ local function has_letters(text)
     return tostring(text or ""):find("[%a]") ~= nil
 end
 
+-- Colour-picker entries: the whole string is one {#color(r,g,b)}...#reset() run.
+--
+-- Several mods surface the game's entire colour palette as swatch names, and on a
+-- live install that is almost the whole workload: 1300 of 1356 keys, while the
+-- three mods responsible contribute two lines of real interface text between them.
+-- The names are Citadel paint names ("Rakarth Flesh", "Rhinox Hide"), which players
+-- know in English; translating them literally ("拉卡斯要塞的血色") makes them harder to
+-- match against the paint, and short brand-like strings are exactly where a machine
+-- translation drifts between calls.
+--
+-- Anchored, and the text between the tags may not contain braces: a string with
+-- two or more coloured runs ("{#color(...)}Fire{#reset()} and {#color(...)}Ice{#reset()}")
+-- is real interface text and is still translated. Only a single wrapped run counts
+-- as a swatch. Set the "Translate colour names" option to take those on anyway.
+local COLOUR_ENTRY = "^{#color%(%d+,%d+,%d+%)}[^{}]*{#reset%(%)}$"
+
+local function is_colour_entry(text)
+    return type(text) == "string" and text:match(COLOUR_ENTRY) ~= nil
+end
+
 -- A mod may write `en = Localize("loc_some_game_key")`. That is evaluated when the
 -- file loads, so "en" ends up holding the *game's own text in the player's current
 -- language* — already Chinese for a Chinese player. Sending that to a translator
@@ -473,6 +493,7 @@ M.state = {
     refused = 0,
     skipped = 0,
     live = 0,
+    unchanged = 0,
     last_error = nil,
 }
 
@@ -577,12 +598,16 @@ function M.start(mod, report, lang)
         return false
     end
 
-    local queued, skipped = 0, 0
+    local queued, skipped, colours = 0, 0, 0
+    local take_colours = mod:get("translate_colours") == true
 
     for _, entry in ipairs(report.mods) do
         if not entry.skipped and #entry.pending > 0 then
             for _, item in ipairs(entry.pending) do
-                if translatable(item.en, lang) then
+                if not take_colours and is_colour_entry(item.en) then
+                    -- Swatch names: left in English on purpose (see COLOUR_ENTRY).
+                    colours = colours + 1
+                elseif translatable(item.en, lang) then
                     q_push({
                         mod_id = entry.name,
                         key = item.key,
@@ -609,12 +634,21 @@ function M.start(mod, report, lang)
     M.state.failed = 0
     M.state.refused = 0
     M.state.skipped = skipped
+    M.state.colours = colours
     M.state.live = 0
+    M.state.unchanged = 0
     M.state.last_error = nil
 
+    local notes = {}
+    if skipped > 0 then
+        notes[#notes + 1] = string.format("%d had no text to translate", skipped)
+    end
+    if colours > 0 then
+        notes[#notes + 1] = string.format("%d colour name(s) left in English", colours)
+    end
     util.info(mod, "online translation queued: %d key(s) into '%s' via %s [%s]%s",
         queued, tostring(lang), engine, table.concat(providers, ", "),
-        skipped > 0 and string.format(" (%d key(s) had nothing to translate)", skipped) or "")
+        #notes > 0 and (" (" .. table.concat(notes, ", ") .. ")") or "")
 
     return queued > 0
 end
@@ -632,9 +666,14 @@ local function finish(mod, reason)
     M.state.running = false
     M.state.finished = true
     local written = M.flush(mod)
+    local translated = M.state.done - M.state.unchanged
     util.info(mod,
-        "online translation %s: %d translated, %d failed, %d refused, %d skipped, %d file(s) written",
-        reason, M.state.done, M.state.failed, M.state.refused, M.state.skipped, written)
+        "online translation %s: %d translated, %d unchanged, %d failed, %d refused, %d skipped, %d file(s) written",
+        reason, translated, M.state.unchanged, M.state.failed, M.state.refused, M.state.skipped, written)
+    if M.state.unchanged > 0 then
+        util.info(mod, "%d key(s) came back unchanged (font names, key labels, numbers) and are marked src = 'unchanged'",
+            M.state.unchanged)
+    end
 
     -- One message per run, and it says what the player has to do: mod option texts
     -- are localised (and cached as plain strings) while DMF initialises `data`, so
@@ -781,9 +820,29 @@ local function handle_response(mod, req, body)
         return false, string.format("%d glossary term(s) were dropped by the service", missing), false
     end
 
-    -- Some services hand the source straight back when they cannot help.
-    if restored == item.masked then
-        return false, "the service returned the source text unchanged", false
+    -- The service handed the text back unchanged. That is usually a correct answer,
+    -- not a failure: font names ("{#font(arial)}Arial{#reset()}"), key labels
+    -- ("[F10]") and numbers have nothing to translate, and forcing them through
+    -- again would waste a request every run forever.
+    --
+    -- So it is stored - but tagged, because it is not a translation: the file says
+    -- which keys are effectively still English, the summary counts them separately,
+    -- and a human translator can find them with a search for src = "unchanged".
+    -- (This comparison used to read item.masked, a field the queue item does not
+    -- have, so the whole check was dead and the tag was never applied.)
+    if restored == req.masked then
+        store_translation(mod, item, restored, "unchanged")
+        M.state.done = M.state.done + 1
+        M.state.unchanged = M.state.unchanged + 1
+        util.log(mod, "unchanged %s:%s -> %s", item.mod_id, item.key, restored)
+
+        if M.state.done % LOG_EVERY == 0 then
+            M.flush(mod)
+            util.info(mod, "progress: %d done (%d translated, %d unchanged), %d failed, %d refused, %d left",
+                M.state.done, M.state.done - M.state.unchanged, M.state.unchanged,
+                M.state.failed, M.state.refused, q_count())
+        end
+        return true
     end
 
     local safe, why = M.text_is_safe(item.en, restored)
@@ -966,6 +1025,7 @@ function M.status()
         refused = M.state.refused,
         skipped = M.state.skipped,
         live = M.state.live or 0,
+        unchanged = M.state.unchanged or 0,
         cooldown = math.max(0, math.floor(cooldown_until - elapsed)),
         last_error = M.state.last_error,
         disabled_providers = table.concat(disabled, ", "),

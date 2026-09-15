@@ -91,6 +91,11 @@ return {
                 default_value = true,
             },
             {
+                setting_id = "translate_colours",
+                type = "checkbox",
+                default_value = false,
+            },
+            {
                 setting_id = "reload_translations",
                 type = "button",
                 button_text = "reload_translations",

@@ -226,6 +226,14 @@ return {
         en = "Shows translation progress in the bottom-right corner while it is running.",
         ["zh-cn"] = "翻译进行时在右下角显示进度。",
     },
+    translate_colours = {
+        en = "Translate colour names",
+        ["zh-cn"] = "翻译颜色名",
+    },
+    translate_colours_description = {
+        en = "Off by default. Several mods list the game's whole colour palette, and swatch names such as 'Citadel Rakarth Flesh' are Citadel paint names that players look up in English - translating them literally makes them harder to match. They are also most of the work: 1300 of 1356 keys on a live install.",
+        ["zh-cn"] = "默认关闭。多个模组会列出游戏的全部调色板，而「Citadel Rakarth Flesh」这类色卡名是 Citadel 画料名，玩家本来就按英文对照，直译反而不便查找。它们也占了工作量的绝大部分：实测 1356 条里有 1300 条是颜色名。",
+    },
     -- Placeholder order is always %d first, then %s.
     hud_progress = {
         en = "%d / %d translated",
