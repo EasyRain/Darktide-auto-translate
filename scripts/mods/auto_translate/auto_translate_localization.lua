@@ -243,17 +243,63 @@
         en = "Auto Translate: the '%s' engine would answer in '%s' and cannot be used for '%s'. Nothing was saved. Use the offline model or an API key, or set the target language to '%s'.",
         ["zh-cn"] = "Auto Translate：「%s」引擎只会返回「%s」，无法用于「%s」，因此没有保存任何内容。请改用本地模型或填写密钥的正式 API，或把目标语言设为「%s」。",
     },
-    download_model_base = {
-        en = "Download 1.3B model",
-        ["zh-cn"] = "下载 1.3B 模型",
+    download_model = {
+        en = "Download the offline model (1.4 GB)",
+        ["zh-cn"] = "下载离线模型（1.4 GB）",
     },
-    -- The automatic downloader is not written yet, so these tooltips say what the
-    -- switch does today instead of promising a download that never starts.
-    download_model_base_description = {
-        en = "Automatic download is not implemented yet - this switch does nothing at the moment. To use the 1.3B model, copy the four files into models/base inside the mod folder (the mod console and show_status report the exact path).",
-        ["zh-cn"] = "自动下载功能尚未实现，此开关目前无作用。若要使用 1.3B 模型，请把 4 个模型文件手动放到本 mod 的 models/base 目录（日志与「显示状态」按钮会给出完整路径）。",
+    download_model_description = {
+        en = "Fetches the four model files (~1.4 GB) into the mod's models folder, resuming if a previous attempt was interrupted, and verifies each file against its checksum when it finishes. Turning this off cancels the transfer and keeps what has already arrived, so it can be continued later. The game can keep running while it downloads.",
+        ["zh-cn"] = "把 4 个模型文件（约 1.4 GB）下载到本 mod 的 models 目录；中断后再次开启会**断点续传**，每个文件下载完成后会校验一次 SHA-256。关闭开关会取消传输并保留已下载的部分，之后可以继续。下载期间游戏可以正常玩。",
+    },
+    model_mirror = {
+        en = "Prefer the Hugging Face mirror",
+        ["zh-cn"] = "优先使用 Hugging Face 镜像",
+    },
+    model_mirror_description = {
+        en = "Use hf-mirror.com instead of huggingface.co for the model download. Mainland China usually needs this; the downloader retries the other host once if the chosen one cannot be reached, so a wrong choice costs a few seconds rather than the download.",
+        ["zh-cn"] = "下载模型时使用 hf-mirror.com（而不是 huggingface.co）。国内通常需要打开；若所选主机连不上，下载器会自动改用另一个重试一次，所以选错只是多等几秒。",
+    },
+    delete_model = {
+        en = "Delete the model files",
+        ["zh-cn"] = "删除模型文件",
+    },
+    delete_model_description = {
+        en = "Removes the four model files (~1.4 GB) and any file that failed its checksum. The offline engine stops working until they are downloaded again. If the model is already loaded in this session, its 1.7 GB of memory is only released when the game restarts.",
+        ["zh-cn"] = "删除 4 个模型文件（约 1.4 GB）以及校验失败留下的文件。删除后离线引擎不可用，直到重新下载。若本次会话已经加载过模型，它占用的 1.7 GB 内存要到重启游戏才会释放。",
+    },
+    model_download_started = {
+        en = "Auto Translate: downloading the offline model (starting with %s). The game can keep running.",
+        ["zh-cn"] = "Auto Translate：正在下载离线模型（从 %s 开始）。期间可以继续游戏。",
+    },
+    model_download_done = {
+        en = "Auto Translate: the offline model is complete and verified. Selecting the local engine now works.",
+        ["zh-cn"] = "Auto Translate：离线模型下载完成并通过校验，现在可以选择本地模型引擎了。",
+    },
+    model_download_cancelled = {
+        en = "Auto Translate: download cancelled - %s MB are kept and the transfer continues from there next time.",
+        ["zh-cn"] = "Auto Translate：下载已取消，已保留 %s MB，下次会从这里继续。",
+    },
+    model_download_failed = {
+        en = "Auto Translate: downloading %s failed: %s (the switch can be turned off and on again to retry; a partial file is resumed, not thrown away).",
+        ["zh-cn"] = "Auto Translate：下载 %s 失败：%s（可以关掉再打开开关重试；已下载的部分会断点续传，不会丢弃）。",
+    },
+    model_deleted = {
+        en = "Auto Translate: deleted %d model file(s). The offline engine is unavailable until they are downloaded again (restart the game to release the memory of a model that was loaded).",
+        ["zh-cn"] = "Auto Translate：已删除 %d 个模型文件。在重新下载之前离线引擎不可用（若本次会话加载过模型，重启游戏才会释放内存）。",
     },
 
+    hud_download = {
+        en = "downloading the offline model",
+        ["zh-cn"] = "正在下载离线模型",
+    },
+    hud_download_done = {
+        en = "model complete and verified",
+        ["zh-cn"] = "模型下载完成并通过校验",
+    },
+    hud_download_failed = {
+        en = "download failed: %s",
+        ["zh-cn"] = "下载失败：%s",
+    },
     progress_hud = {
         en = "Show progress",
         ["zh-cn"] = "显示进度",

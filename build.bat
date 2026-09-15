@@ -43,7 +43,7 @@ set INCLUDES=/I "%TP%\CTranslate2\include" ^
 del /q *.obj 2>nul
 
 cl /nologo /O2 /c /utf-8 /DAT_CORE_BUILD %INCLUDES% ^
-   src\at_core.c src\at_json.c src\at_online.c src\at_model.c
+   src\at_core.c src\at_json.c src\at_online.c src\at_model.c src\at_download.c
 if errorlevel 1 (
   echo FAILED: compiling the C sources
   exit /b 1
@@ -57,8 +57,8 @@ if errorlevel 1 (
 )
 
 link /nologo /DLL /OUT:bin\at_core.dll /IMPLIB:bin\at_core.lib ^
-   at_core.obj at_json.obj at_online.obj at_model.obj at_model_cpp.obj ^
-   winhttp.lib advapi32.lib %CT2_LIBS%
+   at_core.obj at_json.obj at_online.obj at_model.obj at_model_cpp.obj at_download.obj ^
+   winhttp.lib advapi32.lib bcrypt.lib %CT2_LIBS%
 if errorlevel 1 (
   echo FAILED: linking at_core.dll
   exit /b 1

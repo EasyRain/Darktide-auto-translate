@@ -15,6 +15,7 @@
 #include <shellapi.h>          // CommandLineToArgvW, for the UTF-8 argv below
 
 #include "at_core.h"
+#include "at_download.h"
 #include "at_model.h"
 #include "at_online.h"
 
@@ -1197,6 +1198,122 @@ static int cmd_queue(int argc, char** argv)
 // proof: load A, translate, ask for B, and show that the loaded directory, the thread
 // count and the answer are all still A's.
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// fetch — the model downloader, driven from the command line
+//
+// Same code path the mod uses: streamed to disk, resumed when the file is already
+// partially there, verified against a pinned checksum at the end, and cancellable.
+// The mirror is chosen by the URL, and a failure retries the other Hugging Face host.
+//
+//   at_cli.exe fetch <url> <out-path> [--sha256 <hex>] [--cancel-after <ms>]
+// ---------------------------------------------------------------------------
+static int cmd_fetch(int argc, char** argv)
+{
+    const char* url;
+    const char* out_path;
+    const char* sha = NULL;
+    int cancel_after = 0;
+    int i;
+    DWORD start;
+
+    if (argc < 4) {
+        fprintf(stderr, "usage: at_cli.exe fetch <url> <out-path> [--sha256 <hex>] [--cancel-after <ms>]\n");
+        return 1;
+    }
+    url = argv[2];
+    out_path = argv[3];
+    for (i = 4; i < argc; i++) {
+        if (_stricmp(argv[i], "--sha256") == 0 && i + 1 < argc) {
+            sha = argv[++i];
+        } else if (_stricmp(argv[i], "--cancel-after") == 0 && i + 1 < argc) {
+            cancel_after = atoi(argv[++i]);
+        }
+    }
+
+    printf("fetching   : %s\n", url);
+    printf("to         : %s\n", out_path);
+    {
+        long long existing = at_file_size64(out_path);
+        if (existing > 0) {
+            printf("resuming   : %lld byte(s) already there\n", existing);
+        }
+    }
+
+    if (at_download_start(url, out_path, sha) != 1) {
+        fprintf(stderr, "cannot start: %s\n", at_download_error());
+        return 3;
+    }
+
+    start = GetTickCount();
+    for (;;) {
+        int status = at_download_status();
+        long long got = at_download_received();
+        long long total = at_download_total();
+        DWORD elapsed = GetTickCount() - start;
+
+        if (cancel_after > 0 && (int)elapsed >= cancel_after) {
+            printf("\ncancelling after %d ms\n", cancel_after);
+            at_download_cancel();
+            cancel_after = 0;              // once
+        }
+
+        if (status != 1) {
+            printf("\n");
+            if (status == 2) {
+                printf("done       : %lld byte(s) in %.1f s\n", got, elapsed / 1000.0);
+                if (sha) {
+                    char actual[65] = { 0 };
+                    if (at_sha256_file(out_path, actual, (int)sizeof(actual))) {
+                        printf("sha256     : %s\n", actual);
+                        printf("checksum   : %s\n", _stricmp(actual, sha) == 0 ? "ok" : "MISMATCH");
+                    }
+                }
+                return 0;
+            }
+            if (status == 4) {
+                printf("cancelled  : %lld byte(s) kept for the next attempt\n", got);
+                return 4;
+            }
+            fprintf(stderr, "failed     : %s\n", at_download_error());
+            return 3;
+        }
+
+        if (total > 0) {
+            printf("\r  %lld / %lld MB (%.1f%%)", got / (1024 * 1024), total / (1024 * 1024),
+                   100.0 * (double)got / (double)total);
+        } else {
+            printf("\r  %lld MB", got / (1024 * 1024));
+        }
+        fflush(stdout);
+        Sleep(200);
+    }
+}
+
+// hash — the checksum of a file (and its size), for verifying a model directory by hand.
+static int cmd_hash(int argc, char** argv)
+{
+    char hex[65] = { 0 };
+    long long size;
+
+    if (argc < 3) {
+        fprintf(stderr, "usage: at_cli.exe hash <file>\n");
+        return 1;
+    }
+    size = at_file_size64(argv[2]);
+    if (size < 0) {
+        fprintf(stderr, "cannot read %s\n", argv[2]);
+        return 3;
+    }
+    if (!at_sha256_file(argv[2], hex, (int)sizeof(hex))) {
+        fprintf(stderr, "hashing %s failed\n", argv[2]);
+        return 3;
+    }
+    printf("file   : %s\n", argv[2]);
+    printf("size   : %lld\n", size);
+    printf("sha256 : %s\n", hex);
+    return 0;
+}
+
 static int cmd_switch(int argc, char** argv)
 {
     char out[8192] = { 0 };
@@ -1396,7 +1513,9 @@ static void usage(void)
     printf("             [--src en|zh-cn|ja|...] [--compute int8|int8_float32|float32|auto|default]\n");
     printf("             [--threads N]   (default: half the cores; 0 = all of them)\n");
     printf("  at_cli.exe load <model-dir> [target-lang] [text...]    (async load + submit/poll)\n");
-    printf("  at_cli.exe switch <dir-a> <dir-b> [target-lang]        (what a second load does)\n\n");
+    printf("  at_cli.exe switch <dir-a> <dir-b> [target-lang]        (what a second load does)\n");
+    printf("  at_cli.exe fetch <url> <out-path> [--sha256 <hex>] [--cancel-after <ms>]\n");
+    printf("  at_cli.exe hash <file>\n\n");
     printf("providers: google_clients5, google_gtx, mymemory, google_api\n");
     printf("any command accepts --proxy <host:port> (e.g. --proxy 127.0.0.1:7890)\n");
 }
@@ -1442,6 +1561,10 @@ int main(int argc, char** argv)
         rc = cmd_queue(argc, argv);
     } else if (_stricmp(argv[1], "switch") == 0) {
         rc = cmd_switch(argc, argv);
+    } else if (_stricmp(argv[1], "fetch") == 0) {
+        rc = cmd_fetch(argc, argv);
+    } else if (_stricmp(argv[1], "hash") == 0) {
+        rc = cmd_hash(argc, argv);
     } else {
         fprintf(stderr, "unknown command: %s\n", argv[1]);
         usage();

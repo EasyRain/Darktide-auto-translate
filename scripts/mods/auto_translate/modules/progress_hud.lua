@@ -1,4 +1,4 @@
--- progress_hud.lua — the translation progress text in the bottom-right corner.
+﻿-- progress_hud.lua — the translation progress text in the bottom-right corner.
 --
 -- Deliberately plain: a couple of lines of text, no panel, no bar. The mod works
 -- while the player is playing, so the point is only to say what it is doing
@@ -19,7 +19,7 @@
 --     that is what makes Chinese glyphs render instead of boxes
 local M = {}
 
-local mod, util, online
+local mod, util, online, download
 
 local UIRenderer, UIFonts, UIFontSettings, UIConstantElements
 local ready = false
@@ -38,10 +38,11 @@ local TEXT = { 255, 233, 236, 226 }
 local TEXT_DIM = { 210, 172, 178, 172 }
 local TEXT_WARN = { 255, 226, 138, 90 }
 
-function M.init(m, u, o)
+function M.init(m, u, o, d)
     mod = m
     util = u
     online = o
+    download = d
 end
 
 local function resolve()
@@ -95,6 +96,37 @@ end
 local function compose(t)
     if not mod:get("progress_hud") then
         return nil
+    end
+
+    -- A model download comes first: it is the thing the player just started, it has its
+    -- own percentage, and the translation queue may well be idle while it runs.
+    if download then
+        local dl = download.status()
+        if dl.active or dl.done or dl.error then
+            if dl.active then
+                M.visible_until = (t or 0) + 10
+            elseif (t or 0) >= (M.visible_until or 0) then
+                return nil
+            end
+
+            local lines = {
+                { text = string.format("%s  %s", mod:localize("mod_name"), mod:localize("hud_download")), color = TEXT },
+            }
+            if dl.active then
+                local percent = (dl.total and dl.total > 0)
+                    and string.format("%.0f%%", 100 * (dl.received or 0) / dl.total)
+                    or string.format("%.1f MB", (dl.received or 0) / (1024 * 1024))
+                lines[#lines + 1] = {
+                    text = string.format("%s  %s", tostring(dl.name or ""), percent),
+                    color = TEXT_DIM,
+                }
+            elseif dl.error then
+                lines[#lines + 1] = { text = mod:localize("hud_download_failed", tostring(dl.error)), color = TEXT_WARN }
+            else
+                lines[#lines + 1] = { text = mod:localize("hud_download_done"), color = TEXT_DIM }
+            end
+            return lines
+        end
     end
 
     local status = online.status()

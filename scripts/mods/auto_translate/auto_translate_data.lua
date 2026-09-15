@@ -76,9 +76,24 @@ return {
                 max_length = 128,
             },
             {
-                setting_id = "download_model_base",
+                -- Turning this on downloads the four model files; turning it off cancels
+                -- the transfer and keeps the part that arrived for the next attempt.
+                setting_id = "download_model",
                 type = "checkbox",
                 default_value = false,
+            },
+            {
+                -- Which Hugging Face host to start with. The core retries the other one
+                -- once, so this is a preference, not a hard choice.
+                setting_id = "model_mirror",
+                type = "checkbox",
+                default_value = true,
+            },
+            {
+                setting_id = "delete_model",
+                type = "button",
+                button_text = "delete_model",
+                function_name = "delete_model",
             },
 
             {

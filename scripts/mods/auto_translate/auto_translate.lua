@@ -1,4 +1,4 @@
-﻿-- auto_translate.lua — main entry point.
+-- auto_translate.lua — main entry point.
 --
 -- Pipeline on startup (and on demand):
 --   1. scan every loaded mod's localization table (DMF's registry) for the target language
@@ -31,8 +31,13 @@ online.init(util, store, glossary, engines, injector)
 local exporter = mod:io_dofile(BASE .. "exporter")
 exporter.init(util)
 
+-- The model downloader: owns the file sequence, the progress state and the notices; the
+-- transfer itself is native (src/at_download.c).
+local download = mod:io_dofile(BASE .. "download")
+download.init(mod, util, online, engines)
+
 local progress_hud = mod:io_dofile(BASE .. "progress_hud")
-progress_hud.init(mod, util, online)
+progress_hud.init(mod, util, online, download)
 progress_hud.install(mod)
 
 local options_refresh = mod:io_dofile(BASE .. "options_refresh")
@@ -149,7 +154,7 @@ local function check_engine_settings(lang)
         util.warn(mod, "engine '%s' is selected but its model is not downloaded", engine)
         -- The path is part of the message: with no automatic download yet, copying the
         -- files there is the only thing the player can do.
-        local message = mod:localize("model_missing", tostring(engines.model_dir(engine)))
+        local message = mod:localize("model_missing", tostring(engines.model_dir_in_use(engine)))
         if type(mod.notify) == "function" then
             pcall(mod.notify, mod, message)
         end
@@ -311,6 +316,13 @@ function mod.update(dt)
         return
     end
 
+    -- The transfer runs on its own thread in the core; this only advances the file
+    -- sequence and the progress the HUD reads.
+    local dok, derr = pcall(download.update, mod)
+    if not dok then
+        util.warn(mod, "download update error: %s", tostring(derr))
+    end
+
     -- Newly translated keys only reach the game once the merged table is pushed
     -- back into DMF again, so do that when the queue drains.
     local status = online.status()
@@ -400,6 +412,21 @@ function mod.clear_cache()
     util.info(mod, "cleared %d translation file(s) for '%s'; they will be rebuilt on demand", removed, lang)
 end
 
+-- Mod options: "Delete the model files".
+--
+-- One model per process means the memory of a loaded model cannot be given back, so the
+-- notice says a restart is what frees it - otherwise "deleted 1.4 GB" next to an
+-- unchanged memory reading looks like a lie.
+function mod.delete_model()
+    online.stop(mod)
+    download.cancel(mod)
+    local removed = download.delete(mod)
+    util.info(mod, "%d model file(s) removed from %s", removed, tostring(engines.model_dir("local_base")))
+    if online.model_in_memory() then
+        util.info(mod, "the model loaded in this session stays in memory until the game restarts")
+    end
+end
+
 -- Mod options: "Translation status" — what the queue is doing right now.
 function mod.show_status()
     local s = online.status()
@@ -473,19 +500,19 @@ function mod.test_glossary()
 end
 
 mod.on_setting_changed = function(setting_id)
-    if setting_id == "download_model_base" then
-        -- The downloader is not written yet. Logging that only was the wrong call: the
-        -- player flips the switch, nothing happens, and there is no way to tell whether
-        -- it is broken or simply absent. So the notice is player-visible and says what
-        -- to do instead.
-        local dir = util.MOD_DIR .. "/models/base"
-        util.warn(mod, "the automatic model download is not implemented yet; place the 4 model files in %s", dir)
-        if type(mod.notify) == "function" then
-            pcall(mod.notify, mod, mod:localize("model_download_missing", dir))
+    if setting_id == "download_model" then
+        -- The switch is the control: on starts (or continues) the transfer, off cancels it
+        -- and keeps whatever arrived. Both halves say what happened, because a 1.4 GB
+        -- download that appears to do nothing is indistinguishable from a broken one.
+        if mod:get("download_model") then
+            download.start(mod)
+        else
+            download.cancel(mod)
         end
-        if type(mod.echo) == "function" then
-            pcall(mod.echo, mod, mod:localize("model_download_missing", dir))
-        end
+    elseif setting_id == "model_mirror" then
+        -- Only affects the *next* transfer; a running one keeps the host it started with.
+        util.info(mod, "model downloads will start from %s",
+            mod:get("model_mirror") == false and "huggingface.co" or "hf-mirror.com")
     elseif setting_id == "model_threads" then
         -- The thread count is fixed when the model is loaded (CTranslate2 takes it in the
         -- replica pool), so this one cannot be rebuilt into effect like the others: the

@@ -214,6 +214,17 @@ static int effective_proxy(wchar_t* out, int cap)
     return 0;
 }
 
+// The proxy in use, as a wide string, for code that opens its own WinHTTP session (the
+// model downloader). Returns 1 when a proxy is configured, 0 for a direct connection.
+int at_proxy_wide(wchar_t* out, int cap)
+{
+    if (!out || cap <= 0) {
+        return 0;
+    }
+    out[0] = 0;
+    return effective_proxy(out, cap);
+}
+
 int at_set_proxy(const char* hostport_utf8)
 {
     wchar_t wide[256];

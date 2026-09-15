@@ -166,8 +166,33 @@ not reliably load inside the game anyway.
 
 One model is offered: the CTranslate2 int8 conversion of `facebook/nllb-200-1.3B` from
 `Wobin/lingua-imperialis-models`, in the usual four-file CTranslate2 layout
-(`model.bin`, `config.json`, `shared_vocabulary.json`, `sentencepiece.bpe.model`), in
-`models/base/`.
+(`model.bin`, `config.json`, `shared_vocabulary.json`, `sentencepiece.bpe.model`), directly
+in the mod's `models/` folder. (Older installations keep working: `models/base`,
+`models/large` and `models/small` are still read when the flat layout is incomplete, and
+the mod says where the files are.)
+
+### Downloading it
+
+**Download the offline model (1.4 GB)** in the options fetches the four files into
+`models/`, one at a time, smallest first. It is cancellable (turning the switch off keeps
+what arrived) and resumable (`Range: bytes=<n>-`, so a cancelled or interrupted transfer
+continues where it stopped instead of starting over). Each file is verified against a
+pinned SHA-256 when it finishes; a mismatch renames the file to `<name>.bad` rather than
+leaving something that looks like a model.
+
+**Prefer the Hugging Face mirror** starts from `hf-mirror.com` instead of
+`huggingface.co`; whatever is chosen, a failed connection is retried once against the
+other host, because which one is reachable depends on where the player is.
+
+Measured with `at_cli.exe fetch` against the mirror: a full 4,852,054-byte file downloaded
+and verified (`checksum: ok`), a deliberately truncated 1,000,000-byte file resumed
+(`resuming: 1000000 byte(s) already there`) and ended at the exact size with the same
+checksum, and cancelling kept the partial file for the next attempt.
+
+```
+bin\at_cli.exe fetch <url> <out-path> [--sha256 <hex>] [--cancel-after <ms>]
+bin\at_cli.exe hash <file>          # size + SHA-256, for checking a directory by hand
+```
 
 | | |
 | --- | --- |
@@ -415,7 +440,7 @@ the same measurement), so on the model the mod actually ships the fallback is ra
 than routine. `tools/batch_probe.ps1` re-runs the whole measurement:
 
 ```
-powershell -File tools\batch_probe.ps1 -Store <translations store> -ModelDir <models/base> [ -MaxItems 48 ] [ -ItemsPerBatch 5 ]
+powershell -File tools\batch_probe.ps1 -Store <translations store> -ModelDir <models> [ -MaxItems 48 ] [ -ItemsPerBatch 5 ]
 ```
 
 It drives the real planner, the real model and the real split/restore code and prints
@@ -532,8 +557,8 @@ A syntax check never runs a line, so the Lua queue has more checks of its own:
 luajit tools\smoke_online.lua                    # loads modules/online.lua with stubs, runs ~50 assertions
 luajit tools\check_zh_variants.lua <translations/zh-tw>   # simplified characters in a traditional store
 luajit tools\scan_line_breaks.lua <translations-dir>      # how many sources carry a line break
-powershell -File tools\batch_probe.ps1 -Store <store> -ModelDir <models/base>   # is batching better than solo?
-powershell -File tools\model_probe.ps1 -Store <store> -ModelA <models/base> -ModelB <another-model>   # is another model better?
+powershell -File tools\batch_probe.ps1 -Store <store> -ModelDir <models>   # is batching better than solo?
+powershell -File tools\model_probe.ps1 -Store <store> -ModelA <models> -ModelB <another-model>   # is another model better?
 ```
 
 `smoke_online.lua` is what catches a helper that was moved above the `local` it uses
@@ -566,8 +591,9 @@ not a bug — run `at_cli.exe` from a normal shell to check HTTPS.
 
 ## Roadmap
 
-* Local model: NLLB-200 1.3B (~1.4 GB) int8 CTranslate2 conversion, downloaded on
-  demand with resume + checksum.
+* Local model: NLLB-200 1.3B (~1.4 GB) int8 CTranslate2 conversion — the downloader now
+  exists (resume + checksum + mirror); remaining: a progress bar for the HUD beyond the
+  percentage line.
 * Online engines: free public endpoints (with back-off on 429/403) and official APIs.
 * Slow, continuous translation in the background with a progress bar; unfinished work
   resumes on the next launch.

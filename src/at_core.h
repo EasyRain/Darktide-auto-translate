@@ -93,6 +93,10 @@ AT_API int  at_load_model(void);
 // honoured or ignored.
 AT_API int  at_load_model_async(void);
 
+// The proxy currently in use (mod option first, then the Windows setting), as a wide
+// string, for code that opens its own WinHTTP session. Returns 1 when a proxy is set.
+AT_API int  at_proxy_wide(wchar_t* out, int cap);
+
 // Threads one translation may use: <0 = every core (the slowest, measured), 0 = automatic
 // (min(cores/2, 8), the default), >0 = exactly that many. CTranslate2 would otherwise ask
 // for every core on its own, and this runs inside the game. Set before loading; returns 0

@@ -417,8 +417,113 @@ check("legacy 'local_small' means the 1.3B", engines.canonical("local_small"), "
 check("legacy 'local_large' means the 1.3B too", engines.canonical("local_large"), "local_base")
 check("legacy engine is still a local engine", engines.is_local_engine("local_small"), true)
 check("unknown engine stays unknown", engines.is_local_engine("no_such_engine"), false)
-check("legacy engine maps to the base directory",
+check("legacy engine maps to the model directory",
     engines.model_dir("local_small"), engines.model_dir("local_base"))
+check("the model lives directly in models/",
+    engines.model_dir("local_base"):match("/models$") ~= nil, true)
+
+-- ---------------------------------------------------------------------------
+-- download.lua: the file list, the checksums and the sequence
+--
+-- The transfer is native, but what is fetched and when is Lua, and that is the part that
+-- can quietly do the wrong thing: fetching a file that is already complete (1.4 GB
+-- again), skipping the one that is missing, or dropping the checksum that makes a
+-- truncated mirror answer detectably wrong.
+-- ---------------------------------------------------------------------------
+local fake_core = {
+    at_file_size64 = function() return -1 end,
+    at_download_start = function() return 1 end,
+    at_download_status = function() return 0 end,
+    at_download_received = function() return 0 end,
+    at_download_total = function() return 0 end,
+    at_download_cancel = function() return 1 end,
+    at_download_error = function() return "" end,
+    at_delete_file = function() return 1 end,
+}
+local fake_online = { core = function() return fake_core end }
+local fake_engines = { model_dir = function() return "." end }
+local fake_mod = {
+    get = function(_, key) return key == "model_mirror" end,
+    localize = function(_, key, ...) return string.format(key, ...) end,
+    notify = function() end,
+    echo = function() end,
+}
+local fake_util = {
+    ensure_dir = function() end,
+    info = function() end,
+    warn = function() end,
+    log = function() end,
+}
+
+local dl = assert(loadfile(here .. "/../scripts/mods/auto_translate/modules/download.lua"))()
+dl.init(fake_mod, fake_util, fake_online, fake_engines)
+
+local files = dl.files()
+check("download: four files", #files, 4)
+check("download: model.bin is in the list", files[#files].name, "model.bin")
+check("download: smallest first, biggest last",
+    files[1].size < files[2].size and files[2].size < files[3].size and files[3].size < files[#files].size,
+    true)
+check("download: every file has a 64-character checksum", (function()
+    for _, file in ipairs(files) do
+        if type(file.sha256) ~= "string" or #file.sha256 ~= 64 then
+            return false
+        end
+    end
+    return true
+end)(), true)
+check("download: the model.bin checksum is the pinned one",
+    files[#files].sha256, "8ddec65e4b3cfe07d687353743b4721e5e62afcd34cde21f0a68fb8d935ef08b")
+check("download: the mirror is the default host",
+    dl.hosts().mirror:find("hf%-mirror%.com") ~= nil, true)
+check("download: both hosts serve the same path",
+    dl.hosts().mirror:gsub("^https://[^/]+", ""), dl.hosts().direct:gsub("^https://[^/]+", ""))
+
+-- Everything already on disk: nothing is fetched, and the state says so.
+fake_core.at_file_size64 = function(path)
+    for _, file in ipairs(files) do
+        if path:find(file.name, 1, true) then
+            return file.size
+        end
+    end
+    return -1
+end
+dl.start(fake_mod)
+check("download: a complete model needs no transfer", dl.status().active, false)
+check("download: and is reported as done", dl.status().done, true)
+
+-- One file missing: exactly that one is started.
+local started = nil
+fake_core.at_download_start = function(url, path)
+    started = url
+    return 1
+end
+fake_core.at_file_size64 = function(path)
+    for _, file in ipairs(files) do
+        if path:find(file.name, 1, true) then
+            return file.name == "shared_vocabulary.json" and -1 or file.size
+        end
+    end
+    return -1
+end
+dl.start(fake_mod)
+check("download: only the missing file is started",
+    started ~= nil and started:find("shared_vocabulary.json", 1, true) ~= nil, true)
+check("download: the transfer is marked active", dl.status().active, true)
+
+-- Finishing that file completes the model.
+fake_core.at_download_status = function() return 2 end
+fake_core.at_file_size64 = function(path)
+    for _, file in ipairs(files) do
+        if path:find(file.name, 1, true) then
+            return file.size
+        end
+    end
+    return -1
+end
+dl.update(fake_mod)
+check("download: finishing the last file ends the run", dl.status().active, false)
+check("download: and reports done", dl.status().done, true)
 
 print(string.format("%d failure(s) in total", failures))
 os.exit(failures == 0 and 0 or 1)

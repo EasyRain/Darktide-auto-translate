@@ -42,12 +42,19 @@ M.ENGINES = {
 }
 
 -- ---------------------------------------------------------------------------
--- Local model directory (CTranslate2 layout — the same four files Lingua ships):
---     models/base/    NLLB-200 1.3B int8
+-- Local model directory (CTranslate2 layout - the same four files Lingua ships):
+--     models/         the four files sit directly in the mod's models folder
+--
+-- There used to be a subdirectory per size (models/small, models/large, models/base).
+-- With one model left, a folder with one folder in it is just a thing to get wrong, so
+-- the files belong in models/ itself. The old subdirectories are still *read* when the
+-- flat layout is not complete, so an installation made before this change keeps working.
 -- ---------------------------------------------------------------------------
 local MODEL_SUBDIR = {
-    local_base = "base",
+    local_base = "",
 }
+
+local LEGACY_MODEL_DIRS = { "base", "large", "small" }
 
 local REQUIRED_MODEL_FILES = {
     "model.bin",
@@ -60,8 +67,7 @@ local REQUIRED_MODEL_FILES = {
 -- "local_small" (the 600M) and "local_large" (the 3.3B). Both have to keep meaning
 -- something usable, or a saved choice selects an engine that no longer exists and
 -- translation quietly never starts; the 1.3B is the only offline engine left, so both
--- map to it. The model directories themselves may still be on disk (600 MB and 3.4 GB);
--- nothing reads them, and deleting them is the player's call.
+-- map to it.
 local LEGACY_ENGINES = {
     local_small = "local_base",
     local_large = "local_base",
@@ -74,17 +80,8 @@ function M.canonical(name)
     return LEGACY_ENGINES[name] or name
 end
 
-function M.model_dir(name)
-    local sub = MODEL_SUBDIR[M.canonical(name)]
-    if not sub then
-        return nil
-    end
-    return util.MOD_DIR .. "/models/" .. sub
-end
-
-function M.model_available(name)
-    local dir = M.model_dir(name)
-    if not dir then
+local function dir_complete(dir)
+    if type(dir) ~= "string" or dir == "" then
         return false
     end
     for _, file in ipairs(REQUIRED_MODEL_FILES) do
@@ -93,6 +90,43 @@ function M.model_available(name)
         end
     end
     return true
+end
+
+-- Where the files *should* be.
+function M.model_dir(name)
+    local sub = MODEL_SUBDIR[M.canonical(name)]
+    if sub == nil then
+        return nil
+    end
+    if sub == "" then
+        return util.MOD_DIR .. "/models"
+    end
+    return util.MOD_DIR .. "/models/" .. sub
+end
+
+-- Where they are: the flat folder when it is complete, otherwise the first legacy
+-- subdirectory that is. The second return value says whether that was a legacy location,
+-- so the caller can tell the player to move the files.
+function M.model_dir_in_use(name)
+    local canonical = M.model_dir(name)
+    if not canonical then
+        return nil, false
+    end
+    if dir_complete(canonical) then
+        return canonical, false
+    end
+    for _, legacy in ipairs(LEGACY_MODEL_DIRS) do
+        local dir = util.MOD_DIR .. "/models/" .. legacy
+        if dir_complete(dir) then
+            return dir, true
+        end
+    end
+    return canonical, false
+end
+
+function M.model_available(name)
+    local dir = M.model_dir_in_use(name)
+    return dir_complete(dir)
 end
 
 function M.is_local_engine(name)

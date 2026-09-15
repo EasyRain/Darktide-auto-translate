@@ -71,6 +71,16 @@ long long at_model_disk_size(void);
 int at_model_threads(void);
 int at_model_core_count(void);
 int at_model_loaded_dir(char*, int);
+int at_download_start(const char*, const char*, const char*);
+int at_download_status(void);
+long long at_download_received(void);
+long long at_download_total(void);
+int at_download_cancel(void);
+const char* at_download_error(void);
+const char* at_download_path(void);
+int at_sha256_file(const char*, char*, int);
+long long at_file_size64(const char*);
+int at_delete_file(const char*);
 ]]
 
 -- Reads a C string safely: a NULL pointer is cdata (truthy!) in LuaJIT, so a
@@ -1067,7 +1077,13 @@ function M.start(mod, report, lang)
     end
 
     if is_local then
-        local dir = engines.model_dir(engine)
+        -- The flat models folder, or a legacy subdirectory when that is where the files
+        -- still are (an installation made before the layout was flattened).
+        local dir, legacy = engines.model_dir_in_use(engine)
+        if legacy then
+            util.warn(mod, "the model files are in %s; with one model left they belong directly in %s",
+                tostring(dir), tostring(engines.model_dir(engine)))
+        end
         local files = core.at_set_model_dir(dir)
         if files < 4 then
             util.warn(mod, "the %s model is incomplete in %s (%d/4 files); not starting",
@@ -1752,6 +1768,11 @@ local function handle_local_batch(mod, req, raw)
     if #retry > 0 then
         requeue_no_batch(retry)
     end
+end
+
+-- The loaded native library, for modules that need the same DLL (the model downloader).
+function M.core()
+    return core
 end
 
 -- The offline engine has three inflight shapes: "local" for one string, "local_batch"
