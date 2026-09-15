@@ -198,13 +198,42 @@ localization file keys instead of guessing with a language detector.
 `at_cli.exe model <dir> <lang> …` reports how many of these a model file actually
 carries (`languages : 17/17 present`).
 
+### How the game uses it
+
+The offline engine goes through the same queue as the API engines (`modules/online.lua`),
+because that queue is where the four anti-misalignment guards live and a second copy of
+them would be a second place to get them wrong. Only the transport differs:
+
+| | API engines | offline model |
+| --- | --- | --- |
+| start a string | `at_http_get` / `at_http_post` (async, job id) | `at_submit` (async, single slot) |
+| collect it | `at_http_poll`, matched by job id | `at_poll` (0 = still working) |
+| loading | not needed | `at_load_model_async` at the start of a run |
+| payload | JSON, parsed per provider | plain text |
+
+Nothing on the game thread ever waits: module loading is a background thread in the
+core (about a second warm, several seconds cold) and the HUD shows
+`hud_model_loading` while it lasts, and each string is submitted and collected a few
+frames later. The model is loaded **once per process and stays resident** — a
+deliberate choice, roughly 900 MB of RAM and no VRAM; it is never unloaded, so
+removing the files takes effect on the next launch.
+
+The single-slot result queue needs the same care as the HTTP one: `drain_local()`
+throws away whatever the previous run left behind, called from `stop()` and again at
+the top of `dispatch()`, exactly like `drain_results()`. A result that belongs to a
+discarded run would otherwise both block the next submit and look like its answer.
+
 Check the engine without launching the game:
 
 ```
 bin\at_cli.exe model <model-dir> zh-cn "Keystone unlocked"
 bin\at_cli.exe model <model-dir> ja "Hello" --compute int8
 bin\at_cli.exe model <model-dir> ja "狂信徒" --src zh-cn        # non-English source
+bin\at_cli.exe load <model-dir> zh-cn "The Emperor protects"   # the path the game takes
 ```
+
+`load` walks the real startup sequence (async load, status polling, submit/poll) and
+prints the timing of each step.
 
 It prints the model files found, the FLORES-200 code, the SentencePiece pieces and
 the exact token list fed to the model (source language token, pieces, `</s>`), then
@@ -267,13 +296,21 @@ override it — the quickest way to tell a proxy problem from a code problem.
 `build.bat` (Visual Studio 2022 + Windows SDK), then:
 
 ```
-bin\at_cli.exe info                             # core version, model status, proxy, last error
-bin\at_cli.exe selftest                          # 40 checks, offline, no network, no game
+bin\at_cli.exe info                              # core version, model status, proxy, last error
+bin\at_cli.exe selftest                          # offline checks, no network, no game
 bin\at_cli.exe probe                             # are the providers reachable from here?
 bin\at_cli.exe http https://api.github.com/zen    # GET, prints status / bytes / body
 bin\at_cli.exe provider google_clients5 ja "Keystone"  # build -> GET -> parse, end to end
 bin\at_cli.exe parse mymemory tests\fixtures\mymemory_ja.json  # parse a captured response
-bin\at_cli.exe translate ja "Keystone"           # one translation through the local model API
+bin\at_cli.exe model <model-dir> zh-cn "Keystone unlocked"     # offline model, blocking
+bin\at_cli.exe load  <model-dir> zh-cn "The Emperor protects"  # the path the game takes
+```
+
+The Lua side has its own check, because a syntax error there only shows up as a mod
+that quietly fails to load:
+
+```
+python tools\lua_syntax_check.py                 # parses all 13 files, runs nothing
 ```
 
 `selftest` is the useful one: it exercises the JSON reader, URL building, language code

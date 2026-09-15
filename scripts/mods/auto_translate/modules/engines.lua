@@ -20,10 +20,13 @@ end
 
 M.ENGINES = {
     manual = { name = "manual", implemented = true },
-    local_small = { name = "local_small", implemented = false },
-    local_large = { name = "local_large", implemented = false },
+    -- The local models run through modules/online.lua exactly like the API engines
+    -- do - same queue, same pacing, same anti-misalignment guards - and differ only
+    -- in transport: a submit/poll pair in the core instead of an HTTP job.
+    local_small = { name = "local_small", implemented = true },
+    local_large = { name = "local_large", implemented = true },
     online_free = { name = "online_free", implemented = false },
-    online_api = { name = "online_api", implemented = false },
+    online_api = { name = "online_api", implemented = true },
 }
 
 -- ---------------------------------------------------------------------------
@@ -253,8 +256,8 @@ function M.is_implemented(name)
     return e ~= nil and e.implemented == true
 end
 
--- Reports what a local-model engine would do. Reached only when a model engine
--- resolved, so a nil engine here means "nothing configured".
+-- Reports what a local-model engine would do. Kept as a diagnostic: the pipeline no
+-- longer calls it, because every engine now runs through online.start().
 function M.run(mod, report, lang)
     local engine = M.resolve(mod, lang)
     local pending = report.stats.pending
@@ -277,12 +280,7 @@ function M.run(mod, report, lang)
         return
     end
 
-    if not M.is_implemented(engine) then
-        util.info(mod, "%d key(s) awaiting translation into '%s'; engine '%s' is not implemented in this framework build", pending, tostring(lang), engine)
-        return
-    end
-
-    util.info(mod, "%d key(s) pending (target: %s)", pending, tostring(lang))
+    util.info(mod, "%d key(s) pending (target: %s, engine: %s)", pending, tostring(lang), tostring(engine))
 end
 
 return M

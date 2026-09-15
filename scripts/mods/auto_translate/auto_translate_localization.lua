@@ -259,6 +259,10 @@ return {
         en = "last error: %s",
         ["zh-cn"] = "最近错误：%s",
     },
+    hud_model_loading = {
+        en = "loading the offline model...",
+        ["zh-cn"] = "正在加载离线模型…",
+    },
     reload_translations = {
         en = "Reload translation files",
         ["zh-cn"] = "重新加载译文",

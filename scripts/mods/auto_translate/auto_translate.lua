@@ -242,12 +242,12 @@ local function run_pipeline(reason)
 
     if mod:get("auto_translate_enabled") then
         if check_engine_settings(lang) then
-            local engine = engines.resolve(mod, lang)
-            if engines.is_local_engine(engine) then
-                -- the local model path is still a stub; it reports what it would do
-                engines.run(mod, report, lang)
-            elseif not online.start(mod, report, lang) then
-                util.info(mod, "online translation was not started (see the warnings above)")
+            -- One queue driver for every engine. The offline model goes through
+            -- online.start() as well; only the way a string travels differs (a
+            -- submit/poll pair in the core instead of an HTTP job). Keeping both on
+            -- one path is what keeps the anti-misalignment guards in one place.
+            if not online.start(mod, report, lang) then
+                util.info(mod, "translation was not started (see the warnings above)")
             end
         else
             util.info(mod, "translation paused: the selected engine is not usable yet")

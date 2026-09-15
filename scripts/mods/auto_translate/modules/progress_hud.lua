@@ -118,7 +118,11 @@ local function compose(t)
         color = TEXT,
     }
 
-    if status.running then
+    if status.loading then
+        -- The offline model is read from disk in the background; say so, because
+        -- otherwise the counter sits at 0 and looks stuck.
+        lines[#lines + 1] = { text = mod:localize("hud_model_loading"), color = TEXT_DIM }
+    elseif status.running then
         local detail = mod:localize("hud_left", status.left or 0)
         if (status.failed or 0) > 0 or (status.refused or 0) > 0 then
             detail = detail .. "  " .. mod:localize("hud_failures", status.failed or 0, status.refused or 0)

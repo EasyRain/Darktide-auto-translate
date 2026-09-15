@@ -60,6 +60,14 @@ const char* at_online_content_type(const char*);
 int at_online_parse(const char*, const char*, char*, int);
 const char* at_online_error(void);
 int at_online_lang_code_for(const char*, const char*, char*, int);
+int at_set_model_dir(const char*);
+int at_model_ready(void);
+int at_model_status(void);
+int at_load_model_async(void);
+int at_submit(const char*, const char*);
+int at_poll(char*, int);
+const char* at_model_error(void);
+long long at_model_disk_size(void);
 ]]
 
 -- Reads a C string safely: a NULL pointer is cdata (truthy!) in LuaJIT, so a
@@ -472,7 +480,53 @@ end
 -- intact and translates the words (verified against the live API), so masking the
 -- tags would only add placeholders it can drop. The free Google endpoints return
 -- such a string untranslated, so for them the tags stay masked.
+--
+-- The local model is not markup-safe either (NLLB happily mangles braces), so it is
+-- deliberately absent from this table and gets the masked text.
 local MARKUP_SAFE = { deepl = true }
+
+-- ---------------------------------------------------------------------------
+-- Local model engine
+--
+-- The offline engine runs through this same module on purpose: the queue, the
+-- pacing, the live injection, the failure accounting and - most importantly - the
+-- four anti-misalignment guards are all here, and a second copy of them would be a
+-- second place to get them wrong. Only the transport differs: instead of an HTTP
+-- job there is a submit/poll pair in the core, and instead of JSON there is plain
+-- text.
+--
+-- Model status codes from the core: 0 no files, 1 files but not loaded, 2 ready,
+-- 3 a background load is running.
+-- ---------------------------------------------------------------------------
+local MODEL_READY = 2
+local MODEL_LOADING = 3
+
+local function model_loading()
+    return core ~= nil and core.at_model_status() == MODEL_LOADING
+end
+
+local function model_ready()
+    return core ~= nil and core.at_model_status() == MODEL_READY
+end
+
+-- The local twin of drain_results(). The core holds at most one uncollected result,
+-- and at_submit() refuses to start while that slot is full - so a result belonging
+-- to a run we threw away would both block the next item and, when finally collected,
+-- look like the answer to it. That is exactly the off-by-one this module fights, one
+-- transport over.
+local function drain_local(mod)
+    if not core or not ensure_buffers() then
+        return 0
+    end
+    local n = core.at_poll(out_buf, SMALL_CAP)
+    if n > 0 then
+        util.info(mod, "discarded a stale local translation (%d bytes)", n)
+    elseif n < 0 then
+        local why = cstr(core.at_model_error())
+        util.info(mod, "discarded a stale local failure: %s", tostring(why))
+    end
+    return n
+end
 
 -- ---------------------------------------------------------------------------
 -- Pacing
@@ -487,6 +541,8 @@ M.state = {
     lang = nil,
     engine = nil,
     provider = nil,
+    is_local = false,     -- true when the queue is driven by the offline model
+    model_files = 0,      -- how many of the 4 model files were found
     queued = 0,
     done = 0,
     failed = 0,
@@ -550,18 +606,26 @@ function M.start(mod, report, lang)
     end
 
     local providers = providers_for(mod, engine, lang)
-    if #providers == 0 then
+    local is_local = engines.is_local_engine(engine) == true
+
+    -- The offline engine needs no provider, no API key and no proxy; it needs the
+    -- model on disk and (asynchronously) in memory.
+    if is_local then
+        providers = {}
+    elseif #providers == 0 then
         util.info(mod, "engine '%s' has no online provider for '%s'", engine, tostring(lang))
         return false
     end
 
-    local key = mod:get("online_api_key")
-    local has_key = type(key) == "string" and key ~= ""
-    if not has_key then
-        for _, provider in ipairs(providers) do
-            if provider_needs_key(provider) then
-                util.warn(mod, "provider '%s' needs an API key but none is set", provider)
-                return false
+    if not is_local then
+        local key = mod:get("online_api_key")
+        local has_key = type(key) == "string" and key ~= ""
+        if not has_key then
+            for _, provider in ipairs(providers) do
+                if provider_needs_key(provider) then
+                    util.warn(mod, "provider '%s' needs an API key but none is set", provider)
+                    return false
+                end
             end
         end
     end
@@ -574,28 +638,52 @@ function M.start(mod, report, lang)
         return false
     end
 
-    -- Proxy: an address typed in the mod options wins, otherwise the Windows
-    -- setting is used when it is switched on. WinHTTP reads neither by itself.
-    local proxy = mod:get("proxy")
-    if type(proxy) ~= "string" then
-        proxy = ""
-    end
-    core.at_set_proxy(proxy)
-    util.info(mod, "proxy: %s", tostring(cstr(core.at_proxy_in_use())))
-    -- Log only. DMF shows warnings as on-screen notifications, and "Windows has a
-    -- proxy configured but switched off" is not something to interrupt the player
-    -- with on every launch - it is only worth raising when a request actually
-    -- fails to connect (see fail_item).
-    M.proxy_hint = cstr(core.at_proxy_hint()) or ""
-    if M.proxy_hint ~= "" then
-        util.info(mod, "proxy note: %s", M.proxy_hint)
-    end
+    if is_local then
+        local dir = engines.model_dir(engine)
+        local files = core.at_set_model_dir(dir)
+        if files < 4 then
+            util.warn(mod, "the %s model is incomplete in %s (%d/4 files); not starting",
+                tostring(engine), tostring(dir), files)
+            return false
+        end
+        M.state.model_files = files
 
-    -- drop providers this session already found to be unreachable
-    providers = usable_providers(providers)
-    if #providers == 0 then
-        util.warn(mod, "every online provider for '%s' has been unreachable this session", tostring(lang))
-        return false
+        -- Loading reads ~600 MB; on the game thread that is a visible freeze, so it
+        -- runs on a background thread of the core and the HUD shows it while it
+        -- lasts (see M.status().loading).
+        local started = core.at_load_model_async()
+        if started < 0 then
+            util.warn(mod, "could not start loading the offline model: %s", tostring(cstr(core.at_model_error())))
+            return false
+        end
+        if started == 1 then
+            util.info(mod, "loading the offline model from %s (%d/4 files, %.0f MB)",
+                tostring(dir), files, tonumber(core.at_model_disk_size()) / (1024 * 1024))
+        end
+    else
+        -- Proxy: an address typed in the mod options wins, otherwise the Windows
+        -- setting is used when it is switched on. WinHTTP reads neither by itself.
+        local proxy = mod:get("proxy")
+        if type(proxy) ~= "string" then
+            proxy = ""
+        end
+        core.at_set_proxy(proxy)
+        util.info(mod, "proxy: %s", tostring(cstr(core.at_proxy_in_use())))
+        -- Log only. DMF shows warnings as on-screen notifications, and "Windows has a
+        -- proxy configured but switched off" is not something to interrupt the player
+        -- with on every launch - it is only worth raising when a request actually
+        -- fails to connect (see fail_item).
+        M.proxy_hint = cstr(core.at_proxy_hint()) or ""
+        if M.proxy_hint ~= "" then
+            util.info(mod, "proxy note: %s", M.proxy_hint)
+        end
+
+        -- drop providers this session already found to be unreachable
+        providers = usable_providers(providers)
+        if #providers == 0 then
+            util.warn(mod, "every online provider for '%s' has been unreachable this session", tostring(lang))
+            return false
+        end
     end
 
     local queued, skipped, colours = 0, 0, 0
@@ -628,7 +716,8 @@ function M.start(mod, report, lang)
     M.state.finished = queued == 0
     M.state.lang = lang
     M.state.engine = engine
-    M.state.provider = providers[1]
+    M.state.is_local = is_local
+    M.state.provider = is_local and nil or providers[1]
     M.state.queued = queued
     M.state.done = 0
     M.state.failed = 0
@@ -647,19 +736,23 @@ function M.start(mod, report, lang)
         notes[#notes + 1] = string.format("%d colour name(s) left in English", colours)
     end
     util.info(mod, "online translation queued: %d key(s) into '%s' via %s [%s]%s",
-        queued, tostring(lang), engine, table.concat(providers, ", "),
+        queued, tostring(lang), engine,
+        is_local and "offline model" or table.concat(providers, ", "),
         #notes > 0 and (" (" .. table.concat(notes, ", ") .. ")") or "")
 
     return queued > 0
 end
 
 function M.stop(mod)
-    -- Drain before clearing: see drain_results() for why this matters.
+    -- Drain before clearing: see drain_results() for why this matters. The local
+    -- engine has its own single-slot queue and needs the same treatment.
     drain_results(mod)
+    drain_local(mod)
     q_clear()
     inflight = nil
     M.state.running = false
     M.state.finished = false
+    M.state.is_local = false
 end
 
 local function finish(mod, reason)
@@ -714,6 +807,53 @@ local function dispatch(mod)
     -- mistake it for our own first response and shift every later translation by one.
     -- The job-id check in M.update covers whatever is still running right now.
     drain_results(mod)
+
+    -- The offline engine takes the same shape: throw away whatever the previous run
+    -- left in the core's single result slot, then hand over this item.
+    if M.state.is_local then
+        drain_local(mod)
+
+        if not model_ready() then
+            -- Still loading (or failed). Put the item back untouched and let the next
+            -- frame decide; M.status().loading drives the on-screen note.
+            q_unshift(item)
+            if not model_loading() then
+                local why = cstr(core.at_model_error())
+                util.warn(mod, "the offline model is not ready: %s", tostring(why))
+                M.state.last_error = why
+                finish(mod, "stopped: the offline model could not be loaded")
+            end
+            return false
+        end
+
+        local masked, tokens = glossary.mask(item.en, M.state.lang, true)
+        local accepted = core.at_submit(masked, M.state.lang)
+        if accepted == 0 then
+            -- The core is still busy with the previous string; try again next frame.
+            q_unshift(item)
+            return false
+        end
+        if accepted < 0 then
+            -- Refused by the core: bad arguments (an item that masks down to
+            -- nothing, say). Putting it back would retry it every frame and print a
+            -- warning each time, so it is retired as a content problem - the local
+            -- counterpart of "this provider will not translate this string".
+            local why = cstr(core.at_model_error()) or "the offline engine refused the text"
+            fail_item(mod, { kind = "local", item = item }, why, 0, false)
+            return true
+        end
+
+        inflight = {
+            kind = "local",
+            item = item,
+            masked = masked,
+            tokens = tokens,
+        }
+        -- The local model is CPU-bound rather than rate limited: no pacing delay
+        -- beyond the frame, which is what keeps a 2500-key pass at ~180 ms apiece.
+        next_slot = elapsed
+        return true
+    end
 
     local provider = nil
     for i = item.provider_index or 1, #item.providers do
@@ -804,25 +944,15 @@ local function dispatch(mod)
     return true
 end
 
--- Parses a response and stores the result.
--- Returns true, or false plus a reason and whether this was a transport problem.
-local function handle_response(mod, req, body)
-    local ffi = Mods.lua.ffi
+-- Stores `raw` as the translation of req.item, after undoing the glossary masking
+-- and checking that the result is safe to put into a localization table.
+--
+-- Shared by the HTTP providers and the local model so the rules cannot differ: an
+-- engine that skips the format-specifier check or the unchanged tagging would write
+-- broken strings or inflate the "translated" count.
+local function accept_translation(mod, req, raw, src)
     local item = req.item
 
-    local n = core.at_online_parse(req.provider, body, out_buf, SMALL_CAP)
-    if n < 0 then
-        -- A response we cannot read is a problem with *this text* or with the
-        -- reply, not with the connection: it must not count towards disabling the
-        -- provider or tripping the circuit breaker. (Google answers [null,...]
-        -- for text it will not translate, which used to take a healthy provider
-        -- offline after three keys.)
-        local why = cstr(core.at_online_error()) or "unreadable response"
-        util.warn(mod, "%s could not be read from %s: %s", item.key, req.provider, tostring(why))
-        return false, why, false
-    end
-
-    local raw = ffi.string(out_buf, n)
     local restored, missing = glossary.unmask(raw, req.tokens)
     if missing and missing > 0 then
         return false, string.format("%d glossary term(s) were dropped by the service", missing), false
@@ -858,7 +988,7 @@ local function handle_response(mod, req, body)
         return false, why, false
     end
 
-    store_translation(mod, item, restored, req.provider)
+    store_translation(mod, item, restored, src)
     M.state.done = M.state.done + 1
 
     util.log(mod, "translated %s:%s -> %s", item.mod_id, item.key, restored)
@@ -871,12 +1001,46 @@ local function handle_response(mod, req, body)
     return true
 end
 
+-- Parses a response and stores the result.
+-- Returns true, or false plus a reason and whether this was a transport problem.
+local function handle_response(mod, req, body)
+    local ffi = Mods.lua.ffi
+    local item = req.item
+
+    local n = core.at_online_parse(req.provider, body, out_buf, SMALL_CAP)
+    if n < 0 then
+        -- A response we cannot read is a problem with *this text* or with the
+        -- reply, not with the connection: it must not count towards disabling the
+        -- provider or tripping the circuit breaker. (Google answers [null,...]
+        -- for text it will not translate, which used to take a healthy provider
+        -- offline after three keys.)
+        local why = cstr(core.at_online_error()) or "unreadable response"
+        util.warn(mod, "%s could not be read from %s: %s", item.key, req.provider, tostring(why))
+        return false, why, false
+    end
+
+    return accept_translation(mod, req, ffi.string(out_buf, n), req.provider)
+end
+
 -- Retries the current item on the next provider, or gives up on it.
 -- `transport` marks a genuine engine problem (network/HTTP), which is what the
 -- provider health tracker and the circuit breaker count; a refused translation is
 -- a content problem and must not pause the engine.
 local function fail_item(mod, req, reason, http_status, transport)
     local item = req.item
+
+    -- The offline engine has no provider to blame, no alternative to fall back to and
+    -- no quota to respect. A string it cannot translate is a content problem - the
+    -- same category as a service refusing one - so it is counted as refused, which
+    -- deliberately does not pause anything. A model that is actually broken is caught
+    -- in dispatch() (not ready -> finish), so this cannot spin forever.
+    if req.kind == "local" then
+        M.state.last_error = reason
+        M.state.refused = M.state.refused + 1
+        util.info(mod, "the offline model could not translate %s:%s (%s)",
+            item.mod_id, item.key, tostring(reason))
+        return
+    end
 
     if http_status == 429 or http_status == 403 then
         cooldown_until = elapsed + QUOTA_COOLDOWN
@@ -943,7 +1107,30 @@ function M.update(mod, dt)
     elapsed = elapsed + (dt or 0)
 
     -- 1. collect a finished response
-    if inflight then
+    if inflight and inflight.kind == "local" then
+        local n = core.at_poll(out_buf, SMALL_CAP)
+
+        if n == 0 then
+            -- still working; one string at a time
+            return
+        end
+
+        local req = inflight
+        inflight = nil
+
+        if n > 0 then
+            local text = ffi.string(out_buf, n)
+            local ok, why, transport = accept_translation(mod, req, text, M.state.engine)
+            if ok then
+                engines.note_success()
+            else
+                fail_item(mod, req, why, 0, transport)
+            end
+        else
+            local why = cstr(core.at_model_error()) or "the offline model failed"
+            fail_item(mod, req, "offline model: " .. tostring(why), 0, false)
+        end
+    elseif inflight then
         local rc = core.at_http_poll(id_buf, result_buf, code_buf, body_buf, BODY_CAP, len_buf, win_buf)
 
         if rc == 1 then
@@ -1026,6 +1213,10 @@ function M.status()
         lang = M.state.lang,
         engine = M.state.engine,
         provider = M.state.provider,
+        local_engine = M.state.is_local == true,
+        -- The offline model loads in the background at the start of a run; the HUD
+        -- says so instead of leaving the player wondering why nothing is happening.
+        loading = M.state.is_local == true and model_loading(),
         queued = M.state.queued,
         left = q_count(),
         done = M.state.done,
