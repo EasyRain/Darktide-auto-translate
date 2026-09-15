@@ -262,16 +262,6 @@ function M.build_headers(spec, values)
     return table.concat(lines, "\r\n") .. "\r\n"
 end
 
--- Extracts the translation from a reply, using the configured path. Returns the text, or
--- nil plus a localization key and the raw reason.
-function M.extract(core, spec, body, out_buf, cap)
-    if core.at_json_string_at(body, spec.path, out_buf, cap) == 1 then
-        return nil  -- the caller reads out_buf; see online.lua's read_response()
-    end
-    return nil, "custom_unreadable", string.format("%s (path '%s')",
-        tostring(core.at_error()), tostring(spec.path))
-end
-
 -- Which localization key tells the player what went wrong with an HTTP status.
 function M.error_key(http_status)
     if http_status == 401 or http_status == 403 then
