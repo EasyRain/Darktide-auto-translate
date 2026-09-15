@@ -116,6 +116,30 @@ return {
   localised wiki pages).
 * Use **Test glossary** in the options to see masking/restoring in the log.
 
+### When the placeholder is dropped
+
+Masking is a protection, not a translation strategy: a model can lose a placeholder, and the string
+then has no trustworthy answer at all. Two things happen instead of "refused forever".
+
+**1. A string that is nothing but known terms is answered from the token list, with no request.**
+A bare placeholder is exactly what these models mangle — `⟦0⟧` came back as `⁇ 0 ⁇ ` — so `Right`
+and `Hive Scum` used to be refused on every run even though their official translation was sitting
+in the token list. Measured on the probe set (121 translatable strings, 16 with a glossary term):
+**2 strings** take this path, and they now store the official `右側` and `巢都敗類`. It also catches
+strings that are a single known term plus nothing else, e.g. `Reload Speed` → `裝彈速度`.
+
+**2. Everything else gets one retry with the masking switched off.** The model then sees the whole
+phrase, and whatever comes back is stored with `src = "unmasked"` so the answers can be found and
+reviewed. The trade is real and measured: `Chem Toxin` (masked as `⟦0⟧ Toxin`, placeholder lost)
+comes back as `化学毒素` — the right meaning, and a Simplified character in a Traditional store —
+where before it stored nothing at all. It cannot rescue every case: an unmasked `Hive Scum` is
+`蜂巢 ⁇ `, which the unknown-token guard refuses anyway. Each item is retried at most once, so a
+string that keeps losing its term ends up refused rather than translated forever.
+
+To review the entries this produced, search the store for `src = "unmasked"`; to switch the retry
+itself off, make `should_retry_unmasked()` in `modules/online.lua` return false (the deterministic
+first path is independent of it).
+
 ## Engines and language support
 
 Two engines, chosen with the **Translation engine** option:

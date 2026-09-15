@@ -234,6 +234,36 @@ check("plan: a multi-line string is alone",
 check("plan: the literal \\n form is alone too",
     plan({ "Ammo", "one\\ntwo", "Block" }), "Ammo / one\\ntwo / Block")
 
+-- ---------------------------------------------------------------------------
+-- The two answers to "the glossary placeholder was dropped"
+--
+-- 1. A string that was *entirely* known terms is answered from the token list, without a
+--    request: measured, a bare placeholder is exactly what the model mangles ("⟦0⟧" ->
+--    "⁇ 0 ⁇ "), so "Right" and "Hive Scum" used to be refused forever even though their
+--    official translation was sitting right there.
+-- 2. Everything else gets one unmasked retry, tagged src = "unmasked" so the answers can
+--    be reviewed. It has to be once only, or a string that keeps losing its term would be
+--    translated forever.
+-- ---------------------------------------------------------------------------
+local protected = online.is_fully_protected_for_tests
+local tokens1 = { { term = "右側", source = "Right" } }
+check("fully protected: 'Right' -> the token list",
+    protected("Right", "\226\159\1660\226\159\167", tokens1), true)
+check("fully protected: leading space is fine",
+    protected(" Hive Scum", "\226\159\1660\226\159\167", tokens1), true)
+check("fully protected: a phrase with letters left is not",
+    protected("Chem Toxin", "\226\159\1660\226\159\167 Toxin", tokens1), false)
+check("fully protected: nothing was masked",
+    protected("Chem Toxin", "Chem Toxin", {}), false)
+check("fully protected: no tokens", protected("Right", "\226\159\1660\226\159\167", {}), false)
+
+local retry = online.should_retry_unmasked_for_tests
+check("unmasked retry: lost placeholder, first time", retry({}, "tokens"), true)
+check("unmasked retry: lost placeholder, already retried",
+    retry({ tried_unmasked = true }, "tokens"), false)
+check("unmasked retry: an unknown token is not a masking problem", retry({}, "unsafe"), false)
+check("unmasked retry: no reason given", retry({}, nil), false)
+
 print(string.format("%d failure(s)", failures))
 
 -- ---------------------------------------------------------------------------
