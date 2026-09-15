@@ -30,6 +30,12 @@ return {
                 },
             },
             {
+                setting_id = "online_api_key",
+                type = "text",
+                default_value = "",
+                max_length = 256,
+            },
+            {
                 setting_id = "download_model_small",
                 type = "checkbox",
                 default_value = false,

@@ -51,6 +51,18 @@ return {
         en = "Local model (large, ~1.3 GB)",
         ["zh-cn"] = "本地模型（大，约 1.3 GB）",
     },
+    online_api_key = {
+        en = "API key",
+        ["zh-cn"] = "API 密钥",
+    },
+    online_api_key_description = {
+        en = "Used by the 'Online (official API)' engine only. May be left empty. Stored in your local settings file.",
+        ["zh-cn"] = "仅供「在线（正式 API）」引擎使用，可留空。密钥保存在本机设置文件中。",
+    },
+    api_key_missing = {
+        en = "Auto Translate: 'Online (official API)' is selected but no API key is set. Translation is paused until you fill it in (Mod Options).",
+        ["zh-cn"] = "Auto Translate：已选择「在线（正式 API）」，但未填写 API 密钥。在你填写之前（模组设置内）不会进行翻译。",
+    },
     download_model_small = {
         en = "Download small model",
         ["zh-cn"] = "下载小模型",

@@ -75,6 +75,29 @@ end
 
 install_hook()
 
+-- The online API engine needs a key. Warn the player and pause translation when it
+-- is selected without one (the setting may be left empty otherwise).
+local function check_engine_settings()
+    if engines.resolve(mod) ~= "online_api" then
+        return true
+    end
+
+    local key = mod:get("online_api_key")
+    if type(key) == "string" and key ~= "" then
+        return true
+    end
+
+    local message = mod:localize("api_key_missing")
+    util.warn(mod, "engine 'online_api' is selected but no API key is set")
+    if type(mod.notify) == "function" then
+        pcall(mod.notify, mod, message)
+    end
+    if type(mod.echo) == "function" then
+        pcall(mod.echo, mod, message)
+    end
+    return false
+end
+
 local function run_pipeline(reason)
     if not mod:get("apply_translation") then
         util.info(mod, "translations disabled by master switch (%s)", reason)
@@ -103,7 +126,11 @@ local function run_pipeline(reason)
     end
 
     if mod:get("auto_translate_enabled") then
-        engines.run(mod, report)
+        if check_engine_settings() then
+            engines.run(mod, report)
+        else
+            util.info(mod, "translation paused: the selected engine is not usable yet")
+        end
     else
         util.info(mod, "auto translation paused by setting; %d key(s) left pending", st.pending)
     end
@@ -143,8 +170,11 @@ end
 mod.on_setting_changed = function(setting_id)
     if setting_id == "download_model_small" or setting_id == "download_model_large" then
         util.info(mod, "model download toggles are registered but the downloader is not implemented yet")
-    elseif setting_id == "engine" then
-        util.info(mod, "engine set to: %s", tostring(mod:get("engine")))
+    elseif setting_id == "engine" or setting_id == "online_api_key" then
+        if setting_id == "engine" then
+            util.info(mod, "engine set to: %s", tostring(mod:get("engine")))
+        end
+        check_engine_settings()
     elseif setting_id == "apply_translation" then
         util.info(mod, "master switch changed; use 'Reload translation files' to re-apply")
     end
