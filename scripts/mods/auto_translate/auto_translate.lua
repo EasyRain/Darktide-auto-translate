@@ -78,6 +78,13 @@ install_hook()
 -- The online API engine needs a key. Warn the player and pause translation when it
 -- is selected without one (the setting may be left empty otherwise).
 local function check_engine_settings()
+    -- tripped circuit breaker: stop hammering a failing service
+    if engines.is_paused() then
+        local _, _, reason = engines.failure_state()
+        util.info(mod, "translation paused after repeated engine failures (last: %s)", tostring(reason))
+        return false
+    end
+
     if engines.resolve(mod) ~= "online_api" then
         return true
     end
@@ -146,6 +153,7 @@ end
 
 -- Mod options: "Reload translation files"
 function mod.reload_translations()
+    engines.reset(mod) -- give a paused engine another chance
     local ok, err = pcall(run_pipeline, "manual reload")
     if not ok then
         util.warn(mod, "reload error: %s", tostring(err))
@@ -173,6 +181,9 @@ mod.on_setting_changed = function(setting_id)
     elseif setting_id == "engine" or setting_id == "online_api_key" then
         if setting_id == "engine" then
             util.info(mod, "engine set to: %s", tostring(mod:get("engine")))
+        else
+            -- a new key deserves a fresh attempt after a failure streak
+            engines.reset(mod)
         end
         check_engine_settings()
     elseif setting_id == "apply_translation" then

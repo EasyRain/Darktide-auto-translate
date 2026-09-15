@@ -26,6 +26,73 @@ M.ENGINES = {
     online_api = { name = "online_api", implemented = false },
 }
 
+-- ---------------------------------------------------------------------------
+-- Circuit breaker for translation engines.
+--
+-- A bad API key (or an unreachable service) would otherwise fail on every single
+-- key forever. After MAX_FAILURES consecutive failures the engine is paused for
+-- the rest of the session and the player is told. Any success resets the counter;
+-- changing the relevant setting or reloading translations resets it manually.
+-- ---------------------------------------------------------------------------
+M.MAX_FAILURES = 3
+
+local breaker = { failures = 0, paused = false, last_reason = nil }
+
+function M.is_paused()
+    return breaker.paused
+end
+
+function M.failure_state()
+    return breaker.failures, breaker.paused, breaker.last_reason
+end
+
+function M.reset(mod)
+    if breaker.failures > 0 or breaker.paused then
+        if mod then
+            util.info(mod, "engine failure counter reset")
+        end
+    end
+    breaker.failures = 0
+    breaker.paused = false
+    breaker.last_reason = nil
+end
+
+-- Record a failed request. Returns true when this failure tripped the breaker.
+function M.note_failure(mod, reason)
+    if breaker.paused then
+        return true
+    end
+
+    breaker.failures = breaker.failures + 1
+    breaker.last_reason = reason
+
+    util.log(mod, "engine failure %d/%d (%s)", breaker.failures, M.MAX_FAILURES, tostring(reason))
+
+    if breaker.failures >= M.MAX_FAILURES then
+        breaker.paused = true
+        local message = mod:localize("engine_paused_failures")
+        util.warn(mod, "engine paused after %d consecutive failures (last: %s)", breaker.failures, tostring(reason))
+        if type(mod.notify) == "function" then
+            pcall(mod.notify, mod, message)
+        end
+        if type(mod.echo) == "function" then
+            pcall(mod.echo, mod, message)
+        end
+        return true
+    end
+
+    return false
+end
+
+-- Record a successful request.
+function M.note_success()
+    if breaker.failures > 0 or breaker.paused then
+        breaker.failures = 0
+        breaker.paused = false
+        breaker.last_reason = nil
+    end
+end
+
 function M.resolve(mod)
     local wanted = mod:get("engine") or "auto"
     if wanted == "auto" then
