@@ -79,7 +79,9 @@ end
 -- over the game world is otherwise hard to read.
 local function font_options()
     local ok, options = pcall(UIFonts.get_font_options_by_style, {
-        text_horizontal_alignment = "left",
+        -- right aligned: the block sits in the top-right corner, so the text hugs
+        -- the screen edge instead of leaving a ragged one
+        text_horizontal_alignment = "right",
         text_vertical_alignment = "center",
         drop_shadow = true,
     }, {})
@@ -149,16 +151,19 @@ local function draw(self, ui_renderer, input_service, dt, t)
     local scale = (engine_render_settings and engine_render_settings.scale)
         or (resolution and resolution.scale) or ui_renderer.scale or 1
     local res_w = (resolution and (resolution.width or resolution.res_w or resolution[1])) or 1920
-    local res_h = (resolution and (resolution.height or resolution.res_h or resolution[2])) or 1080
     local screen_width = res_w / scale
-    local screen_height = res_h / scale
 
     local font_size = math.floor(17 * scale + 0.5)
     local line_height = font_size + 4
     local width = math.floor(330 * scale + 0.5)
-    local block_height = line_height * #lines
-    local x = screen_width - width - 36
-    local y = screen_height - block_height - 72
+
+    -- Top-right corner. It used to sit bottom-right, where it covered the ammo and
+    -- weapon readouts; the top-right of the HUD is empty, so nothing is hidden.
+    -- TOP_MARGIN leaves room for anything the game puts along the top edge.
+    local TOP_MARGIN = 70
+    local RIGHT_MARGIN = 36
+    local x = screen_width - width - RIGHT_MARGIN
+    local y = TOP_MARGIN
 
     render_settings.scale = scale
     render_settings.inverse_scale = (engine_render_settings and engine_render_settings.inverse_scale) or (1 / scale)
