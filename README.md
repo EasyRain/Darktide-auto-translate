@@ -3,11 +3,11 @@
 Automatically translates the texts of your installed mods **in memory** — the original
 mod files are never modified. Translations are cached locally in editable text files.
 
-> **Status: v0.1.0 — framework build.**
-> What works today: scanning every loaded mod, reading its localization table, applying
-> translations from the local library, and hot-injecting the merged table back into DMF.
-> Machine translation engines (local NLLB-200 model / online services) are stubbed and
-> land in the next step.
+> **Status: v0.1.0 — online engine works, local model still a stub.**
+> Working today: scanning every loaded mod, applying translations from the local
+> library, hot-injecting the merged table back into DMF, and translating missing
+> keys through the online providers (one request at a time, resumable, saved as it
+> goes). The offline NLLB-200 model and the model downloader are the next step.
 
 ## How it works
 
@@ -17,7 +17,28 @@ mod files are never modified. Translations are cached locally in editable text f
 3. Translations are looked up in the local library (`translations/<language>/<modid>.lua`).
 4. The merged table is written back into DMF's in-memory registry via
    `dmf:initialize_mod_localization()`. **No file of the translated mod is touched.**
-5. Keys that still have no translation are handed to the selected engine (not implemented yet).
+5. Keys that still have no translation are queued for the selected engine.
+
+## The online engine
+
+The queue is driven from `mod.update(dt)`, one request in flight at a time, so the game
+thread never blocks.
+
+* **Glossary terms are masked** into placeholders before a request and restored afterwards,
+  so a service cannot paraphrase official terminology. A response that dropped a
+  placeholder is discarded.
+* **Text safety**: format specifiers (`%s`, `%.0f`, `%%`, …) are compared against the
+  source. A translation whose specifiers do not match is **refused, not stored** — a stray
+  `%` reaching `string.format` throws.
+* **Quota handling**: HTTP 429/403 pauses the queue for 5 minutes instead of hammering the
+  service. Three consecutive transport failures trip the circuit breaker and stop the run.
+* **Saved as it goes**: translation files are written every 25 keys and at the end, so
+  quitting mid-run loses nothing. The rest is picked up on the next launch.
+* **No restart needed**: when the queue drains, the newly translated keys are injected into
+  DMF immediately (the "Translation status" button shows progress at any time).
+
+The request/response handling itself (URLs, language spellings, JSON, HTML entities) lives
+in the native core `bin/at_core.dll` — see *Testing without launching the game* below.
 
 ## Install
 
@@ -128,10 +149,15 @@ not read the "system proxy" that most VPN clients set for browsers. Consequences
 
 ```
 bin\at_cli.exe info                             # core version, model status, last error
+bin\at_cli.exe selftest                          # 32 checks, offline, no network, no game
 bin\at_cli.exe http https://api.github.com/zen   # GET, prints status / bytes / body
-bin\at_cli.exe http http://example.com/          # plaintext is fine for local endpoints
-bin\at_cli.exe translate ja "Keystone"           # one translation through the core API
+bin\at_cli.exe provider google_gtx ja "Keystone" # build -> GET -> parse, end to end
+bin\at_cli.exe translate ja "Keystone"           # one translation through the local model API
 ```
+
+`selftest` is the useful one: it exercises the JSON reader, URL building, language code
+mapping, HTML entity decoding and every provider's response parsing — the same code the game
+runs — and exits non-zero on the first mismatch. Run it after touching `src/`.
 
 Exit codes: `0` ok, `1` usage error, `2` core unavailable, `3` request or translation failed.
 A failed request prints the WinHTTP/Win32 code **and its decoded message**, which is normally all
