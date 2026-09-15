@@ -1,4 +1,4 @@
-// at_model.h — the offline NLLB-200 engine: model files, language codes, inference.
+﻿// at_model.h — the offline NLLB-200 engine: model files, language codes, inference.
 //
 // Kept apart from at_online.c because the two halves have nothing in common: this
 // one never touches the network, and it owns the CTranslate2/SentencePiece side.
@@ -66,10 +66,31 @@ AT_API int at_model_load(const char* dir_utf8);
 //   1 = started, 0 = already loaded or already loading, <0 = refused
 // Poll at_model_loading() / at_model_status(), then read at_model_error() if the
 // model never becomes ready.
+//
+// One model per process: a request naming a *different* directory while one is loaded
+// returns 0 and does nothing (the loaded objects are never released). Compare
+// at_model_current_dir() with what was asked for to detect that.
 AT_API int at_model_load_async(const char* dir_utf8);
 
 // 1 while a background load is in progress.
 AT_API int at_model_loading(void);
+
+// How many threads one translation may use. 0 = the default, half the cores, which is
+// what the mod uses: this runs inside the game, and CTranslate2 would otherwise take
+// every core for the whole inference. Only read at load time. Returns 1 on success, 0
+// when a model is already loaded (too late to change).
+AT_API int at_model_set_threads(int threads);
+
+// The thread count the loaded model uses, or 0 when nothing is loaded.
+AT_API int at_model_current_threads(void);
+
+// Logical processors reported by the machine (0 when unknown).
+AT_API int at_model_machine_cores(void);
+
+// Directory of the loaded model, "" when none. Writes at most `cap` bytes and
+// returns the length. A mismatch with the requested directory means the request was a
+// no-op and the game has to be restarted for the change to apply.
+AT_API int at_model_current_dir(char* out, int cap);
 
 // Translates `text_utf8` into `target_lang_utf8` ("zh-cn", "ja", ...).
 // Returns the number of bytes written to out_text, or a negative value:

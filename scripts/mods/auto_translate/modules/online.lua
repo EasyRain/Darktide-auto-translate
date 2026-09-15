@@ -68,6 +68,9 @@ int at_submit(const char*, const char*);
 int at_poll(char*, int);
 const char* at_model_error(void);
 long long at_model_disk_size(void);
+int at_model_threads(void);
+int at_model_core_count(void);
+int at_model_loaded_dir(char*, int);
 ]]
 
 -- Reads a C string safely: a NULL pointer is cdata (truthy!) in LuaJIT, so a
@@ -919,6 +922,38 @@ M.state = {
 -- found again (search the store for src = "unmasked") and reviewed.
 local UNMASKED_SRC = "unmasked"
 
+-- Says, once per session, that the model the mod asked for is not the one in memory.
+--
+-- Only one model fits in the game process - the core never releases one (1,663 MB for
+-- the 1.3B, 3,813 MB for the 3.3B, and the whole point is to never pay both) - so
+-- changing the engine takes a restart. The notice has to say so: otherwise the player
+-- switches to the 3.3B and keeps getting the 1.3B's answers, with nothing anywhere
+-- telling them why.
+function M.note_model_switch(mod, wanted)
+    if M.state.model_switch_reported then
+        return
+    end
+    M.state.model_switch_reported = true
+
+    local ffi = Mods.lua.ffi
+    local buf = ffi.new("char[?]", 1024)
+    local n = core.at_model_loaded_dir(buf, 1024)
+    local loaded = n > 0 and ffi.string(buf, n) or ""
+    if loaded == "" or loaded == wanted then
+        return
+    end
+
+    util.warn(mod, "the model in memory is %s, not %s: restart the game to switch models (only one fits in the process)",
+        loaded, tostring(wanted))
+    local message = mod:localize("model_restart_needed", loaded)
+    if type(mod.notify) == "function" then
+        pcall(mod.notify, mod, message)
+    end
+    if type(mod.echo) == "function" then
+        pcall(mod.echo, mod, message)
+    end
+end
+
 -- The "Windows has a proxy but it is switched off" note from the core. Logged when
 -- the queue starts and attached to a connection failure when one happens.
 M.proxy_hint = ""
@@ -1014,18 +1049,29 @@ function M.start(mod, report, lang)
         end
         M.state.model_files = files
 
-        -- Loading reads ~600 MB; on the game thread that is a visible freeze, so it
+        -- Loading reads 1.4 GB; on the game thread that is a visible freeze, so it
         -- runs on a background thread of the core and the HUD shows it while it
         -- lasts (see M.status().loading).
         local started = core.at_load_model_async()
         if started < 0 then
+            -- Only one model fits in the process (the core never releases one), so a
+            -- different model than the loaded one is refused. Saying so is the whole
+            -- point: the player changed the engine and would otherwise be told nothing
+            -- while the old model keeps answering.
             util.warn(mod, "could not start loading the offline model: %s", tostring(cstr(core.at_model_error())))
+            M.note_model_switch(mod, dir)
             return false
         end
         if started == 1 then
-            util.info(mod, "loading the offline model from %s (%d/4 files, %.0f MB)",
-                tostring(dir), files, tonumber(core.at_model_disk_size()) / (1024 * 1024))
+            util.info(mod, "loading the offline model from %s (%d/4 files, %.0f MB) with %d of %d core(s)",
+                tostring(dir), files, tonumber(core.at_model_disk_size()) / (1024 * 1024),
+                core.at_model_threads(), core.at_model_core_count())
+        elseif not M.state.model_switch_checked then
+            -- Already loaded: the same directory is fine, a different one means the
+            -- request did nothing at all.
+            M.note_model_switch(mod, dir)
         end
+        M.state.model_switch_checked = true
     else
         -- Proxy: an address typed in the mod options wins, otherwise the Windows
         -- setting is used when it is switched on. WinHTTP reads neither by itself.

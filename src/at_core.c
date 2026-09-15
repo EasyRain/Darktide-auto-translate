@@ -1,4 +1,4 @@
-// at_core.c — Auto Translate native core.
+﻿// at_core.c — Auto Translate native core.
 //
 // Part 1 (this file): async HTTP GET on a worker thread via WinHTTP, so the Lua
 // side can just enqueue requests and poll for results once per frame.
@@ -939,6 +939,26 @@ int at_load_model_async(void)
         return -2;
     }
     return at_model_load_async(g_model_dir);
+}
+
+int at_set_model_threads(int threads)
+{
+    return at_model_set_threads(threads);
+}
+
+int at_model_threads(void)
+{
+    return at_model_current_threads();
+}
+
+int at_model_core_count(void)
+{
+    return at_model_machine_cores();
+}
+
+int at_model_loaded_dir(char* out, int cap)
+{
+    return at_model_current_dir(out, cap);
 }
 
 // The game-facing translation entry point: submit now, collect later. Never blocks.

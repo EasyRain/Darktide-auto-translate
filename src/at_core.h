@@ -86,7 +86,26 @@ AT_API int  at_set_model_dir(const char* dir_utf8);
 AT_API int  at_load_model(void);
 
 // Same, on a background thread: 1 = started, 0 = already loaded/loading, <0 = refused.
+//
+// One model per process: once something is loaded, a call naming another directory
+// returns 0 and changes nothing (see the note in at_model.cpp - the objects are never
+// released). at_model_loaded_dir() is what tells the caller whether its request was
+// honoured or ignored.
 AT_API int  at_load_model_async(void);
+
+// Threads one translation may use. 0 = the default (half the cores): CTranslate2
+// otherwise asks for every core, and this runs inside the game. Set before loading;
+// returns 0 when a model is already loaded.
+AT_API int  at_set_model_threads(int threads);
+
+// Threads the loaded model uses (0 when nothing is loaded) and the machine's core
+// count, for the HUD/log and for the CLI to report.
+AT_API int  at_model_threads(void);
+AT_API int  at_model_core_count(void);
+
+// Directory of the loaded model ("" when none). A mismatch with the directory the mod
+// asked for means the request did nothing and the game has to be restarted.
+AT_API int  at_model_loaded_dir(char* out, int cap);
 
 // The game-facing translation pair. at_submit hands a string over and returns at once
 // (1 = accepted, 0 = busy, <0 = refused); at_poll collects it a few frames later

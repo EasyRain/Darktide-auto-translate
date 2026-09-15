@@ -157,6 +157,12 @@ return {
         en = "Auto Translate: the automatic model download is not implemented yet. Place the 4 model files (model.bin, config.json, shared_vocabulary.json, sentencepiece.bpe.model) in: %s",
         ["zh-cn"] = "Auto Translate：自动下载功能尚未实现。请把 4 个模型文件（model.bin、config.json、shared_vocabulary.json、sentencepiece.bpe.model）放到：%s",
     },
+    -- Only one model fits in the game process (1.7 GB for the 1.3B, 3.8 GB for the 3.3B,
+    -- and the core never releases one), so switching engines mid-session cannot work.
+    model_restart_needed = {
+        en = "Auto Translate: the model already loaded is '%s'. Only one model fits in the game process, so switching models needs a restart - until then the loaded one keeps translating.",
+        ["zh-cn"] = "Auto Translate：当前已加载的模型是「%s」。游戏进程内只能容纳一个模型，因此切换模型需要重启游戏——在此之前仍由已加载的模型翻译。",
+    },
     -- DMF shows this as the setting's hover tooltip (options.lua: it falls back to
     -- "<setting_id>_description" when the option has no explicit tooltip key), which is
     -- where the explanations belong - in the dropdown itself they made every entry too

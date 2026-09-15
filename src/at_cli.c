@@ -1,4 +1,4 @@
-// at_cli.c — command line front end for the Auto Translate native core.
+﻿// at_cli.c — command line front end for the Auto Translate native core.
 //
 // Lets the core be tested without launching the game:
 //   at_cli.exe info
@@ -929,6 +929,12 @@ static int cmd_model(int argc, char** argv)
             async_mode = 1;
             continue;
         }
+        // --threads N caps how many cores one translation may use (0 = all of them).
+        if (_stricmp(argv[i], "--threads") == 0 && i + 1 < argc) {
+            at_set_model_threads(atoi(argv[i + 1]));
+            ++i;
+            continue;
+        }
         {
             size_t used = strlen(text);
             size_t need = strlen(argv[i]);
@@ -975,6 +981,7 @@ static int cmd_model(int argc, char** argv)
             return 3;
         }
         printf("loaded     : ok\n");
+        printf("threads    : %d of %d core(s)\n", at_model_threads(), at_model_core_count());
 
         // Show exactly what the model is fed: the source language token has to be
         // there as a token of its own (SentencePiece would shred "eng_Latn" into
@@ -1079,17 +1086,27 @@ static int cmd_queue(int argc, char** argv)
     int problems = 0;
 
     if (argc < 5) {
-        fprintf(stderr, "usage: at_cli.exe queue <model-dir> <target-lang> <text> [text...]\n");
+        fprintf(stderr, "usage: at_cli.exe queue <model-dir> <target-lang> <text> [text...] [--threads N]\n");
         return 1;
     }
     dir = argv[2];
     lang = argv[3];
+
+    // --threads N is not part of the text; it caps how many cores one translation may
+    // use, which is what the mod does so the game keeps its own.
+    for (i = 4; i < argc; i++) {
+        if (_stricmp(argv[i], "--threads") == 0 && i + 1 < argc) {
+            at_set_model_threads(atoi(argv[i + 1]));
+            continue;
+        }
+    }
 
     printf("loading     : %s\n", dir);
     if (!at_model_load(dir)) {
         fprintf(stderr, "load failed: %s\n", at_model_error());
         return 3;
     }
+    printf("threads     : %d of %d core(s)\n", at_model_threads(), at_model_core_count());
 
     // The regression this command exists for: a submit issued while the previous
     // string is still being translated must be refused. It used to be accepted, and
@@ -1129,6 +1146,12 @@ static int cmd_queue(int argc, char** argv)
         int accepted;
         int n;
 
+        // Flags are not strings to translate. The index in the label counts only the
+        // real strings, so it still lines up with the caller's list.
+        if (_stricmp(text, "--threads") == 0) {
+            continue;
+        }
+
         accepted = at_submit(text, lang);
         if (accepted != 1) {
             printf("[%02d] %-34s -> submit refused (%d): %s\n", i - 3, text, accepted, at_model_error());
@@ -1148,6 +1171,51 @@ static int cmd_queue(int argc, char** argv)
 
     printf("%d item(s), %d problem(s)\n", argc - 4, problems);
     return problems ? 1 : 0;
+}
+
+// ---------------------------------------------------------------------------
+// switch — what happens when a second model is asked for
+//
+// The engine must never hold two models: the game process would carry 1.7 GB plus
+// 3.8 GB for a queue that can only use one, and the objects of the first model are
+// never released (see at_model.cpp). So the second request has to be a no-op, and the
+// caller has to be able to *tell* - at_model_loaded_dir() is how. This command is the
+// proof: load A, translate, ask for B, and show that the loaded directory, the thread
+// count and the answer are all still A's.
+// ---------------------------------------------------------------------------
+static int cmd_switch(int argc, char** argv)
+{
+    char out[8192] = { 0 };
+    char loaded[1024] = { 0 };
+    const char* second;
+    const char* lang = argc > 4 ? argv[4] : "zh-tw";
+    int n;
+
+    if (argc < 4) {
+        fprintf(stderr, "usage: at_cli.exe switch <dir-a> <dir-b> [target-lang]\n");
+        return 1;
+    }
+    second = argv[3];
+
+    printf("load A       : %s -> %d\n", argv[2], at_model_load(argv[2]));
+    at_model_loaded_dir(loaded, (int)sizeof(loaded));
+    printf("loaded dir   : %s\n", loaded);
+    printf("threads      : %d of %d core(s)\n", at_model_threads(), at_model_core_count());
+
+    n = at_model_translate("Reload Speed", lang, out, (int)sizeof(out));
+    printf("answer A     : %s\n", n > 0 ? out : at_model_error());
+
+    printf("load B       : %s -> %d (1 = same model, <0 = refused: one model per process)\n",
+           second, at_model_load(second));
+    at_model_loaded_dir(loaded, (int)sizeof(loaded));
+    printf("loaded dir   : %s\n", loaded);
+    printf("threads      : %d of %d core(s)\n", at_model_threads(), at_model_core_count());
+
+    n = at_model_translate("Reload Speed", lang, out, (int)sizeof(out));
+    printf("answer B     : %s\n", n > 0 ? out : at_model_error());
+
+    printf("\ntwo models resident would be ~5.5 GB; the working set of this process says whether it is one\n");
+    return 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -1270,15 +1338,23 @@ static int cmd_proxy(int argc, char** argv)
 static int cmd_info(void)
 {
     int status = at_model_status();
-    const char* names[3];
+    const char* names[4];
+    char loaded[1024] = { 0 };
     names[0] = "no model";
     names[1] = "model files present";
     names[2] = "model loaded and ready";
+    names[3] = "loading";
 
     printf("at_core available : %s\n", at_available() ? "yes" : "no");
     printf("at_core version   : %s\n", at_version() ? at_version() : "(null)");
     printf("model status      : %d (%s)\n", status,
-           (status >= 0 && status <= 2) ? names[status] : "unknown");
+           (status >= 0 && status <= 3) ? names[status] : "unknown");
+    at_model_loaded_dir(loaded, (int)sizeof(loaded));
+    if (loaded[0]) {
+        printf("model loaded from : %s\n", loaded);
+    }
+    printf("threads           : %d of %d core(s)%s\n", at_model_threads(), at_model_core_count(),
+           at_model_threads() == 0 ? " (nothing loaded)" : "");
     printf("proxy in use      : %s\n", at_proxy_in_use());
     if (at_proxy_hint() && at_proxy_hint()[0]) {
         printf("proxy note        : %s\n", at_proxy_hint());
@@ -1304,7 +1380,9 @@ static void usage(void)
     printf("  at_cli.exe provider <name> <target-lang> <text...> [--key <api-key>]\n");
     printf("  at_cli.exe model <model-dir> <target-lang> <text...>  (offline NLLB, no network)\n");
     printf("             [--src en|zh-cn|ja|...] [--compute int8|int8_float32|float32|auto|default]\n");
-    printf("  at_cli.exe load <model-dir> [target-lang] [text...]    (async load + submit/poll)\n\n");
+    printf("             [--threads N]   (default: half the cores; 0 = all of them)\n");
+    printf("  at_cli.exe load <model-dir> [target-lang] [text...]    (async load + submit/poll)\n");
+    printf("  at_cli.exe switch <dir-a> <dir-b> [target-lang]        (what a second load does)\n\n");
     printf("providers: google_clients5, google_gtx, mymemory, google_api\n");
     printf("any command accepts --proxy <host:port> (e.g. --proxy 127.0.0.1:7890)\n");
 }
@@ -1348,6 +1426,8 @@ int main(int argc, char** argv)
         rc = cmd_load(argc, argv);
     } else if (_stricmp(argv[1], "queue") == 0) {
         rc = cmd_queue(argc, argv);
+    } else if (_stricmp(argv[1], "switch") == 0) {
+        rc = cmd_switch(argc, argv);
     } else {
         fprintf(stderr, "unknown command: %s\n", argv[1]);
         usage();

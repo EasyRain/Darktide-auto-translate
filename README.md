@@ -182,6 +182,30 @@ The SentencePiece model is identical in every NLLB-200 conversion, so copy the o
 `models/base` next to it; the mod checks for the four CTranslate2 files and will report the
 directory as incomplete without it.
 
+### One model per process, and how many cores it may use
+
+**Two models are never loaded at once.** The CTranslate2 objects are deliberately never
+released (destroying them hangs the process at exit — see `at_model.cpp`), so the core
+enforces one model per process: a load request naming a *different* directory is refused
+(`-3`, "another model is already loaded and cannot be released — restart the game"), and
+`at_model_loaded_dir()` lets the mod see that the request was not honoured. Measured with
+`at_cli.exe switch <dir-a> <dir-b>`: the loaded directory stays `dir-a`, the answer stays
+`dir-a`'s, and the process peaks at 1,666 MB instead of the ~5,476 MB two models would
+take. The mod warns once per session and tells the player a restart is needed.
+
+**A translation uses at most 8 threads.** CTranslate2's default is every core, which
+inside the game is both the rudest and the *slowest* setting. One 102-character string,
+1.3B int8, three runs each, on a 32-thread machine:
+
+| threads | 32 | 16 | 8 | 4 | 2 | 1 |
+| --- | --- | --- | --- | --- | --- | --- |
+| ms | ~1000 | ~400 | **340** | ~410 | 640 | 1200 |
+
+So the default is `min(cores/2, 8)` (8 here), and the game keeps the rest of the machine
+for the whole inference. `at_cli.exe model … --threads N` measures it; `0` asks for every
+core again.
+
+
 
 ### Why the 600M model was dropped
 

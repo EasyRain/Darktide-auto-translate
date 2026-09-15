@@ -1,4 +1,4 @@
-// at_model.cpp — offline NLLB-200 translation through SentencePiece + CTranslate2.
+﻿// at_model.cpp — offline NLLB-200 translation through SentencePiece + CTranslate2.
 //
 // Compiled as C++ (both libraries are C++ with no C API) and exposing a plain C
 // surface, because the rest of the core is C.
@@ -10,6 +10,17 @@
 //     a staged probe printed every step and then sat there for 120 s without
 //     exiting. In the game that would mean the game not closing. Leaking a
 //     handful of objects once per process lets the OS reclaim them instead.
+//
+//     The flip side is the rule load_model_locked() enforces: **one model per
+//     process**. A second load request is refused, whatever directory it names,
+//     because the objects of the first one cannot be released - so the mod has to
+//     tell the player to restart instead of pretending the model changed.
+//
+//   * A translation uses 8 threads at most, never all of them. CTranslate2 asks for
+//     every core when nothing is configured, and inside the game that is both the
+//     slowest setting (32 threads on 32 logical cores thrash: measured ~1000 ms
+//     against 340 ms at 8) and the one that takes the machine away from the game.
+//     at_model_set_threads() overrides it; the CLI's --threads measures it.
 //
 //   * compute_type is INT8, not the default. The NLLB conversion we ship is int8;
 //     asking CTranslate2 for float32 makes it try to convert the model on load,
@@ -53,6 +64,40 @@ char g_error[512] = { 0 };
 // Source language, as a FLORES-200 token. The texts this mod translates come from
 // English mod files, so that is the default; at_set_source_lang() can change it.
 char g_source_lang[32] = "eng_Latn";
+
+// Threads one translation may use. 0 = the default (see default_intra_threads()): enough
+// to keep the queue moving without taking the whole machine away from the game.
+int g_intra_threads = 0;
+
+// The directory that is actually loaded, for the mod and the CLI to compare against
+// what they asked for - the mismatch is silent otherwise (the load is a no-op).
+std::string g_loaded_dir;
+
+// The thread count the pool was built with: ReplicaPoolConfig cannot be read back from
+// the Translator, so it is remembered here for at_model_current_threads().
+int g_effective_threads = 0;
+
+// Half the logical processors, capped at 8. Both halves of that rule are measured (one
+// 102-character string, 1.3B int8, 3 runs each, on a 32-thread machine):
+//
+//     threads  32     16     8     4     2     1
+//     ms      ~1000   ~400   340   ~410   640   1200
+//
+// "All of them" is not just bad for the game, it is the *slowest*: 32 threads on 32
+// logical cores thrash. Half the cores is the passable default and 8 is the sweet spot on
+// a big machine, so that is the cap; a small machine still gets a proportional share.
+int default_intra_threads()
+{
+    const unsigned hw = std::thread::hardware_concurrency();
+    if (hw == 0) {
+        return 2;
+    }
+    int threads = (int)(hw / 2);
+    if (threads > 8) {
+        threads = 8;
+    }
+    return threads > 0 ? threads : 1;
+}
 
 // Compute type the model is loaded with. The shipped conversion is int8, so that
 // is the default; the knob exists because a mismatch here does not fail loudly -
@@ -246,8 +291,19 @@ std::string g_load_dir;
 // start, and at_model_ready() stays false so submits are refused rather than queued.
 int load_model_locked(const char* dir_utf8)
 {
+    // One model per process, whatever directory is asked for: the objects of the first
+    // one are never released (see the note at the top of the file), so loading a second
+    // would put two models in the game process at once - 1.7 GB plus 3.8 GB measured,
+    // for a queue that can only ever use one of them. Asking again for the model that is
+    // already loaded is a plain no-op; asking for a *different* one is refused loudly,
+    // because the caller has to tell the player to restart instead of pretending the
+    // change applied.
     if (g_ready) {
-        return 1;
+        if (g_loaded_dir == dir_utf8) {
+            return 1;
+        }
+        set_error("another model is already loaded and cannot be released - restart the game to switch models");
+        return -3;
     }
     if (!dir_utf8 || !dir_utf8[0]) {
         set_error("no model directory given");
@@ -290,18 +346,65 @@ int load_model_locked(const char* dir_utf8)
         g_loader = new ctranslate2::models::ModelLoader(dir_utf8);
         g_loader->device = ctranslate2::Device::CPU;
         g_loader->compute_type = ctranslate2::str_to_compute_type(g_compute_type);
-        g_translator = new ctranslate2::Translator(*g_loader);
+
+        // ReplicaPoolConfig is where the thread count lives in CTranslate2 4.x (it is not
+        // a ModelLoader member): num_threads_per_replica = 0 asks for every core, and this
+        // runs inside the game, so the default is half of them.
+        ctranslate2::ReplicaPoolConfig pool;
+        pool.num_threads_per_replica = (size_t)(g_intra_threads > 0 ? g_intra_threads : default_intra_threads());
+        g_translator = new ctranslate2::Translator(*g_loader, pool);
+        g_effective_threads = (int)pool.num_threads_per_replica;
     } catch (const std::exception& e) {
         std::snprintf(g_error, sizeof(g_error), "could not load the CTranslate2 model: %s", e.what());
         return 0;
     }
 
+    g_loaded_dir = dir_utf8;
     g_ready = true;
     set_error("");
     return 1;
 }
 
 }  // namespace
+
+// Threads a translation may use; 0 = the default (half the cores). Only read when a
+// model is loaded, so set it before at_model_load()/at_model_load_async().
+int at_model_set_threads(int threads)
+{
+    g_intra_threads = threads > 0 ? threads : 0;
+    if (g_ready) {
+        set_error("threads can only be set before the model is loaded");
+        return 0;
+    }
+    return 1;
+}
+
+int at_model_current_threads(void)
+{
+    return g_effective_threads;
+}
+
+int at_model_machine_cores(void)
+{
+    const unsigned hw = std::thread::hardware_concurrency();
+    return hw > 0 ? (int)hw : 0;
+}
+
+// The directory that is loaded, or "" when none is. The mod compares this with the model
+// it asked for: a *different* directory after a load request means the request was a
+// no-op (one model per process), and the player has to restart for the change to apply.
+int at_model_current_dir(char* out, int cap)
+{
+    if (!out || cap <= 0) {
+        return 0;
+    }
+    out[0] = 0;
+    if (g_loaded_dir.empty()) {
+        return 0;
+    }
+    std::snprintf(out, (size_t)cap, "%s", g_loaded_dir.c_str());
+    return (int)g_loaded_dir.size();
+}
 
 int at_model_load(const char* dir_utf8)
 {
@@ -323,7 +426,16 @@ int at_model_load_async(const char* dir_utf8)
 
     {
         std::lock_guard<std::mutex> lock(g_load_lock);
-        if (g_ready || g_loading) {
+        if (g_ready) {
+            // Already loaded: the same directory is a no-op, a different one cannot be
+            // honoured at all (one model per process) - see load_model_locked().
+            if (g_loaded_dir == dir_utf8) {
+                return 0;
+            }
+            set_error("another model is already loaded and cannot be released - restart the game to switch models");
+            return -3;
+        }
+        if (g_loading) {
             return 0;
         }
         g_loading = true;
