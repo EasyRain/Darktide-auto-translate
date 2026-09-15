@@ -12,8 +12,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <windows.h>
+#include <shellapi.h>          // CommandLineToArgvW, for the UTF-8 argv below
 
 #include "at_core.h"
+#include "at_model.h"
 #include "at_online.h"
 
 #define BODY_CAP (4 * 1024 * 1024)
@@ -21,6 +23,45 @@
 // argv with "--proxy <addr>" removed (it is handled once, before dispatch).
 static char* g_argv[64];
 static int g_argc = 0;
+
+// Windows hands `main` its arguments in the ANSI code page, so any non-ASCII text
+// on the command line arrives as mojibake: "狂信徒" reached the model as "����ͽ",
+// tokenised to a single invalid piece, and the answer was unk tokens. The wide
+// command line is the only lossless source, so it is converted to UTF-8 up front
+// and the rest of the program keeps using plain char*.
+//
+// The mod itself is unaffected - Lua hands the core UTF-8 strings directly - but
+// nobody can test a non-English string without this.
+static void use_utf8_argv(void)
+{
+    LPWSTR* wide;
+    int count = 0;
+    int i;
+
+    wide = CommandLineToArgvW(GetCommandLineW(), &count);
+    if (!wide || count <= 0) {
+        return;
+    }
+
+    g_argc = 0;
+    if (count > 63) {
+        count = 63;
+    }
+    for (i = 0; i < count; ++i) {
+        const int bytes = WideCharToMultiByte(CP_UTF8, 0, wide[i], -1, NULL, 0, NULL, NULL);
+        if (bytes <= 0) {
+            continue;
+        }
+        g_argv[g_argc] = (char*)malloc((size_t)bytes);
+        if (!g_argv[g_argc]) {
+            continue;
+        }
+        WideCharToMultiByte(CP_UTF8, 0, wide[i], -1, g_argv[g_argc], bytes, NULL, NULL);
+        ++g_argc;
+    }
+
+    LocalFree(wide);
+}
 
 static void strip_proxy_args(int argc, char** argv)
 {
@@ -684,47 +725,6 @@ static int cmd_provider(int argc, char** argv)
 }
 
 // ---------------------------------------------------------------------------
-// translate — local model entry point (stub for now)
-// ---------------------------------------------------------------------------
-static int cmd_translate(int argc, char** argv)
-{
-    char out[8192];
-    char text[4096];
-    int i;
-    int rc;
-
-    if (argc < 4) {
-        fprintf(stderr, "usage: at_cli.exe translate <target-lang> <text...>\n");
-        return 1;
-    }
-
-    text[0] = 0;
-    for (i = 3; i < argc; i++) {
-        size_t used = strlen(text);
-        size_t need = strlen(argv[i]);
-        if (used + need + 2 >= sizeof(text)) {
-            break;
-        }
-        if (used) {
-            text[used++] = ' ';
-            text[used] = 0;
-        }
-        strcat(text, argv[i]);
-    }
-
-    printf("target : %s\nsource : %s\n", argv[2], text);
-
-    rc = at_translate(text, argv[2], out, (int)sizeof(out));
-    if (rc > 0) {
-        printf("result : %s\n", out);
-        return 0;
-    }
-
-    fprintf(stderr, "translate failed: rc=%d (%s)\n", rc, at_error() ? at_error() : "?");
-    return 3;
-}
-
-// ---------------------------------------------------------------------------
 // probe — is each provider actually reachable from this machine?
 //
 // This is the check that answers "why is nothing translating": the difference
@@ -877,6 +877,108 @@ static int cmd_parse(int argc, char** argv)
 }
 
 // ---------------------------------------------------------------------------
+// model — the offline engine, end to end and without the game
+//   at_cli.exe model <model-dir> <target-lang> <text...>
+// ---------------------------------------------------------------------------
+static int cmd_model(int argc, char** argv)
+{
+    char out[8192];
+    char text[4096];
+    int i;
+    int n;
+
+    if (argc < 5) {
+        fprintf(stderr, "usage: at_cli.exe model <model-dir> <target-lang> <text...> "
+                        "[--compute int8|int8_float32|float32|auto|default]\n");
+        return 1;
+    }
+
+    text[0] = 0;
+    for (i = 4; i < argc; i++) {
+        // --compute <type> steers how the weights are loaded; it is not part of the text.
+        if (_stricmp(argv[i], "--compute") == 0 && i + 1 < argc) {
+            if (!at_set_compute_type(argv[i + 1])) {
+                fprintf(stderr, "compute type: %s\n", at_model_error());
+                return 1;
+            }
+            ++i;
+            continue;
+        }
+        // --src <lang> says what the text is written in; it defaults to English.
+        if (_stricmp(argv[i], "--src") == 0 && i + 1 < argc) {
+            if (!at_set_source_lang(argv[i + 1])) {
+                fprintf(stderr, "source language: %s\n", at_model_error());
+                return 1;
+            }
+            ++i;
+            continue;
+        }
+        {
+            size_t used = strlen(text);
+            size_t need = strlen(argv[i]);
+            if (used + need + 2 >= sizeof(text)) {
+                break;
+            }
+            if (used) {
+                text[used++] = ' ';
+                text[used] = 0;
+            }
+            strcat(text, argv[i]);
+        }
+    }
+
+    {
+        char missing[256] = { 0 };
+        int files = at_model_check_dir(argv[2], missing, (int)sizeof(missing));
+        long long bytes = at_model_dir_size(argv[2]);
+        printf("model dir  : %s\n", argv[2]);
+        printf("files      : %d/4 present%s%s\n", files,
+               files < 4 ? ", missing: " : "", missing);
+        printf("size       : %.1f MB\n", (double)bytes / (1024.0 * 1024.0));
+
+        char flores[32] = { 0 };
+        if (at_model_lang_code(argv[3], flores, (int)sizeof(flores))) {
+            printf("lang code  : %s -> %s\n", argv[3], flores);
+        } else {
+            printf("lang code  : %s -> (not supported)\n", argv[3]);
+        }
+
+        printf("target     : %s\nsource     : %s\n", argv[3], text);
+        printf("compute    : %s\n", at_model_compute_type());
+        printf("loading...\n");
+        if (!at_model_load(argv[2])) {
+            fprintf(stderr, "load failed: %s\n", at_model_error());
+            return 3;
+        }
+        printf("loaded     : ok\n");
+
+        // Show exactly what the model is fed: the source language token has to be
+        // there as a token of its own (SentencePiece would shred "eng_Latn" into
+        // "▁eng|_|Lat|n"), and the source EOS is what keeps NLLB from degenerating.
+        {
+            char pieces[2048] = { 0 };
+            char fed[4096] = { 0 };
+            printf("src lang   : %s\n", at_model_source_lang());
+            if (at_model_tokenize(text, pieces, (int)sizeof(pieces)) >= 0) {
+                printf("text pieces: %s\n", pieces);
+            }
+            if (at_model_pieces(text, fed, (int)sizeof(fed)) >= 0) {
+                printf("fed tokens : %s\n", fed);
+            }
+        }
+    }
+
+    n = at_model_translate(text, argv[3], out, (int)sizeof(out));
+    if (n < 0) {
+        fprintf(stderr, "translate failed: rc=%d (%s)\n", n, at_model_error());
+        return 3;
+    }
+    printf("result     : %s\n", out);
+    printf("bytes      : %d\n", n);
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
 // proxy — what would be used, and why
 // ---------------------------------------------------------------------------
 static int cmd_proxy(int argc, char** argv)
@@ -942,7 +1044,8 @@ static void usage(void)
     printf("  at_cli.exe http <url>\n");
     printf("  at_cli.exe http <host> <path>\n");
     printf("  at_cli.exe provider <name> <target-lang> <text...> [--key <api-key>]\n");
-    printf("  at_cli.exe translate <target-lang> <text...>\n\n");
+    printf("  at_cli.exe model <model-dir> <target-lang> <text...>  (offline NLLB, no network)\n");
+    printf("             [--src en|zh-cn|ja|...] [--compute int8|int8_float32|float32|auto|default]\n\n");
     printf("providers: google_clients5, google_gtx, mymemory, google_api\n");
     printf("any command accepts --proxy <host:port> (e.g. --proxy 127.0.0.1:7890)\n");
 }
@@ -954,7 +1057,10 @@ int main(int argc, char** argv)
     // Make UTF-8 output readable instead of mojibake on a non-UTF-8 console.
     SetConsoleOutputCP(CP_UTF8);
 
-    strip_proxy_args(argc, argv);
+    // ...and make UTF-8 *input* arrive intact (see use_utf8_argv).
+    use_utf8_argv();
+
+    strip_proxy_args(g_argc, g_argv);
     argc = g_argc;
     argv = g_argv;
 
@@ -977,8 +1083,8 @@ int main(int argc, char** argv)
         rc = cmd_http(argc, argv);
     } else if (_stricmp(argv[1], "provider") == 0) {
         rc = cmd_provider(argc, argv);
-    } else if (_stricmp(argv[1], "translate") == 0) {
-        rc = cmd_translate(argc, argv);
+    } else if (_stricmp(argv[1], "model") == 0) {
+        rc = cmd_model(argc, argv);
     } else {
         fprintf(stderr, "unknown command: %s\n", argv[1]);
         usage();

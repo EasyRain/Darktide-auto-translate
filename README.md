@@ -7,7 +7,9 @@ mod files are never modified. Translations are cached locally in editable text f
 > Working today: scanning every loaded mod, applying translations from the local
 > library, hot-injecting the merged table back into DMF, and translating missing
 > keys through the online providers (one request at a time, resumable, saved as it
-> goes). The offline NLLB-200 model and the model downloader are the next step.
+> goes). The offline NLLB-200 engine is implemented — see
+> [The offline engine](#the-offline-engine-local-nllb-200), including the
+> `add_source_eos` trap that makes this particular model look broken.
 
 ## How it works
 
@@ -122,7 +124,63 @@ Two engines, chosen with the **Translation engine** option:
 | --- | --- |
 | **Automatic** | The largest downloaded offline model; if none is downloaded, the API when a key is set. If neither exists, translation stays paused and the mod tells you which two things would fix it. |
 | **Online (official API)** | Needs a key. Pick the service with **API service**: **DeepL** (default) or Google Cloud Translation. |
-| **Local model (small / large)** | Offline NLLB-200. *(not implemented yet — the next step)* |
+| **Local model (small / large)** | Offline NLLB-200 through CTranslate2 + SentencePiece, no network at all. Implemented; see [The offline engine](#the-offline-engine-local-nllb-200). |
+
+## The offline engine (local NLLB-200)
+
+`at_core.dll` links CTranslate2 and SentencePiece **statically** (both `/MT`), so the
+engine is a single 1.9 MB DLL with no extra runtime files — a DLL's own directory is
+not searched for its dependencies, so a separate `ctranslate2.dll` beside it would
+not reliably load inside the game anyway.
+
+The model is the CTranslate2 int8 conversion of `facebook/nllb-200-distilled-600M`
+used by Lingua Imperialis (`model.bin`, `config.json`, `shared_vocabulary.json`,
+`sentencepiece.bpe.model`; ~604 MB on disk, ~8 s to load, ~0.8 s per short string).
+
+### The trap: this conversion needs a source EOS its own config.json denies
+
+Its `config.json` says `"add_source_eos": false`, and that is **wrong for the weights
+beside it**. Without a trailing `</s>` on the source, the encoder state is worthless
+and *every* request comes back as a repetition of the first source token:
+
+```
+"Keystone unlocked"  ->  Ke Ke Ke Ke ... (200 tokens, to max_decoding_length)
+```
+
+With the token appended, the same request returns `关键石解锁`. This is not a
+misreading on our side: the official `ctranslate2` 4.8.2 wheel (the same version this
+repo builds from) behaves identically, and Lingua Imperialis' own `dtranslate.dll`
+translates correctly with the very same model directory because it appends the source
+EOS itself. `at_model.c: at_model_source_eos_needed()` reads the flag and
+`at_model.cpp` appends `</s>` when the model does not, so nothing on disk is edited
+(the model directory is user data, and `model.bin` is pinned by SHA-256 upstream).
+
+Symptoms worth remembering if it ever regresses to "the model loads but answers with
+noise": the target-language prefix is still honoured (it is inserted as a forced
+prefix, so it shows up in the output even when nothing else works), which makes it
+look like a vocabulary or precision problem when it is neither. Compute type
+(`int8`/`int8_float32`/`float32`), CPU dispatch, the vocabulary-order off-by-one in
+`shared_vocabulary.json` (an extra `<pad>` at index 1) and the language-token ids were
+all checked and are **not** the cause.
+
+Check the engine without launching the game:
+
+```
+bin\at_cli.exe model <model-dir> zh-cn "Keystone unlocked"
+bin\at_cli.exe model <model-dir> ja "Hello" --compute int8
+bin\at_cli.exe model <model-dir> ja "狂信徒" --src zh-cn        # non-English source
+```
+
+It prints the model files found, the FLORES-200 code, the SentencePiece pieces and
+the exact token list fed to the model (source language token, pieces, `</s>`), then
+the translation. `--src` defaults to English; the mod gets its source language from
+its own setting, the CLI needs it spelled out.
+
+Note for anyone testing by hand: Windows hands a C program its arguments in the ANSI
+code page, so `"狂信徒"` used to reach the model as `"?????"` and come back as unk
+tokens. The CLI now reads the wide command line and converts it to UTF-8 itself
+(`use_utf8_argv` in `at_cli.c`). The mod was never affected — Lua passes UTF-8
+strings to the core directly.
 
 **API service** — why DeepL is the default:
 

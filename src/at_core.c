@@ -14,6 +14,7 @@
 #include <stdio.h>
 
 #include "at_core.h"
+#include "at_model.h"
 
 #define AT_MAX_BODY (256 * 1024)
 #define AT_TIMEOUT_MS 20000
@@ -866,19 +867,68 @@ const char* at_win_error_text(unsigned long code)
     return buffer;
 }
 
-// Local model inference — placeholder until the CTranslate2 core is built in.
-// Kept in the same DLL/CLI so callers and tests can be written before it exists.
+// Local model inference. The CTranslate2/SentencePiece half is C++ (at_model.cpp),
+// so this is a thin forwarder: the Lua side only ever talks to the core.
+// The directory is remembered rather than passed on every call, because loading
+// is a one-off: it reads ~600 MB from disk.
+
+static char g_model_dir[512] = { 0 };
+
+static const char* at_model_dir(void)
+{
+    return g_model_dir;
+}
+
+int at_set_model_dir(const char* dir_utf8)
+{
+    if (!dir_utf8) {
+        g_model_dir[0] = 0;
+        set_error("no model directory given");
+        return 0;
+    }
+    _snprintf_s(g_model_dir, sizeof(g_model_dir), _TRUNCATE, "%s", dir_utf8);
+
+    char missing[256];
+    return at_model_check_dir(g_model_dir, missing, (int)sizeof(missing));
+}
+
+int at_load_model(void)
+{
+    if (g_model_dir[0] == 0) {
+        set_error("no model directory has been set");
+        return 0;
+    }
+    return at_model_load(g_model_dir);
+}
+
 int at_translate(const char* text_utf8, const char* target_lang_utf8, char* out_text, int out_cap)
 {
     if (!text_utf8 || !target_lang_utf8 || !out_text || out_cap <= 0) {
         return -2;
     }
     out_text[0] = 0;
-    set_error("local model inference is not implemented in this build");
-    return -1;
+
+    if (!at_model_ready()) {
+        set_error("the offline model is not loaded");
+        return -1;
+    }
+
+    return at_model_translate(text_utf8, target_lang_utf8, out_text, out_cap);
 }
 
+// 0 = no model on disk, 1 = model files present, 2 = loaded and ready.
 int at_model_status(void)
 {
-    return 0;
+    if (at_model_ready()) {
+        return 2;
+    }
+
+    char missing[256];
+    const int present = at_model_check_dir(at_model_dir(), missing, (int)sizeof(missing));
+    return present > 0 ? 1 : 0;
+}
+
+long long at_model_disk_size(void)
+{
+    return at_model_dir_size(at_model_dir());
 }

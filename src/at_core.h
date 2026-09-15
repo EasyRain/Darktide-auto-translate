@@ -66,17 +66,32 @@ AT_API const char* at_proxy_in_use(void);
 // showing, because that is exactly the "my VPN is on but nothing works" case.
 AT_API const char* at_proxy_hint(void);
 
-// Local model inference (same entry point the CLI uses). Not implemented yet:
-// returns -1 and fills the error string, so callers/tests can be written now.
+// Local model inference (the same entry point the CLI uses). The heavy lifting is
+// in at_model.cpp; this is the C surface the Lua side talks to.
 //   > 0 = number of bytes written to out_text
-//   -1  = not implemented in this build
-//   -2  = invalid arguments
-//   -3  = model not loaded / not available
+//   -1  = no model loaded
+//   -2  = invalid arguments (or a language with no FLORES-200 code)
+//   -3  = tokenisation failed
+//   -4  = inference failed / the result does not fit
 AT_API int  at_translate(const char* text_utf8, const char* target_lang_utf8,
                          char* out_text, int out_cap);
 
-// 0 = no model, 1 = model files present, 2 = model loaded and ready.
+// Remembers where the model lives so at_load_model()/at_model_status() can find it.
+// Returns how many of the 4 model files are present (4 = complete, 0 = unusable).
+AT_API int  at_set_model_dir(const char* dir_utf8);
+
+// Loads the model from the directory set above. 1 = ready, 0 = failed; the reason
+// is in at_model_error().
+AT_API int  at_load_model(void);
+
+// 0 = no model files found, 1 = files present but not loaded, 2 = loaded and ready.
 AT_API int  at_model_status(void);
+
+// Size in bytes of the model files on disk, 0 when there is nothing to load.
+AT_API long long at_model_disk_size(void);
+
+// Last model failure, human readable. Never NULL.
+AT_API const char* at_model_error(void);
 
 #ifdef __cplusplus
 }
