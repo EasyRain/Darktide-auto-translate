@@ -54,6 +54,10 @@ return {
 ```
 
 * The target language follows the game by default; override it with the **Target language** option.
+* **A mod that ships the target language itself always wins**: those keys are left completely
+  untouched, so a mod update that adds its own translation is never fought over. Keys it does *not*
+  translate are still filled in by this mod — mixing author translations with ours is normal and
+  intended. (There is deliberately no option to override this.)
 * Mark `manual = true` **once per file** — there is no need to tag every entry. (A single entry can
   still be protected on its own with `src = "manual"`.)
 * `manual` does **not** skip the mod: its file is still read and validated on every launch.
