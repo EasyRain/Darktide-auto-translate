@@ -130,9 +130,11 @@ end
 -- ---------------------------------------------------------------------------
 -- Tuning
 -- ---------------------------------------------------------------------------
--- Free public endpoints dislike bursts; the official API does not care.
+-- The API is paid/quota'd rather than hostile, but a burst is still a bad idea:
+-- being rate limited costs a 300 s cooldown, so four requests a second is the
+-- sensible ceiling. ~1800 keys take about 8 minutes.
 local MIN_INTERVAL_FREE = 0.6
-local MIN_INTERVAL_API = 0.1
+local MIN_INTERVAL_API = 0.25
 
 -- HTTP 429/403 means "you are over the quota" — back off instead of burning
 -- through the rest of the queue (the same idea as Lingua's 300 s cooldown).
@@ -592,9 +594,12 @@ local function finish(mod, reason)
         "online translation %s: %d translated, %d failed, %d refused, %d skipped, %d file(s) written",
         reason, M.state.done, M.state.failed, M.state.refused, M.state.skipped, written)
 
+    -- One message per run, and it says what the player has to do: mod option texts
+    -- are localised (and cached as plain strings) while DMF initialises `data`, so
+    -- a translation produced afterwards is only picked up on the next launch.
     if type(mod.notify) == "function" and M.state.done > 0 then
-        pcall(mod.notify, mod,
-            string.format("Auto Translate: %d text(s) translated into %s.", M.state.done, tostring(M.state.lang)))
+        local message = mod:localize("translation_done", M.state.done, tostring(M.state.lang))
+        pcall(mod.notify, mod, message)
     end
 end
 

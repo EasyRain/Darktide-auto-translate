@@ -120,6 +120,11 @@ return {
         en = "all languages",
         ["zh-cn"] = "全部完成",
     },
+    -- Placeholder order is always %d first, then %s.
+    translation_done = {
+        en = "Auto Translate: translated %d text(s) into '%s'. Mod names and settings text only appear after restarting the game.",
+        ["zh-cn"] = "Auto Translate：已翻译 %d 条文本（%s）。模组名称与设置项文字需要重启游戏后才会显示。",
+    },
     test_glossary_description = {
         en = "Shows in the log how known terms are masked before translation and restored afterwards.",
         ["zh-cn"] = "在日志中演示已知术语在翻译前如何被占位、翻译后如何还原。",
@@ -232,6 +237,14 @@ return {
     reload_translations = {
         en = "Reload translation files",
         ["zh-cn"] = "重新加载译文",
+    },
+    reload_translations_description = {
+        en = "Re-scans the installed mods, applies the translation files again and restarts the translation queue. Mod names and settings text are rebuilt when you close and reopen this screen (DMF caches them while the game starts); text a mod looks up while playing applies immediately.",
+        ["zh-cn"] = "重新扫描已装模组、再次应用译文并重启翻译队列。模组名称与设置项文字需要关闭再打开本界面才会重建（DMF 在启动时就把它们固化成字符串了）；模组在游玩过程中查询的文本则会立即生效。",
+    },
+    reload_done = {
+        en = "Auto Translate: re-applied %d option string(s). Close and reopen this screen to see them.",
+        ["zh-cn"] = "Auto Translate：已重新应用 %d 条界面文字。关闭再打开本界面即可看到。",
     },
     clear_cache = {
         en = "Clear local translations",

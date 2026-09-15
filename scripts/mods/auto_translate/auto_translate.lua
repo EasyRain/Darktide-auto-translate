@@ -31,6 +31,10 @@ online.init(util, store, glossary, engines, injector)
 local exporter = mod:io_dofile(BASE .. "exporter")
 exporter.init(util)
 
+local options_refresh = mod:io_dofile(BASE .. "options_refresh")
+options_refresh.init(util)
+options_refresh.install_hook(mod)
+
 -- Language we translate INTO (configured, or the game's current language).
 local function current_lang()
     return util.target_language(mod)
@@ -280,6 +284,9 @@ function mod.update(dt)
         if not iok then
             util.warn(mod, "could not re-inject finished translations: %s", tostring(ierr))
         end
+        -- and make the mod names / settings texts pickable up by the options screen
+        pcall(options_refresh.reapply, mod)
+        options_refresh.mark_stale(mod)
     end
 end
 
@@ -290,12 +297,12 @@ function mod.on_all_mods_loaded()
         util.warn(mod, "startup pipeline error: %s", tostring(err))
     end
 
-    -- Collect the current language's official terminology (independent of the
-    -- translation switches: it only writes a file, so it is always safe).
-    local eok, eerr = pcall(exporter.run, mod, current_lang())
-    if not eok then
-        util.warn(mod, "term export failed: %s", tostring(eerr))
-    end
+    -- The whole-language terminology collection is done: translations/export/
+    -- holds all 12 languages. It used to run here and announce itself on every
+    -- launch ("already collected", "progress 12/12"), which was pure noise. The
+    -- module is kept in case the game adds terms or a language: call
+    --   exporter.run(mod, current_lang())
+    -- from here (or from a button) to collect again.
 end
 
 -- Mod options: "Reload translation files"
@@ -311,6 +318,18 @@ function mod.reload_translations()
     local ok, err = pcall(run_pipeline, "manual reload")
     if not ok then
         util.warn(mod, "reload error: %s", tostring(err))
+        return
+    end
+
+    -- DMF turned the option titles into plain strings while the game was starting,
+    -- so re-localise them from the keys recorded at that moment and arrange for the
+    -- options screen to rebuild the next time it is opened.
+    local refreshed = options_refresh.reapply(mod)
+    options_refresh.mark_stale(mod)
+    util.info(mod, "re-applied %d option string(s); close and reopen the options screen to see them", refreshed)
+
+    if type(mod.notify) == "function" then
+        pcall(mod.notify, mod, mod:localize("reload_done", refreshed))
     end
 end
 
