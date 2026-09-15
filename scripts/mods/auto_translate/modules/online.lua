@@ -1491,9 +1491,13 @@ function M.update(mod, dt)
             local why = cstr(core.at_model_error()) or "the offline model failed"
             local reason = "offline model: " .. tostring(why)
             if req.kind == "local_batch" then
-                for i = #req.items, 1, -1 do
-                    fail_item(mod, { kind = "local", item = req.items[i] }, reason, 0, false)
-                end
+                -- The failure belongs to the combined request (a result that does not
+                -- fit the buffer, say), not to the individual strings, so they are asked
+                -- again one at a time instead of being written off as refused.
+                M.state.last_error = reason
+                util.warn(mod, "the offline model failed on a batch of %d (%s); retrying them one at a time",
+                    #req.items, tostring(why))
+                requeue_no_batch(req.items)
             else
                 fail_item(mod, req, reason, 0, false)
             end
