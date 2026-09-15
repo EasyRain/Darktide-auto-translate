@@ -1,10 +1,11 @@
 -- Auto Translate seed translations for mod: AutoMark
--- Entries with src = "manual" are never overwritten by machine translation.
+-- manual = true: hand written translations; machine translation never overwrites them.
 -- Set enabled = false to skip this mod entirely.
 return {
     enabled = true,
+    manual = true,
     entries = {
-        ["degree"] = { zh = "°", src = "manual" },
-        ["percent"] = { zh = "%%", src = "manual" },
+        ["degree"] = { zh = "°" },
+        ["percent"] = { zh = "%%" },
     },
 }

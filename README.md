@@ -45,13 +45,15 @@ One file per mod at `mods/auto_translate/translations/<modid>.lua`:
 ```lua
 return {
     enabled = true,                      -- set false to skip this mod entirely
+    manual  = true,                      -- hand written file: machine translation never overwrites it
     entries = {
-        ["some_key"] = { zh = "译文", src = "manual" },
+        ["some_key"] = { zh = "译文" },
     },
 }
 ```
 
-* `src = "manual"` entries are **never** overwritten by machine translation.
+* Mark `manual = true` **once per file** — there is no need to tag every entry. (A single entry can
+  still be protected on its own with `src = "manual"`.)
 * `en` / `hash` are filled in automatically on the next run (they detect source changes).
 * Delete an entry (or the whole file) to have it translated again.
 

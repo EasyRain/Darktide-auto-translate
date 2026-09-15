@@ -22,6 +22,59 @@ injector.init(util, store)
 local engines = mod:io_dofile(BASE .. "engines")
 engines.init(util, store)
 
+-- ---------------------------------------------------------------------------
+-- Early hook: every mod loaded AFTER us passes through here.
+--
+-- DMF loads a mod's resources as localization -> data -> script, and localizes
+-- the option titles/tooltips while initializing `data` (caching them as plain
+-- strings). So we merge our translations into the table right before DMF stores
+-- it — otherwise option texts would stay English forever.
+-- This is why auto_translate must be the FIRST entry in mod_load_order.txt.
+-- ---------------------------------------------------------------------------
+local hooked = false
+
+local function install_hook()
+    if hooked then
+        return true
+    end
+
+    local dmf = get_mod("DMF")
+    if not (dmf and type(dmf.hook) == "function") then
+        util.warn(mod, "DMF hook API unavailable; early merge disabled")
+        return false
+    end
+
+    local handler = function(next_func, target_mod, loc_table)
+        local name
+        if target_mod and target_mod.get_name then
+            name = target_mod:get_name()
+        end
+
+        local ok, err = pcall(injector.merge, mod, name, loc_table)
+        if not ok then
+            util.warn(mod, "merge error (%s): %s", tostring(name), tostring(err))
+        end
+
+        return next_func(target_mod, loc_table)
+    end
+
+    -- dmf:hook(obj, method, handler) is a colon method: use colon syntax so the
+    -- implicit self (dmf) and obj (also dmf) are both passed correctly.
+    local ok, err = pcall(function()
+        dmf:hook(dmf, "initialize_mod_localization", handler)
+    end)
+    if not ok then
+        util.warn(mod, "could not hook initialize_mod_localization: %s", tostring(err))
+        return false
+    end
+
+    hooked = true
+    util.info(mod, "early merge hook installed")
+    return true
+end
+
+install_hook()
+
 local function run_pipeline(reason)
     if not mod:get("apply_translation") then
         util.info(mod, "translations disabled by master switch (%s)", reason)
@@ -43,6 +96,11 @@ local function run_pipeline(reason)
     )
 
     injector.apply(mod, report)
+
+    local saved = injector.flush(mod)
+    if saved > 0 then
+        util.info(mod, "saved %d translation file(s) with backfilled source hashes", saved)
+    end
 
     if mod:get("auto_translate_enabled") then
         engines.run(mod, report)

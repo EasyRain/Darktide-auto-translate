@@ -2,19 +2,20 @@
 --
 -- One Lua file per translated mod, at:
 --     ../mods/auto_translate/translations/<modid>.lua
+--
 -- Format (hand editable on purpose):
 --     return {
---         enabled = true,
+--         enabled = true,          -- false = skip this mod completely
+--         manual  = true,          -- hand written translations: machine translation
+--                                  -- must never overwrite this mod (mark once, not per entry)
 --         entries = {
---             ["some_key"] = {
---                 en   = "source text",      -- snapshot of the source text
---                 hash = "1a2b3c4d",         -- hash(en), used to detect source changes
---                 zh   = "译文",
---                 src  = "manual",           -- manual | local | online_free | online_api
---                 ts   = 0,
---             },
+--             ["some_key"] = { zh = "译文" },
 --         },
 --     }
+--
+-- Per-entry machine results also store their provenance and a source hash:
+--     ["key"] = { en = "...", hash = "1a2b3c4d", zh = "...", src = "local", ts = 0 }
+-- `src` may still be set to "manual" on a single entry to protect just that one.
 local M = {}
 
 local util
@@ -36,7 +37,19 @@ local function normalize(data)
     if data.enabled == nil then
         data.enabled = true
     end
+    if data.manual == nil then
+        data.manual = false
+    end
     return data
+end
+
+-- Is this entry protected from machine translation?
+-- Either the whole file is marked manual, or this single entry is.
+local function is_manual(data, entry)
+    if data and data.manual == true then
+        return true
+    end
+    return type(entry) == "table" and entry.src == "manual"
 end
 
 function M.load(mod_id)
@@ -51,15 +64,26 @@ function M.load(mod_id)
     return normalize(data)
 end
 
+local function lua_quote(s)
+    s = tostring(s or "")
+    s = s:gsub("\\", "\\\\"):gsub("\"", "\\\""):gsub("\n", "\\n"):gsub("\r", "")
+    return "\"" .. s .. "\""
+end
+
 -- Serializes a store table back to Lua source (stable ordering, human editable).
 function M.serialize(mod_id, data)
     data = normalize(data)
+    local manual_all = data.manual == true
+
     local out = {}
     out[#out + 1] = "-- Auto Translate translation file for mod: " .. tostring(mod_id)
-    out[#out + 1] = "-- Edit freely: entries with src = \"manual\" are never overwritten automatically."
-    out[#out + 1] = "-- Set enabled = false to skip this mod entirely."
+    out[#out + 1] = "-- enabled = false : skip this mod completely"
+    out[#out + 1] = "-- manual  = true  : hand written translations, machine translation never overwrites them"
     out[#out + 1] = "return {"
     out[#out + 1] = string.format("    enabled = %s,", tostring(data.enabled == true))
+    if manual_all then
+        out[#out + 1] = "    manual = true,"
+    end
     out[#out + 1] = "    entries = {"
 
     local keys = {}
@@ -68,23 +92,24 @@ function M.serialize(mod_id, data)
     end
     table.sort(keys)
 
-    local function lua_quote(s)
-        s = tostring(s or "")
-        s = s:gsub("\\", "\\\\"):gsub("\"", "\\\""):gsub("\n", "\\n"):gsub("\r", "")
-        return "\"" .. s .. "\""
-    end
-
     for _, k in ipairs(keys) do
         local e = data.entries[k]
         if type(e) == "table" and type(e.zh) == "string" and e.zh ~= "" then
-            out[#out + 1] = string.format("        [%s] = {", lua_quote(k))
-            if type(e.en) == "string" then
+            out[#out + 1] = "        [" .. lua_quote(k) .. "] = {"
+            if type(e.en) == "string" and e.en ~= "" then
                 out[#out + 1] = "            en = " .. lua_quote(e.en) .. ","
             end
-            out[#out + 1] = "            hash = " .. lua_quote(e.hash) .. ","
+            if type(e.hash) == "string" and e.hash ~= "" then
+                out[#out + 1] = "            hash = " .. lua_quote(e.hash) .. ","
+            end
             out[#out + 1] = "            zh = " .. lua_quote(e.zh) .. ","
-            out[#out + 1] = "            src = " .. lua_quote(e.src or "local") .. ","
-            out[#out + 1] = "            ts = " .. tostring(math.floor(tonumber(e.ts) or 0)) .. ","
+            -- src is redundant once the whole file is marked manual
+            if not manual_all then
+                out[#out + 1] = "            src = " .. lua_quote(e.src or "local") .. ","
+            end
+            if tonumber(e.ts) and tonumber(e.ts) > 0 then
+                out[#out + 1] = "            ts = " .. tostring(math.floor(e.ts)) .. ","
+            end
             out[#out + 1] = "        },"
         end
     end
@@ -104,7 +129,7 @@ end
 -- Returns the usable translation for a source text, or nil.
 -- A manual entry always wins; a machine entry is dropped when the source changed.
 -- Third return value is true when the entry lacks bookkeeping (en/hash) and the
--- caller should backfill it on the next save (used by hand written seed files).
+-- caller should backfill it on the next save (used by hand written files).
 function M.lookup(data, key, en, hash)
     if type(data) ~= "table" or type(data.entries) ~= "table" then
         return nil
@@ -113,13 +138,19 @@ function M.lookup(data, key, en, hash)
     if type(e) ~= "table" or type(e.zh) ~= "string" or e.zh == "" then
         return nil
     end
+
+    local src = e.src
+    if (src == nil or src == "") and data.manual == true then
+        src = "manual"
+    end
+
     if e.hash == nil or e.hash == "" then
-        return e.zh, e.src, true
+        return e.zh, src, true
     end
     if e.hash ~= hash then
         return nil, "source changed"
     end
-    return e.zh, e.src
+    return e.zh, src
 end
 
 local function now()
@@ -127,14 +158,15 @@ local function now()
     return (oslib and oslib.time and oslib.time()) or 0
 end
 
--- Adds or updates an entry. Never changes the text of a manual entry; it only
--- fills in missing bookkeeping (en/hash) so seed files stay minimal.
+-- Adds or updates an entry. Never changes the text of a manual entry (whole file
+-- marked manual, or the single entry marked manual); it only fills in missing
+-- bookkeeping (en/hash) so hand written files stay minimal.
 function M.set_entry(data, key, en, hash, zh, src, ts)
     data = normalize(data)
     local prev = data.entries[key]
 
     if type(prev) == "table" then
-        if prev.src == "manual" then
+        if is_manual(data, prev) then
             if (prev.en == nil or prev.en == "") and en then
                 prev.en = en
             end
