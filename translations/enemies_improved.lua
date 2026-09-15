@@ -1,0 +1,14 @@
+-- Auto Translate seed translations for mod: enemies_improved
+-- Entries with src = "manual" are never overwritten by machine translation.
+-- Set enabled = false to skip this mod entirely.
+return {
+    enabled = true,
+    entries = {
+        ["adjust_ads_opacity"] = { zh = "瞄准时调整不透明度", src = "manual" },
+        ["adjust_ads_opacity_tooltip"] = { zh = "允许在瞄准时应用不透明度倍率。适合希望瞄准与不瞄准时使用不同组件不透明度的情况。", src = "manual" },
+        ["ads_opacity_mult"] = { zh = "瞄准不透明度倍率", src = "manual" },
+        ["ads_opacity_mult_tooltip"] = { zh = "设置瞄准时的不透明度倍率。按此倍率降低或提高你设定的不透明度。", src = "manual" },
+        ["remove_tag_skull"] = { zh = "移除标记骷髅", src = "manual" },
+        ["remove_tag_skull_tooltip"] = { zh = "切换敌人被标记时头顶显示的“骷髅”图标。", src = "manual" },
+    },
+}
