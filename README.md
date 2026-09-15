@@ -54,6 +54,11 @@ return {
 
 * Mark `manual = true` **once per file** — there is no need to tag every entry. (A single entry can
   still be protected on its own with `src = "manual"`.)
+* `manual` does **not** skip the mod: its file is still read and validated on every launch.
+  Hand written text wins as long as it still matches the source; keys added by a mod update, and
+  entries whose source text changed, are queued for machine translation.
+* When a hand written entry goes out of date, the fresh translation is stored and the old text is
+  kept next to it as `zh_prev`, so nothing is lost.
 * `en` / `hash` are filled in automatically on the next run (they detect source changes).
 * Delete an entry (or the whole file) to have it translated again.
 
