@@ -41,6 +41,34 @@ function M.defaults()
     }
 end
 
+-- "zh-tw=ZH-HANT;; pt-br=PT-BR" -> { ["zh-tw"] = "ZH-HANT", ["pt-br"] = "PT-BR" }.
+--
+-- Every service spells languages its own way, and the mod's internal codes are the game's
+-- (zh-cn, zh-tw, pt-br). DeepL wants ZH-HANS/ZH-HANT, Google wants zh-TW/pt-BR, Baidu
+-- wants cht/pt. Asking the player to translate the codes is the honest option: guessing a
+-- mapping from the URL would work for exactly the service it was written for and silently
+-- send the wrong language everywhere else.
+local function parse_lang_map(text)
+    local map = {}
+    if type(text) ~= "string" or text == "" then
+        return map
+    end
+    local expanded = text:gsub("\\n", "\n"):gsub(";;", "\n")
+    for line in expanded:gmatch("[^\r\n]+") do
+        local from, to = line:match("^%s*([^=%s]+)%s*=%s*([^%s]+)%s*$")
+        if from and to then
+            map[from:lower()] = to
+        end
+    end
+    return map
+end
+
+-- The code the service is told, for one of our internal codes.
+function M.service_lang(spec, code)
+    local mapped = spec.map and spec.map[tostring(code):lower()]
+    return mapped or code
+end
+
 -- The current configuration, with the defaults filled in.
 function M.spec(mod)
     local function text(id)
@@ -60,6 +88,8 @@ function M.spec(mod)
         body = text("custom_body"),
         headers = text("custom_headers"),
         path = text("custom_path"),
+        langs = text("custom_langs"),
+        map = parse_lang_map(text("custom_langs")),
     }
 
     if spec.method ~= "get" then
@@ -145,8 +175,8 @@ end
 function M.values(spec, text, source, target)
     return {
         text = text,
-        source = source or "en",
-        target = target or "en",
+        source = M.service_lang(spec, source or "en"),
+        target = M.service_lang(spec, target or "en"),
         key = spec.key,
     }
 end

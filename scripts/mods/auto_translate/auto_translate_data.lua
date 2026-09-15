@@ -120,6 +120,14 @@ return {
             },
 
             {
+                -- Every service spells languages its own way; this is where the player
+                -- says how. Empty = pass the mod's own codes through unchanged.
+                setting_id = "custom_langs",
+                type = "text",
+                default_value = "",
+                max_length = 512,
+            },
+            {
                 setting_id = "custom_headers",
                 type = "text",
                 default_value = "",

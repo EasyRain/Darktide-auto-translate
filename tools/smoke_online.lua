@@ -762,11 +762,73 @@ check("custom: {system} is not a placeholder any more",
                                      custom_body = "s={system}&text={text}" })), values)
         :find("{system}", 1, true) ~= nil, true)
 
+-- Services spell languages their own way, so the mapping is what makes a DeepL-pointed
+-- custom engine send "ZH-HANT" instead of the game's "zh-tw".
+local mapped = cu.spec(fake_mod_with({
+    custom_url = "https://api-free.deepl.com/v2/translate",
+    custom_body = "text={text}&target_lang={target}",
+    custom_path = "translations.0.text",
+    custom_langs = "zh-cn=ZH-HANS;; zh-tw=ZH-HANT",
+}))
+check("custom: a mapped target language is translated",
+    cu.values(mapped, "Ammo", "en", "zh-tw").target, "ZH-HANT")
+check("custom: an unmapped code passes through",
+    cu.values(mapped, "Ammo", "en", "ja").target, "ja")
+check("custom: the source language is mapped the same way",
+    cu.values(cu.spec(fake_mod_with({ custom_url = "https://a.example.com/x",
+                                      custom_langs = "en=EN-US" })), "Ammo", "en", "ja").source,
+    "EN-US")
+check("custom: the body carries the mapped code",
+    cu.build(mapped, cu.values(mapped, "Ammo", "en", "zh-tw")),
+    "text=Ammo&target_lang=ZH-HANT")
+
 check("custom: 401/403 is named as an auth problem", cu.error_key(401), "custom_auth_failed")
 check("custom: 404 is named as a URL problem", cu.error_key(404), "custom_not_found")
 check("custom: 429 is named as rate limiting", cu.error_key(429), "custom_rate_limited")
 check("custom: 500 is named as a server error", cu.error_key(500), "custom_server_error")
 check("custom: 400 has no special name", cu.error_key(400), nil)
+
+-- ---------------------------------------------------------------------------
+-- The public API: every online.<name> the rest of the mod calls has to exist
+--
+-- A missing field on the module is invisible to a syntax check and fails as
+-- "attempt to call field 'probe' (a nil value)" the moment a button is pressed - which is
+-- exactly what happened when a scripted edit silently did nothing. This reads the call
+-- sites out of the main file and asserts each one is a function here.
+-- ---------------------------------------------------------------------------
+-- The test button has to be callable and to say why it cannot run instead of crashing -
+-- that is the failure the player hit ("attempt to call field 'probe' (a nil value)").
+do
+    local probe_popups = {}
+    online.init({ popup = function(_, key) probe_popups[#probe_popups + 1] = key end,
+                  info = function() end, warn = function() end, log = function() end },
+                nil, fake_glossary, nil, nil)
+    check("probe without a native core returns false", online.probe(fake_mod, "zh-tw"), false)
+    check("probe says why it cannot run", probe_popups[1], "custom_test_failed")
+end
+
+do
+    local main = io.open(here .. "/../scripts/mods/auto_translate/auto_translate.lua", "rb")
+    local source = main and main:read("*a") or ""
+    if main then
+        main:close()
+    end
+
+    local wanted, seen = {}, {}
+    -- Only call sites: "online.lua" appears in paths and comments, "online.start(" does not.
+    for name in source:gmatch("online%.([A-Za-z_][A-Za-z0-9_]*)%s*%(") do
+        if not seen[name] then
+            seen[name] = true
+            wanted[#wanted + 1] = name
+        end
+    end
+    table.sort(wanted)
+
+    for _, name in ipairs(wanted) do
+        check("online." .. name .. " exists", type(online[name]), "function")
+    end
+    check("the check found the call sites", #wanted > 5, true)
+end
 
 print(string.format("%d failure(s) in total", failures))
 os.exit(failures == 0 and 0 or 1)

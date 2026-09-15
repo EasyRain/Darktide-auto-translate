@@ -1,4 +1,4 @@
-return {
+﻿return {
     mod_name = {
         en = "Auto Translate",
         ["zh-cn"] = "自动翻译",
@@ -204,6 +204,14 @@ return {
     custom_body_description = {
         en = "The request parameters, with {text} {source} {target} {key} replaced (JSON-escaped in a JSON body, percent-encoded in a query). Empty = the shipped DeepL-shaped default: text={text}&source_lang={source}&target_lang={target}&key={key}. DeepL itself wants 'text={text}&target_lang={target}' with the key in the auth header; LibreTranslate wants 'q={text}&source={source}&target={target}'.",
         ["zh-cn"] = "请求参数模板，其中 {text} {source} {target} {key} 会被替换（JSON 体里做 JSON 转义，查询串里做百分号编码）。留空＝内置的 DeepL 形状默认值：text={text}&source_lang={source}&target_lang={target}&key={key}。DeepL 本身用 'text={text}&target_lang={target}' 且密钥放鉴权头；LibreTranslate 用 'q={text}&source={source}&target={target}'。",
+    },
+    custom_langs = {
+        en = "Custom: language codes",
+        ["zh-cn"] = "自定义：语言代码映射",
+    },
+    custom_langs_description = {
+        en = "How your service spells the target language, one 'code=SERVICE_CODE' per entry, separated by ';;' or a literal \n. The mod's codes are the game's (en, zh-cn, zh-tw, pt-br). DeepL wants 'zh-cn=ZH-HANS;; zh-tw=ZH-HANT' (and 'en=EN-US'), Google wants 'zh-tw=zh-TW', Baidu wants 'zh-tw=cht'. Empty = pass the mod's codes through unchanged, which is right for a service that already uses them.",
+        ["zh-cn"] = "你的服务怎么写目标语言，每项 '代码=服务代码'，用 ';;' 或字面量 \n 分隔。本 mod 用的是游戏的语言码（en、zh-cn、zh-tw、pt-br）。DeepL 要 'zh-cn=ZH-HANS;; zh-tw=ZH-HANT'（以及 'en=EN-US'），Google 要 'zh-tw=zh-TW'，百度要 'zh-tw=cht'。留空＝原样传 mod 的语言码，适用于本来就使用这套代码的服务。",
     },
     custom_headers = {
         en = "Custom: extra headers",

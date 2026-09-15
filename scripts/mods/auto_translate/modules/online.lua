@@ -2115,6 +2115,112 @@ function M.update(mod, dt)
     dispatch(mod)
 end
 
+-- The "Test the online engine" button.
+--
+-- One sample string through whatever service is configured, with the request, the status
+-- and the reply in the chat. A custom endpoint is eight fields and every mistake in them
+-- looks the same from the outside ("translation failed"), so this is what makes it
+-- configurable at all. It uses the same single inflight slot as a translation - one
+-- request at a time is what keeps the answers paired with their strings - so a run in
+-- progress is stopped first.
+function M.probe(mod, lang)
+    lang = lang or M.state.lang or "en"
+    if not core then
+        local _, why = M.load_core(mod)
+        if not core then
+            util.popup(mod, "custom_test_failed", tostring(why))
+            return false
+        end
+    end
+    if inflight then
+        util.popup(mod, "custom_test_failed", "a request is already in flight")
+        return false
+    end
+
+    M.stop(mod)
+
+    local provider = engines.api_provider(mod)
+    local sample = "Reload Speed"
+    local masked, tokens = glossary.mask(sample, lang, true)
+    local probe_item = { mod_id = "test", key = "test", en = sample, hash = "" }
+    local job, describe, response_path
+
+    if provider == "custom" then
+        if not custom then
+            util.popup(mod, "custom_test_failed", "the custom API module is not loaded")
+            return false
+        end
+        local spec = custom.spec(mod)
+        local problem = custom.problem(spec)
+        if problem then
+            if problem == "custom_url_invalid" then
+                util.popup(mod, problem, tostring(spec.url))
+            else
+                util.popup(mod, problem)
+            end
+            return false
+        end
+
+        local host, path = custom.split_url(spec.url)
+        local values = custom.values(spec, masked, "en", lang)
+        if spec.method == "get" then
+            path = custom.append_query(path, custom.query_for(spec, values))
+            job = core.at_http_get(host, path)
+        else
+            job = core.at_http_post(host, path, spec.content_type, custom.build_headers(spec),
+                                    custom.build(spec, values))
+        end
+        describe = custom.describe(spec)
+        response_path = spec.path
+        util.info(mod, "testing the custom endpoint: %s, response path '%s', sample '%s'",
+            describe, tostring(spec.path), sample)
+    else
+        local api_key = nil
+        if provider_needs_key(provider) then
+            api_key = mod:get("online_api_key")
+            if type(api_key) ~= "string" or api_key == "" then
+                util.popup(mod, "api_key_missing")
+                return false
+            end
+        end
+        if core.at_online_host(provider, api_key, host_buf, 512) == 0
+            or core.at_online_path(provider, api_key, "en", lang, masked, path_buf, PATH_CAP) == 0 then
+            util.popup(mod, "custom_test_failed", tostring(cstr(core.at_online_error())))
+            return false
+        end
+        if core.at_online_uses_post(provider) == 1 then
+            if core.at_online_body(provider, "en", lang, masked, body_buf, BODY_CAP) == 0
+                or core.at_online_headers(provider, api_key, headers_buf, 1024) == 0 then
+                util.popup(mod, "custom_test_failed", tostring(cstr(core.at_online_error())))
+                return false
+            end
+            job = core.at_http_post(host_buf, path_buf, core.at_online_content_type(provider),
+                                    headers_buf, body_buf)
+        else
+            job = core.at_http_get(host_buf, path_buf)
+        end
+        describe = provider
+        util.info(mod, "testing the online engine: %s, sample '%s'", tostring(provider), sample)
+    end
+
+    if job <= 0 then
+        util.popup(mod, "custom_test_failed", tostring(cstr(core.at_error())))
+        return false
+    end
+
+    inflight = {
+        kind = "probe",
+        item = probe_item,
+        provider = provider,
+        job = job,
+        masked = masked,
+        tokens = tokens,
+        response_path = response_path,
+        describe = describe,
+    }
+    return true
+end
+
 -- Progress snapshot for the HUD and for the options buttons.
 function M.status()
     local disabled = {}
