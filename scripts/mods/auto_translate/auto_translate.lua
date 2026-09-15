@@ -190,6 +190,28 @@ local function run_pipeline(reason)
         reason, lang, st.mods_total, st.keys_total, st.already, st.ready, st.pending, st.stale, st.skipped
     )
 
+    -- The total alone does not say whether a run will take a minute or an hour, so
+    -- name the mods the work actually sits in.
+    local waiting = {}
+    for _, entry in ipairs(report.mods) do
+        if #entry.pending > 0 then
+            waiting[#waiting + 1] = { name = entry.name, n = #entry.pending }
+        end
+    end
+    table.sort(waiting, function(a, b)
+        return a.n > b.n
+    end)
+
+    if #waiting > 0 then
+        local parts = {}
+        for i = 1, math.min(#waiting, 12) do
+            parts[#parts + 1] = string.format("%s=%d", waiting[i].name, waiting[i].n)
+        end
+        util.info(mod, "pending by mod (%d mod(s)): %s%s",
+            #waiting, table.concat(parts, ", "),
+            #waiting > 12 and string.format(", ... and %d more", #waiting - 12) or "")
+    end
+
     injector.apply(mod, report, lang)
 
     local saved = injector.flush(mod, lang)
@@ -370,28 +392,49 @@ end
 mod.on_setting_changed = function(setting_id)
     if setting_id == "download_model_small" or setting_id == "download_model_large" then
         util.info(mod, "model download toggles are registered but the downloader is not implemented yet")
-    elseif setting_id == "target_language" then
-        -- the queue was built for the previous language, so it must not continue
-        online.flush(mod)
-        online.stop(mod)
-        util.info(mod, "target language set to: %s (press 'Reload translation files' to apply now)", tostring(mod:get("target_language")))
-    elseif setting_id == "engine" or setting_id == "online_api_key" then
-        if setting_id == "engine" then
+    elseif setting_id == "target_language" or setting_id == "engine"
+        or setting_id == "online_api_key" or setting_id == "proxy" then
+        -- These all change what the queue should even contain, so stopping is not
+        -- enough: the pipeline has to be rebuilt. (Previously this only stopped the
+        -- queue and told the player to press "Reload", which looked like nothing
+        -- happened at all.)
+        if setting_id == "target_language" then
+            util.info(mod, "target language set to: %s", tostring(mod:get("target_language")))
+        elseif setting_id == "engine" then
             util.info(mod, "engine set to: %s", tostring(mod:get("engine")))
-        else
+        elseif setting_id == "online_api_key" then
             -- a new key deserves a fresh attempt after a failure streak
             engines.reset(mod)
         end
+
         online.flush(mod)
         online.stop(mod)
-        check_engine_settings(current_lang())
-    elseif setting_id == "auto_translate_enabled" and not mod:get("auto_translate_enabled") then
-        -- switching translation off must stop the queue, but keep what it produced
+
+        if mod:get("auto_translate_enabled") then
+            local ok, err = pcall(run_pipeline, "setting changed")
+            if not ok then
+                util.warn(mod, "could not restart after the setting change: %s", tostring(err))
+            end
+        else
+            check_engine_settings(current_lang())
+        end
+    elseif setting_id == "auto_translate_enabled" then
         online.flush(mod)
         online.stop(mod)
-        util.info(mod, "translation stopped by setting; %d key(s) already stored", online.status().done)
+        if mod:get("auto_translate_enabled") then
+            -- turning it on should start work, not wait for another button
+            local ok, err = pcall(run_pipeline, "enabled")
+            if not ok then
+                util.warn(mod, "could not start translation: %s", tostring(err))
+            end
+        else
+            util.info(mod, "translation stopped by setting; %d key(s) already stored", online.status().done)
+        end
     elseif setting_id == "apply_translation" then
-        util.info(mod, "master switch changed; use 'Reload translation files' to re-apply")
+        local ok, err = pcall(run_pipeline, "master switch")
+        if not ok then
+            util.warn(mod, "could not re-apply: %s", tostring(err))
+        end
     end
 end
 
