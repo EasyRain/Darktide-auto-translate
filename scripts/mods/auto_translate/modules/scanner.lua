@@ -41,8 +41,11 @@ local function localization_path(mod_file_path)
 end
 
 -- Scans a single mod. Returns an entry with ready/pending key lists and the raw table.
+-- Manual translation files are still fully read and validated here: only their
+-- existing translations are protected, while missing or out of date keys stay pending
+-- so the engine can fill them in.
 function M.scan_mod(name)
-    local entry = { name = name, total = 0, already = 0, ready = {}, pending = {} }
+    local entry = { name = name, total = 0, already = 0, ready = {}, pending = {}, stale = 0 }
 
     local mod_file = find_mod_file(name)
     if not mod_file then
@@ -77,11 +80,15 @@ function M.scan_mod(name)
                 entry.already = entry.already + 1
             else
                 local hash = util.hash(value["en"])
-                local zh, src = store.lookup(data, key, value["en"], hash)
+                local zh, reason = store.lookup(data, key, value["en"], hash)
                 if zh then
-                    entry.ready[#entry.ready + 1] = { key = key, en = value["en"], hash = hash, zh = zh, src = src }
+                    entry.ready[#entry.ready + 1] = { key = key, en = value["en"], hash = hash, zh = zh, src = reason }
                 else
+                    -- no translation yet, or the source text changed since it was written
                     entry.pending[#entry.pending + 1] = { key = key, en = value["en"], hash = hash }
+                    if reason == "source changed" then
+                        entry.stale = entry.stale + 1
+                    end
                 end
             end
         end
@@ -95,7 +102,7 @@ end
 function M.scan(mod)
     local report = {
         mods = {},
-        stats = { mods_total = 0, keys_total = 0, already = 0, ready = 0, pending = 0, skipped = 0 },
+        stats = { mods_total = 0, keys_total = 0, already = 0, ready = 0, pending = 0, stale = 0, skipped = 0 },
     }
 
     local dmf = get_mod("DMF")
@@ -120,6 +127,7 @@ function M.scan(mod)
             st.already = st.already + entry.already
             st.ready = st.ready + #entry.ready
             st.pending = st.pending + #entry.pending
+            st.stale = st.stale + entry.stale
             if entry.skipped then
                 st.skipped = st.skipped + 1
                 util.log(mod, "skipped %s: %s", name, entry.skipped)

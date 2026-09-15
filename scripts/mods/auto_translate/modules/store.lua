@@ -103,6 +103,10 @@ function M.serialize(mod_id, data)
                 out[#out + 1] = "            hash = " .. lua_quote(e.hash) .. ","
             end
             out[#out + 1] = "            zh = " .. lua_quote(e.zh) .. ","
+            -- keep an out of date hand written translation around instead of dropping it
+            if type(e.zh_prev) == "string" and e.zh_prev ~= "" then
+                out[#out + 1] = "            zh_prev = " .. lua_quote(e.zh_prev) .. ", -- previous hand translation (source changed)"
+            end
             -- src is redundant once the whole file is marked manual
             if not manual_all then
                 out[#out + 1] = "            src = " .. lua_quote(e.src or "local") .. ","
@@ -158,15 +162,21 @@ local function now()
     return (oslib and oslib.time and oslib.time()) or 0
 end
 
--- Adds or updates an entry. Never changes the text of a manual entry (whole file
--- marked manual, or the single entry marked manual); it only fills in missing
--- bookkeeping (en/hash) so hand written files stay minimal.
+-- Adds or updates an entry.
+--
+-- Manual entries are protected — but only while they still match the source text.
+-- When the source hash changed the hand written translation is out of date, so the
+-- new translation is accepted; the old text is kept in `zh_prev` so nothing is lost.
+-- Missing bookkeeping (en/hash) is always filled in.
 function M.set_entry(data, key, en, hash, zh, src, ts)
     data = normalize(data)
     local prev = data.entries[key]
 
     if type(prev) == "table" then
-        if is_manual(data, prev) then
+        local protected = is_manual(data, prev)
+        local stale = type(prev.hash) == "string" and prev.hash ~= "" and prev.hash ~= hash
+
+        if protected and not stale then
             if (prev.en == nil or prev.en == "") and en then
                 prev.en = en
             end
@@ -175,6 +185,12 @@ function M.set_entry(data, key, en, hash, zh, src, ts)
             end
             return true
         end
+
+        if protected and stale then
+            prev.zh_prev = prev.zh
+            prev.zh_prev_src = prev.src or "manual"
+        end
+
         prev.en = en
         prev.hash = hash
         prev.zh = zh

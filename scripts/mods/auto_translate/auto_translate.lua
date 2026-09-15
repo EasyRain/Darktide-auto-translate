@@ -91,8 +91,8 @@ local function run_pipeline(reason)
 
     util.info(
         mod,
-        "scan (%s): mods=%d keys=%d already=%d ready=%d pending=%d skipped=%d",
-        reason, st.mods_total, st.keys_total, st.already, st.ready, st.pending, st.skipped
+        "scan (%s): mods=%d keys=%d already=%d ready=%d pending=%d stale=%d skipped=%d",
+        reason, st.mods_total, st.keys_total, st.already, st.ready, st.pending, st.stale or 0, st.skipped
     )
 
     injector.apply(mod, report)
