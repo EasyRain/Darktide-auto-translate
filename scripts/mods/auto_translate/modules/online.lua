@@ -2092,7 +2092,18 @@ function M.update(mod, dt)
                     if n == 0 then
                         util.popup(mod, "custom_unreadable", tostring(why))
                     else
-                        util.popup(mod, "custom_test_ok", req.item.en, ffi.string(out_buf, n))
+                        -- The reply is whatever the endpoint did with the *masked* text, so the
+                        -- glossary terms have to be put back before the player reads it:
+                        -- otherwise the chat shows the placeholders, which look like garbage.
+                        local answer = ffi.string(out_buf, n)
+                        if req.tokens and #req.tokens > 0 then
+                            local restored, missing = glossary.unmask(answer, req.tokens)
+                            answer = restored
+                            if missing and missing > 0 then
+                                answer = answer .. string.format(" (%d placeholder(s) lost)", missing)
+                            end
+                        end
+                        util.popup(mod, "custom_test_ok", req.item.en, answer)
                     end
                 end
                 return
@@ -2197,7 +2208,18 @@ function M.probe(mod, lang)
 
     local provider = engines.api_provider(mod)
     local sample = "Reload Speed"
-    local masked, tokens = glossary.mask(sample, lang, true)
+    -- The same masking rule the run uses for this provider (a service that passes the game's
+    -- rich-text markup through gets it unmasked; a custom endpoint is assumed not to).
+    local masked, tokens = glossary.mask(sample, lang, not (MARKUP_SAFE[provider] == true))
+    -- A sample the glossary covers entirely masks down to a bare placeholder, and a request
+    -- carrying nothing but "⟦0⟧" proves nothing: the endpoint echoes the placeholder back and
+    -- the test shows the player "⟦0⟧", which reads as mojibake (the font has no glyph for it).
+    -- The game log recorded exactly that - a 69-byte reply whose whole translation was ⟦0⟧.
+    -- A real run never sends such a string either: it answers from the token table (see
+    -- is_fully_protected), so the test sends the plain sample and has nothing to unmask.
+    if is_fully_protected(sample, masked, tokens) then
+        masked, tokens = sample, {}
+    end
     local probe_item = { mod_id = "test", key = "test", en = sample, hash = "" }
     local job, describe, response_path
 

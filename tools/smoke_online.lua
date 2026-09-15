@@ -939,23 +939,36 @@ do
     local probe_engines = { api_provider = function() return "custom" end,
                             model_dir = function() return "." end }
 
-    local reply = '{"translations":[{"text":"\233\135\141\232\163\133\233\128\159\229\186\166"}]}'
+    local reply_text = "\233\135\141\232\163\133\233\128\159\229\186\166"    -- 重装速度
     local ready = false
+    local status = 200
     local posted = nil
+    -- The named extractor is kept so the 400 case can borrow the core and hand it back.
+    local function extract_translation(body, path, out)
+        if path ~= "translations.0.text" then
+            return 0
+        end
+        ffi.copy(out, reply_text)
+        return 1
+    end
     local fake_http_core = {
         at_http_post = function(host, path, content_type, headers, body)
             posted = { host = host, path = path, headers = headers, body = body }
             ready = true
             return 7
         end,
+        -- Answers with whatever reply_text/status the case under test set up.
         at_http_poll = function(id, result, code, body, cap, len)
             if not ready then
                 return 0
             end
             ready = false
-            id[0], result[0], code[0] = 7, 0, 200
-            ffi.copy(body, reply)
-            len[0] = #reply
+            id[0], result[0], code[0] = 7, 0, status
+            local payload = status == 200
+                and ('{"translations":[{"text":"' .. reply_text .. '"}]}')
+                or reply_text
+            ffi.copy(body, payload)
+            len[0] = #payload
             return 1
         end,
         at_poll = function() return 0 end,
@@ -963,11 +976,7 @@ do
         at_proxy_in_use = function() return "" end,
         at_proxy_hint = function() return "" end,
         at_json_string_at = function(body, path, out)
-            if path ~= "translations.0.text" then
-                return 0
-            end
-            ffi.copy(out, "\233\135\141\232\163\133\233\128\159\229\186\166")
-            return 1
+            return extract_translation(body, path, out)
         end,
     }
 
@@ -1017,22 +1026,12 @@ do
 
     -- A 400 with a service sentence on it: what the player sees is that sentence, not the
     -- response path.
-    local fail_util = {
-        popup = function(_, key, ...) seen[#seen + 1] = { key = key, args = { ... } } end,
-        info = function() end, warn = function() end, log = function() end,
-    }
-    online.init(fail_util, nil, probe_glossary, probe_engines, nil, cu)
-    fake_http_core.at_http_poll = function(id, result, code, body, cap, len)
-        if not ready then
-            return 0
-        end
-        ready = false
-        id[0], result[0], code[0] = 7, 0, 400
-        local said = '{"message":"Bad request. Reason: Value for \'source_lang\' not supported."}'
-        ffi.copy(body, said)
-        len[0] = #said
-        return 1
-    end
+    local sentences = {}
+    online.init({ popup = function(_, key, ...) sentences[#sentences + 1] = select(1, ...) end,
+                  info = function() end, warn = function() end, log = function() end },
+                nil, probe_glossary, probe_engines, nil, cu)
+    status = 400
+    reply_text = '{"message":"Bad request. Reason: Value for \'source_lang\' not supported."}'
     fake_http_core.at_json_string_at = function(body, path, out)
         local said = body:match('"message"%s*:%s*"(.-)"')
         if path ~= "message" or not said then
@@ -1043,8 +1042,62 @@ do
     end
     online.probe(probe_mod, "zh-cn")
     online.update(probe_mod, 0.016)
-    check("probe: a 400 shows the service's own sentence",
-        seen[3] and seen[3].args[1], "HTTP 400: Bad request. Reason: Value for 'source_lang' not supported.")
+    check("probe: a 400 shows the service's own sentence", sentences[1],
+        "HTTP 400: Bad request. Reason: Value for 'source_lang' not supported.")
+    fake_http_core.at_json_string_at = extract_translation
+
+    -- -----------------------------------------------------------------------
+    -- A sample the glossary covers entirely masks down to a bare placeholder
+    --
+    -- That is what the game log recorded: a 69-byte reply whose entire translation was "⟦0⟧",
+    -- which the player reported as mojibake (the chat font has no glyph for the placeholder).
+    -- A real run answers such a string from the token table instead of sending it
+    -- (is_fully_protected), so a test that sends it proves nothing about the endpoint.
+    -- -----------------------------------------------------------------------
+    status = 200
+    local PLACEHOLDER = "\226\159\166" .. "0" .. "\226\159\167"      -- ⟦0⟧
+    local mask_calls, unmask_calls = {}, {}
+    local term_glossary = {
+        mask = function(text)
+            mask_calls[#mask_calls + 1] = text
+            return PLACEHOLDER, { { term = "裝彈速度" } }
+        end,
+        unmask = function(text, tokens)
+            unmask_calls[#unmask_calls + 1] = text
+            return (text:gsub(PLACEHOLDER, "裝彈速度")), 0
+        end,
+    }
+    local term_popups = {}
+    online.init({ popup = function(_, key, ...) term_popups[#term_popups + 1] = { key, ... } end,
+                  info = function() end, warn = function() end, log = function() end },
+                nil, term_glossary, probe_engines, nil, cu)
+
+    posted, ready = nil, false
+    online.probe(probe_mod, "zh-cn")
+    check("probe: a fully masked sample is replaced by the plain one",
+        mask_calls[1] == "Reload Speed" and posted ~= nil
+            and posted.body:find("text=Reload", 1, true) ~= nil
+            and posted.body:find("%E2%9F%A6", 1, true) == nil, true)
+    reply_text = "重装速度"
+    online.update(probe_mod, 0.016)
+    check("probe: and its answer is shown as it came back",
+        term_popups[1] and term_popups[1][3], "重装速度")
+
+    -- A partly masked sample keeps its placeholders, and the reply is unmasked before the
+    -- player sees it (otherwise the chat line is placeholders, which is the "garbled" report).
+    term_glossary.mask = function(text)
+        return PLACEHOLDER .. " Speed", { { term = "裝彈速度" } }
+    end
+    posted, ready = nil, false
+    online.probe(probe_mod, "zh-cn")
+    check("probe: a partly masked sample keeps its placeholder in the request",
+        posted ~= nil and posted.body:find("Speed", 1, true) ~= nil
+            and posted.body:find("%E2%9F%A6", 1, true) ~= nil, true)
+    reply_text = PLACEHOLDER .. " 速度"
+    online.update(probe_mod, 0.016)
+    check("probe: and the placeholder in the reply is put back",
+        term_popups[2] and term_popups[2][3], "裝彈速度 速度")
+
     online.set_core_for_tests(nil)
 end
 

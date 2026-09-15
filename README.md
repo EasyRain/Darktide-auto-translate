@@ -565,7 +565,16 @@ and the common self-hosted shapes.
 
 **Test the online engine** sends one sample string through whatever is configured and shows
 the request, the status and the reply in the chat — the only way to tell a wrong URL from a
-wrong response path.
+wrong response path. Two details keep its answer readable:
+
+* the sample ("Reload Speed") is a glossary term in most languages, so masking turns it into
+  a bare `⟦0⟧`. A real run never sends such a string — it answers from the token table
+  (`is_fully_protected`) — and a request carrying nothing but a placeholder proves nothing
+  about the endpoint: DeepL echoes `⟦0⟧` back, and the chat shows a placeholder, which the
+  font has no glyph for and reads as mojibake. The probe therefore sends the **plain sample**
+  in that case, and masks normally when the glossary covers only part of it.
+* when placeholders *were* sent, the reply is unmasked before it is shown, with the count of
+  any placeholder the endpoint dropped.
 
 `tools/custom_api_stub.py` is a local stand-in for such an endpoint (it parses the body it
 receives, so it also proves the template produced valid JSON, and echoes the headers it saw
