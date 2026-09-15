@@ -41,9 +41,10 @@ return {
             {
                 setting_id = "engine",
                 type = "dropdown",
-                -- "auto" resolves to: large model -> small model -> keyed API ->
-                -- free online. A fresh install has no model, so this works out of
-                -- the box while still preferring the offline model once it exists.
+                -- "auto" resolves to: keyed API -> large model -> small model. The API
+                -- comes first because the offline models are measurably weaker on
+                -- longer text (the small one truncated a 102 character description to
+                -- 13); with no key the models are the offline fallback.
                 -- (Selecting a local engine explicitly still pauses with a notice
                 -- when its model has not been downloaded.)
                 default_value = "auto",

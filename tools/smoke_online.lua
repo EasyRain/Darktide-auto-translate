@@ -127,5 +127,45 @@ check_logging("util.log with a percent", function()
     util.log(dmf_like, "engine '%s' cannot produce '%s'", "deepl", "zh-tw")
 end)
 
+-- ---------------------------------------------------------------------------
+-- engine priority (modules/engines.lua)
+--
+-- A key has to win over a downloaded model: measured, the offline models are weaker on
+-- longer text. This rule was the other way round until that was noticed, and it decides
+-- what every player with both gets by default, so it is worth pinning down.
+-- ---------------------------------------------------------------------------
+local engines_path = here .. "/../scripts/mods/auto_translate/modules/engines.lua"
+local engines_chunk = loadfile(engines_path)
+if not engines_chunk then
+    io.stderr:write("could not load engines.lua\n")
+    os.exit(1)
+end
+local engines = engines_chunk()
+engines.init({ MOD_DIR = ".", file_exists = function() return false end }, {})
+
+-- pretend both models are on disk, so only the rule decides
+local have_models = true
+engines.model_available = function() return have_models end
+
+local function resolve_with(key, engine)
+    local fake_mod = {
+        get = function(_, id)
+            if id == "online_api_key" then return key end
+            if id == "engine" then return engine end
+            return nil
+        end,
+    }
+    return engines.resolve(fake_mod, "zh-tw")
+end
+
+check("resolve(key, auto) prefers the API", resolve_with("sk-test", "auto"), "online_api")
+check("resolve(no key, auto) uses a model", resolve_with("", "auto"), "local_large")
+check("resolve(nil key, auto) uses a model", resolve_with(nil, "auto"), "local_large")
+check("resolve(key, explicit small) obeys the choice",
+    resolve_with("sk-test", "local_small"), "local_small")
+have_models = false
+check("resolve(key, auto, no models)", resolve_with("sk-test", "auto"), "online_api")
+check("resolve(no key, auto, no models)", resolve_with("", "auto"), nil)
+
 print(string.format("%d failure(s) in total", failures))
 os.exit(failures == 0 and 0 or 1)

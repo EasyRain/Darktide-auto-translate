@@ -146,32 +146,32 @@ return {
         ["zh-cn"] = "Google Cloud 翻译",
     },
     engine_auto_description = {
-        en = "Automatic: the largest downloaded offline model first, then the API if a key is set. The free public services are no longer used - they are rate limited and blocked too easily.",
-        ["zh-cn"] = "自动：优先用已下载的最大离线模型，其次用填了密钥的正式 API。不再使用免费公共服务——它们限流严重且容易被掐。",
+        en = "Automatic: the official API when a key is set, otherwise the largest downloaded offline model. The free public services are no longer used - they are rate limited and blocked too easily.",
+        ["zh-cn"] = "自动：填了密钥就用正式 API，否则用已下载的最大离线模型。不再使用免费公共服务——它们限流严重且容易被掐。",
     },
     model_missing = {
         en = "Auto Translate: a local model engine is selected but its model is not downloaded yet. Turn on the matching model download option (or switch to an online engine) to start translating.",
         ["zh-cn"] = "Auto Translate：已选择本地模型引擎，但模型尚未下载。请打开对应模型的下载开关（或改用在线引擎），之后才会开始翻译。",
     },
     engine_description = {
-        en = "Which engine is used for new translations.",
-        ["zh-cn"] = "选择用于翻译新文本的引擎。",
+        en = "Which engine is used for new translations. The offline models need no network at all; the API is more accurate.",
+        ["zh-cn"] = "选择用于翻译新文本的引擎。离线模型完全不需要网络；正式 API 的译文质量更好。",
     },
     engine_auto = {
         en = "Automatic (recommended)",
         ["zh-cn"] = "自动（推荐）",
     },
     engine_online_api = {
-        en = "Online (official API, needs key)",
-        ["zh-cn"] = "在线（正式 API，需密钥）",
+        en = "Online (official API, needs key) - best quality",
+        ["zh-cn"] = "在线（正式 API，需密钥）——质量最好",
     },
     engine_local_small = {
-        en = "Local model (small, ~600 MB)",
-        ["zh-cn"] = "本地模型（小，约 600 MB）",
+        en = "Local model (small, ~600 MB) - NOT RECOMMENDED: too few parameters, it invents text and drops parts of longer sentences",
+        ["zh-cn"] = "本地模型（小，约 600 MB）——不推荐：参数太少，容易产生幻觉，长句还会丢内容",
     },
     engine_local_large = {
-        en = "Local model (large, ~1.3 GB)",
-        ["zh-cn"] = "本地模型（大，约 1.3 GB）",
+        en = "Local model (large, ~1.3 GB) - offline fallback, better than the small one",
+        ["zh-cn"] = "本地模型（大，约 1.3 GB）——离线兜底，比小模型好",
     },
     online_api_key = {
         en = "API key",

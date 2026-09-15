@@ -122,9 +122,9 @@ Two engines, chosen with the **Translation engine** option:
 
 | engine | notes |
 | --- | --- |
-| **Automatic** | The largest downloaded offline model; if none is downloaded, the API when a key is set. If neither exists, translation stays paused and the mod tells you which two things would fix it. |
-| **Online (official API)** | Needs a key. Pick the service with **API service**: **DeepL** (default) or Google Cloud Translation. |
-| **Local model (small / large)** | Offline NLLB-200 through CTranslate2 + SentencePiece, no network at all. Implemented; see [The offline engine](#the-offline-engine-local-nllb-200). |
+| **Automatic** | The API when a key is set, otherwise the largest downloaded offline model. The key comes first because the offline models are measurably weaker on longer text; with neither, translation stays paused and the mod says which two things would fix it. |
+| **Online (official API)** | Needs a key. Pick the service with **API service**: **DeepL** (default) or Google Cloud Translation. Best quality. |
+| **Local model (small / large)** | Offline NLLB-200 through CTranslate2 + SentencePiece, no network at all. **The small (600M) one is not recommended**: too few parameters, it invents text for short labels ("Right" became "這樣的情況") and truncates longer sentences. The large one is the offline fallback. See [The offline engine](#the-offline-engine-local-nllb-200). |
 
 ## The offline engine (local NLLB-200)
 

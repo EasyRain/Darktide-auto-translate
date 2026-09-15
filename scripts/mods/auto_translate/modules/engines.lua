@@ -227,25 +227,29 @@ end
 
 -- Resolves the engine to use. Returns nil when nothing is usable, so the caller
 -- can say so instead of quietly picking something the player did not ask for.
+--
+-- A key wins over a downloaded model, which is the opposite of the first version of
+-- this rule. Measured on the real models: the 600M conversion truncated a 102
+-- character description to 13 characters and read "curios" as "curiosity", while
+-- DeepL gets the same string right - so a player who has a key should get the better
+-- engine by default. The models stay as the fallback for players who do not.
 function M.resolve(mod, lang)
     local wanted = mod:get("engine") or "auto"
     if wanted ~= "auto" then
         return wanted
     end
 
-    -- both models downloaded -> prefer the one with more parameters
+    local key = mod:get("online_api_key")
+    if type(key) == "string" and key ~= "" then
+        return "online_api"
+    end
+
+    -- no key: the offline models, larger first because it makes fewer mistakes
     if M.model_available("local_large") then
         return "local_large"
     end
     if M.model_available("local_small") then
         return "local_small"
-    end
-
-    -- no local model: an API key is the only remaining option. The free endpoints
-    -- are deliberately not used here.
-    local key = mod:get("online_api_key")
-    if type(key) == "string" and key ~= "" then
-        return "online_api"
     end
 
     return nil
