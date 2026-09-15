@@ -64,4 +64,52 @@ check("text_is_safe('%d ms', '%d 毫秒')", online.text_is_safe("%d ms", "%d 毫
 check("text_is_safe('Ammo', '')", online.text_is_safe("Ammo", ""), false)
 
 print(string.format("%d failure(s)", failures))
+
+-- ---------------------------------------------------------------------------
+-- util.lua's logging wrapper
+--
+-- DMF formats every log message a second time (logging.lua: pcall(string.format,
+-- str, ...)), so a message containing a '%' used to raise
+--   (logging) string.format: bad argument #2 to 'format' (value expected)
+-- and the message itself - the refusal reason - was lost. The stub below formats the
+-- way DMF does, which is what makes this a real test.
+-- ---------------------------------------------------------------------------
+local util_path = here .. "/../scripts/mods/auto_translate/modules/util.lua"
+local util_chunk = loadfile(util_path)
+if not util_chunk then
+    io.stderr:write("could not load util.lua\n")
+    os.exit(1)
+end
+local util = util_chunk()
+
+local dmf_like = {
+    info = function(_, str, ...) return string.format(str, ...) end,
+    warning = function(_, str, ...) return string.format(str, ...) end,
+    get = function(_, key) return key == "debug_logging" end,
+}
+
+local function check_logging(label, fn)
+    local ok, err = pcall(fn)
+    if ok then
+        print(string.format("ok   %s", label))
+    else
+        failures = failures + 1
+        print(string.format("FAIL %s -> %s", label, tostring(err)))
+    end
+end
+
+check_logging("util.info with '%d' after formatting", function()
+    util.info(dmf_like, "format placeholder '%s' is missing or changed", "%d")
+end)
+check_logging("util.info with a stray '%%'", function()
+    util.info(dmf_like, "translation has %d stray '%%%%' the source does not have", 1)
+end)
+check_logging("util.warn with a percent", function()
+    util.warn(dmf_like, "100%% done")
+end)
+check_logging("util.log with a percent", function()
+    util.log(dmf_like, "engine '%s' cannot produce '%s'", "deepl", "zh-tw")
+end)
+
+print(string.format("%d failure(s) in total", failures))
 os.exit(failures == 0 and 0 or 1)

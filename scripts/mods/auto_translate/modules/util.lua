@@ -225,17 +225,27 @@ local function fmt(f, ...)
     return ok and msg or tostring(f)
 end
 
+-- The finished message is passed as an *argument*, never as the format string.
+--
+-- DMF formats whatever it is given a second time (modules/core/logging.lua:
+-- `pcall(string.format, str, ...)`), so a message that itself contains a '%' - and
+-- the refusal reasons do: "format placeholder '%d' is missing or changed",
+-- "translation has 1 stray '%' the source does not have" - was read as a format
+-- specifier. DMF then reported
+--   (logging) string.format: bad argument #2 to 'format' (value expected)
+-- and the original message, the one that explained the refusal, was lost.
+-- Handing over "%s" plus the text keeps any '%' in it literal.
 function M.info(mod, f, ...)
-    mod:info("[AT] " .. fmt(f, ...))
+    mod:info("%s", "[AT] " .. fmt(f, ...))
 end
 
 function M.warn(mod, f, ...)
-    mod:warning("[AT] " .. fmt(f, ...))
+    mod:warning("%s", "[AT] " .. fmt(f, ...))
 end
 
 function M.log(mod, f, ...)
     if mod:get("debug_logging") then
-        mod:info("[AT][dbg] " .. fmt(f, ...))
+        mod:info("%s", "[AT][dbg] " .. fmt(f, ...))
     end
 end
 
