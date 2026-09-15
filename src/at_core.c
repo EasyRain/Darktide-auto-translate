@@ -359,6 +359,22 @@ static char* read_body(HINTERNET request, int* out_len)
     return buffer;
 }
 
+// Alternate host for a host that is served twice, or NULL.
+//
+// Google serves the Translation v2 API on both translation.googleapis.com and
+// www.googleapis.com. Measured here: through a proxy tunnel the canonical host
+// completes the CONNECT (HTTP 200) and then never finishes the TLS handshake,
+// while the other one answers with Google's own "API key not valid" JSON - the
+// same API, reachable. So a transport failure gets one retry on the alternate
+// name rather than failing every Google translation on such a network.
+static const char* fallback_host_for(const char* host)
+{
+    if (host && _stricmp(host, "translation.googleapis.com") == 0) {
+        return "www.googleapis.com";
+    }
+    return NULL;
+}
+
 // `out_status` is 0 when the request completed and negative on a transport
 // failure; `out_http_code` carries the HTTP status in the completed case. They are
 // separate on purpose: one value meaning both "no error" and "the 200 we got" is
@@ -587,6 +603,19 @@ static DWORD WINAPI worker_main(LPVOID param)
             int len = 0;
             DWORD win_error = 0;
             do_http(job, &status, &http_code, &body, &len);
+
+            // One transport-level retry on an alternate host, for the single host
+            // we know is served twice. A completed response is never retried, so a
+            // 400 "API key not valid" stays a 400.
+            if (status < 0) {
+                const char* alternate_host = fallback_host_for(job->host);
+                if (alternate_host) {
+                    Job alternate = *job;
+                    alternate.host = (char*)alternate_host;
+                    do_http(&alternate, &status, &http_code, &body, &len);
+                }
+            }
+
             if (status < 0) {
                 win_error = last_win_error();
             }
