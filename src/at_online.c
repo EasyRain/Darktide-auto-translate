@@ -1,0 +1,516 @@
+// at_online.c — online provider request/response adapters. See at_online.h.
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+
+#include "at_json.h"
+#include "at_online.h"
+
+static char g_error[512] = { 0 };
+
+static void set_error(const char* msg)
+{
+    strncpy_s(g_error, sizeof(g_error), msg ? msg : "", _TRUNCATE);
+}
+
+static void set_errorf(const char* fmt, const char* a, const char* b)
+{
+    _snprintf_s(g_error, sizeof(g_error), _TRUNCATE, fmt, a ? a : "", b ? b : "");
+}
+
+const char* at_online_error(void)
+{
+    return g_error;
+}
+
+// ---------------------------------------------------------------------------
+// Language codes
+//
+// Our internal codes are lower case and match the game's language ids; every
+// provider wants its own spelling, and getting this wrong silently translates
+// into the wrong language.
+// ---------------------------------------------------------------------------
+typedef struct {
+    const char* internal;
+    const char* provider;
+} LangMap;
+
+static const LangMap LANG_MAP[] = {
+    { "en",    "en" },
+    { "zh-cn", "zh-CN" },
+    { "zh-tw", "zh-TW" },
+    { "ja",    "ja" },
+    { "ko",    "ko" },
+    { "ru",    "ru" },
+    { "de",    "de" },
+    { "fr",    "fr" },
+    { "es",    "es" },
+    { "it",    "it" },
+    { "pl",    "pl" },
+    { "pt-br", "pt-BR" },
+    { "uk",    "uk" },
+};
+
+int at_online_lang_code(const char* internal_lang, char* out, int cap)
+{
+    size_t i;
+    if (!internal_lang || !out || cap <= 0) {
+        return 0;
+    }
+    for (i = 0; i < sizeof(LANG_MAP) / sizeof(LANG_MAP[0]); i++) {
+        if (_stricmp(LANG_MAP[i].internal, internal_lang) == 0) {
+            strncpy_s(out, (size_t)cap, LANG_MAP[i].provider, _TRUNCATE);
+            return 1;
+        }
+    }
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
+// Percent encoding
+//
+// Everything except the unreserved set is escaped, so multi-byte UTF-8 text and
+// '&', '|', '?' inside a mod string cannot break the query string.
+// ---------------------------------------------------------------------------
+static int url_encode(const char* src, char* out, int cap)
+{
+    static const char* hex = "0123456789ABCDEF";
+    int used = 0;
+    const unsigned char* p = (const unsigned char*)src;
+
+    if (!src || !out || cap <= 0) {
+        return 0;
+    }
+
+    for (; *p; p++) {
+        unsigned char c = *p;
+        int plain = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') ||
+                    c == '-' || c == '_' || c == '.' || c == '~';
+        if (plain) {
+            if (used + 1 >= cap) {
+                return 0;
+            }
+            out[used++] = (char)c;
+        } else {
+            if (used + 3 >= cap) {
+                return 0;
+            }
+            out[used++] = '%';
+            out[used++] = hex[(c >> 4) & 0xF];
+            out[used++] = hex[c & 0xF];
+        }
+    }
+    out[used] = 0;
+    return 1;
+}
+
+// ---------------------------------------------------------------------------
+// HTML entity decoding
+//
+// MyMemory and Google's Cloud API both escape their output ("&quot;", "&#39;").
+// Left alone, the player sees &amp;#39; instead of an apostrophe.
+// ---------------------------------------------------------------------------
+static int entity_decode(const char* src, char* out, int cap)
+{
+    int used = 0;
+    const char* p = src;
+
+    if (!src || !out || cap <= 0) {
+        return 0;
+    }
+
+    while (*p) {
+        if (*p == '&') {
+            const char* semi = strchr(p, ';');
+            if (semi && (semi - p) <= 12) {
+                char name[12];
+                int n = (int)(semi - p) - 1;
+                const char* replacement = NULL;
+                char single[8];
+                int single_len = 0;
+
+                memcpy(name, p + 1, (size_t)n);
+                name[n] = 0;
+
+                if (_stricmp(name, "amp") == 0) {
+                    replacement = "&";
+                } else if (_stricmp(name, "quot") == 0) {
+                    replacement = "\"";
+                } else if (_stricmp(name, "apos") == 0 || _stricmp(name, "#39") == 0) {
+                    replacement = "'";
+                } else if (_stricmp(name, "lt") == 0) {
+                    replacement = "<";
+                } else if (_stricmp(name, "gt") == 0) {
+                    replacement = ">";
+                } else if (_stricmp(name, "nbsp") == 0) {
+                    replacement = " ";
+                } else if (name[0] == '#') {
+                    unsigned int cp = 0;
+                    int ok = 1;
+                    if (name[1] == 'x' || name[1] == 'X') {
+                        int i;
+                        for (i = 2; name[i]; i++) {
+                            char c = name[i];
+                            cp <<= 4;
+                            if (c >= '0' && c <= '9') {
+                                cp |= (unsigned int)(c - '0');
+                            } else if (c >= 'a' && c <= 'f') {
+                                cp |= (unsigned int)(c - 'a' + 10);
+                            } else if (c >= 'A' && c <= 'F') {
+                                cp |= (unsigned int)(c - 'A' + 10);
+                            } else {
+                                ok = 0;
+                                break;
+                            }
+                        }
+                    } else {
+                        int i;
+                        for (i = 1; name[i]; i++) {
+                            if (name[i] < '0' || name[i] > '9') {
+                                ok = 0;
+                                break;
+                            }
+                            cp = cp * 10 + (unsigned int)(name[i] - '0');
+                        }
+                    }
+                    if (ok && cp > 0 && cp < 0x80) {
+                        single[0] = (char)cp;
+                        single_len = 1;
+                    } else if (ok && cp >= 0x80 && cp <= 0x10FFFF) {
+                        // re-encode as UTF-8
+                        if (cp < 0x800) {
+                            single[0] = (char)(0xC0 | (cp >> 6));
+                            single[1] = (char)(0x80 | (cp & 0x3F));
+                            single_len = 2;
+                        } else if (cp < 0x10000) {
+                            single[0] = (char)(0xE0 | (cp >> 12));
+                            single[1] = (char)(0x80 | ((cp >> 6) & 0x3F));
+                            single[2] = (char)(0x80 | (cp & 0x3F));
+                            single_len = 3;
+                        } else {
+                            single[0] = (char)(0xF0 | (cp >> 18));
+                            single[1] = (char)(0x80 | ((cp >> 12) & 0x3F));
+                            single[2] = (char)(0x80 | ((cp >> 6) & 0x3F));
+                            single[3] = (char)(0x80 | (cp & 0x3F));
+                            single_len = 4;
+                        }
+                    } else {
+                        ok = 0;
+                    }
+
+                    if (ok) {
+                        if (used + single_len + 1 >= cap) {
+                            return 0;
+                        }
+                        memcpy(out + used, single, (size_t)single_len);
+                        used += single_len;
+                        p = semi + 1;
+                        continue;
+                    }
+                }
+
+                if (replacement) {
+                    size_t rl = strlen(replacement);
+                    if (used + (int)rl + 1 >= cap) {
+                        return 0;
+                    }
+                    memcpy(out + used, replacement, rl);
+                    used += (int)rl;
+                    p = semi + 1;
+                    continue;
+                }
+            }
+        }
+
+        if (used + 2 >= cap) {
+            return 0;
+        }
+        out[used++] = *p++;
+    }
+
+    out[used] = 0;
+    return 1;
+}
+
+// ---------------------------------------------------------------------------
+// Providers
+// ---------------------------------------------------------------------------
+int at_online_provider_known(const char* provider)
+{
+    if (!provider) {
+        return 0;
+    }
+    return _stricmp(provider, "google_gtx") == 0 || _stricmp(provider, "mymemory") == 0 ||
+           _stricmp(provider, "google_api") == 0;
+}
+
+int at_online_needs_key(const char* provider)
+{
+    return provider && _stricmp(provider, "google_api") == 0;
+}
+
+int at_online_host(const char* provider, char* out, int cap)
+{
+    const char* host = NULL;
+
+    if (!provider || !out || cap <= 0) {
+        return 0;
+    }
+    if (_stricmp(provider, "google_gtx") == 0) {
+        host = "translate.googleapis.com";
+    } else if (_stricmp(provider, "mymemory") == 0) {
+        host = "api.mymemory.translated.net";
+    } else if (_stricmp(provider, "google_api") == 0) {
+        host = "translation.googleapis.com";
+    } else {
+        set_errorf("unknown provider '%s'%s", provider, "");
+        return 0;
+    }
+
+    strncpy_s(out, (size_t)cap, host, _TRUNCATE);
+    return 1;
+}
+
+int at_online_path(const char* provider, const char* api_key, const char* source_lang,
+                   const char* target_lang, const char* text_utf8, char* out, int cap)
+{
+    char src[16];
+    char dst[16];
+    char* encoded;
+    size_t need;
+    int written = -1;
+
+    if (!provider || !out || cap <= 0 || !text_utf8) {
+        set_error("missing argument");
+        return 0;
+    }
+    if (!at_online_lang_code(source_lang ? source_lang : "en", src, (int)sizeof(src))) {
+        set_errorf("unsupported source language '%s'%s", source_lang, "");
+        return 0;
+    }
+    if (!at_online_lang_code(target_lang, dst, (int)sizeof(dst))) {
+        set_errorf("unsupported target language '%s'%s", target_lang, "");
+        return 0;
+    }
+
+    // worst case every byte becomes %XX
+    need = strlen(text_utf8) * 3 + 1;
+    encoded = (char*)malloc(need);
+    if (!encoded) {
+        set_error("out of memory");
+        return 0;
+    }
+    if (!url_encode(text_utf8, encoded, (int)need)) {
+        free(encoded);
+        set_error("text too long to encode");
+        return 0;
+    }
+
+    if (_stricmp(provider, "google_gtx") == 0) {
+        // dt=t asks for the translated text; sl/tl pick the language pair.
+        written = _snprintf_s(out, (size_t)cap, _TRUNCATE,
+                              "/translate_a/single?client=gtx&sl=%s&tl=%s&dt=t&q=%s",
+                              src, dst, encoded);
+    } else if (_stricmp(provider, "mymemory") == 0) {
+        written = _snprintf_s(out, (size_t)cap, _TRUNCATE,
+                              "/get?q=%s&langpair=%s%%7C%s", encoded, src, dst);
+    } else if (_stricmp(provider, "google_api") == 0) {
+        if (!api_key || !*api_key) {
+            free(encoded);
+            set_error("this provider needs an API key");
+            return 0;
+        }
+        written = _snprintf_s(out, (size_t)cap, _TRUNCATE,
+                              "/language/translate/v2?key=%s&q=%s&source=%s&target=%s&format=text",
+                              api_key, encoded, src, dst);
+    } else {
+        free(encoded);
+        set_errorf("unknown provider '%s'%s", provider, "");
+        return 0;
+    }
+
+    free(encoded);
+
+    if (written < 0) {
+        _snprintf_s(g_error, sizeof(g_error), _TRUNCATE, "request path too long (buffer: %d bytes)", cap);
+        return 0;
+    }
+    return 1;
+}
+
+// google_gtx answers with:
+//   [[["译文","source",null,null,10],["more","source2",...]],null,"en",...]
+// Long input is split into several segments, so all of them are concatenated.
+static int parse_google_gtx(const char* body, char* out, int cap)
+{
+    JVal* root = json_parse(body);
+    JVal* segments;
+    int used = 0;
+    int i;
+
+    if (!root) {
+        set_error("response was not valid JSON");
+        return -1;
+    }
+
+    segments = json_at(root, 0);
+    if (!segments || segments->type != J_ARR) {
+        json_free(root);
+        set_error("unexpected response shape (expected an array of segments)");
+        return -1;
+    }
+
+    for (i = 0; i < segments->count; i++) {
+        const char* piece = json_str(json_at(json_at(segments, i), 0));
+        size_t n;
+        if (!piece) {
+            continue;
+        }
+        n = strlen(piece);
+        if (used + (int)n + 1 > cap) {
+            json_free(root);
+            set_error("translated text does not fit the output buffer");
+            return -1;
+        }
+        memcpy(out + used, piece, n);
+        used += (int)n;
+    }
+
+    json_free(root);
+
+    if (used == 0) {
+        set_error("response contained no translated text");
+        return -1;
+    }
+    out[used] = 0;
+    return used;
+}
+
+// mymemory:
+//   {"responseData":{"translatedText":"..."},"responseStatus":200,"responseDetails":""}
+// On quota problems responseStatus is 403/429 and responseDetails carries the reason.
+static int parse_mymemory(const char* body, char* out, int cap)
+{
+    JVal* root = json_parse(body);
+    JVal* data;
+    const char* text;
+    const char* details;
+    int status;
+    char decoded[8192];
+    int n;
+
+    if (!root) {
+        set_error("response was not valid JSON");
+        return -1;
+    }
+
+    status = json_int(json_get(root, "responseStatus"), 200);
+    details = json_str(json_get(root, "responseDetails"));
+    data = json_get(root, "responseData");
+    text = data ? json_str(json_get(data, "translatedText")) : NULL;
+
+    if (!text || !*text) {
+        // keep the service's own explanation - it is usually about quota
+        if (details && *details) {
+            set_errorf("service refused the request: %s%s", details, "");
+        } else if (status != 200) {
+            _snprintf_s(g_error, sizeof(g_error), _TRUNCATE, "service returned status %d", status);
+        } else {
+            set_error("response contained no translated text");
+        }
+        json_free(root);
+        return -1;
+    }
+
+    json_free(root);
+
+    if (cap <= 0 || (int)strlen(text) >= (int)sizeof(decoded)) {
+        set_error("translated text does not fit the output buffer");
+        return -1;
+    }
+    if (!entity_decode(text, decoded, (int)sizeof(decoded))) {
+        set_error("could not decode the translated text");
+        return -1;
+    }
+    n = (int)strlen(decoded);
+    if (n >= cap) {
+        set_error("translated text does not fit the output buffer");
+        return -1;
+    }
+    memcpy(out, decoded, (size_t)n + 1);
+    return n;
+}
+
+// google_api:
+//   {"data":{"translations":[{"translatedText":"..."}]}}
+static int parse_google_api(const char* body, char* out, int cap)
+{
+    JVal* root = json_parse(body);
+    JVal* err;
+    JVal* node;
+    const char* text;
+    const char* message;
+    char decoded[8192];
+    int n;
+
+    if (!root) {
+        set_error("response was not valid JSON");
+        return -1;
+    }
+
+    err = json_get(root, "error");
+    if (err) {
+        message = json_str(json_get(err, "message"));
+        set_errorf("API error: %s%s", message ? message : "unknown", "");
+        json_free(root);
+        return -1;
+    }
+
+    node = json_path(root, "data.translations.0.translatedText");
+    text = json_str(node);
+    if (!text || !*text) {
+        set_error("response contained no translated text");
+        json_free(root);
+        return -1;
+    }
+
+    json_free(root);
+
+    if (cap <= 0 || (int)strlen(text) >= (int)sizeof(decoded)) {
+        set_error("translated text does not fit the output buffer");
+        return -1;
+    }
+    if (!entity_decode(text, decoded, (int)sizeof(decoded))) {
+        set_error("could not decode the translated text");
+        return -1;
+    }
+    n = (int)strlen(decoded);
+    if (n >= cap) {
+        set_error("translated text does not fit the output buffer");
+        return -1;
+    }
+    memcpy(out, decoded, (size_t)n + 1);
+    return n;
+}
+
+int at_online_parse(const char* provider, const char* body_utf8, char* out, int cap)
+{
+    if (!provider || !body_utf8 || !out || cap <= 0) {
+        set_error("missing argument");
+        return -1;
+    }
+    out[0] = 0;
+
+    if (_stricmp(provider, "google_gtx") == 0) {
+        return parse_google_gtx(body_utf8, out, cap);
+    }
+    if (_stricmp(provider, "mymemory") == 0) {
+        return parse_mymemory(body_utf8, out, cap);
+    }
+    if (_stricmp(provider, "google_api") == 0) {
+        return parse_google_api(body_utf8, out, cap);
+    }
+
+    set_errorf("unknown provider '%s'%s", provider, "");
+    return -1;
+}

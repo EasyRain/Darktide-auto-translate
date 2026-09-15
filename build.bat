@@ -11,7 +11,8 @@ if errorlevel 1 (
 
 if not exist bin mkdir bin
 
-cl /nologo /O2 /LD /utf-8 src\at_core.c /Fe:bin\at_core.dll /link winhttp.lib
+cl /nologo /O2 /LD /utf-8 /DAT_CORE_BUILD src\at_core.c src\at_json.c src\at_online.c ^
+   /Fe:bin\at_core.dll /link winhttp.lib
 if errorlevel 1 (
   echo FAILED: at_core.dll
   exit /b 1
@@ -23,8 +24,8 @@ if errorlevel 1 (
   exit /b 1
 )
 
-del /q bin\at_core.obj bin\at_core.exp at_cli.obj 2>nul
-del /q at_core.obj at_cli.obj 2>nul
+del /q bin\at_core.obj bin\at_core.exp at_cli.obj at_json.obj at_online.obj 2>nul
+del /q *.obj 2>nul
 
 echo built bin\at_core.dll and bin\at_cli.exe
 endlocal

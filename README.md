@@ -137,6 +137,11 @@ Exit codes: `0` ok, `1` usage error, `2` core unavailable, `3` request or transl
 A failed request prints the WinHTTP/Win32 code **and its decoded message**, which is normally all
 you need to tell "no network" from "TLS problem" from "wrong API key".
 
+**Note for AI/dev sessions running inside a restricted sandbox:** schannel TLS can fail there with
+`12185 ERROR_WINHTTP_CLIENT_CERT_NO_PRIVATE_KEY` (and `curl` exits 35, .NET fails too) even though
+the same binary works when you run it yourself. That is the sandbox blocking the certificate store,
+not a bug — run `at_cli.exe` from a normal shell to check HTTPS.
+
 ## Roadmap
 
 * Local models: NLLB-200 distilled 600M (~600 MB) and NLLB-200 1.3B (~1.3 GB),
