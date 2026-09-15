@@ -886,10 +886,11 @@ static int cmd_model(int argc, char** argv)
     char text[4096];
     int i;
     int n;
+    int async_mode = 0;
 
     if (argc < 5) {
         fprintf(stderr, "usage: at_cli.exe model <model-dir> <target-lang> <text...> "
-                        "[--compute int8|int8_float32|float32|auto|default]\n");
+                        "[--src <lang>] [--async] [--compute int8|int8_float32|float32|auto|default]\n");
         return 1;
     }
 
@@ -911,6 +912,11 @@ static int cmd_model(int argc, char** argv)
                 return 1;
             }
             ++i;
+            continue;
+        }
+        // --async goes through submit/poll instead of the blocking call.
+        if (_stricmp(argv[i], "--async") == 0) {
+            async_mode = 1;
             continue;
         }
         {
@@ -974,6 +980,44 @@ static int cmd_model(int argc, char** argv)
                 printf("fed tokens : %s\n", fed);
             }
         }
+    }
+
+    // --async exercises the path the game uses: submit must return immediately and
+    // the answer is collected by polling, so the frame callback never waits.
+    if (async_mode) {
+        DWORD start;
+        DWORD waited = 0;
+        int accepted;
+
+        start = GetTickCount();
+        accepted = at_model_submit(text, argv[3]);
+        printf("submit     : %d after %lu ms (returns immediately)\n", accepted,
+               (unsigned long)(GetTickCount() - start));
+        if (accepted != 1) {
+            fprintf(stderr, "submit refused: %s\n", at_model_error());
+            return 3;
+        }
+
+        for (;;) {
+            n = at_model_poll(out, (int)sizeof(out));
+            if (n != 0) {
+                break;
+            }
+            if (waited > 60000) {
+                fprintf(stderr, "poll timed out\n");
+                return 3;
+            }
+            Sleep(20);
+            waited += 20;
+        }
+        printf("polled     : after ~%lu ms\n", (unsigned long)waited);
+        if (n < 0) {
+            fprintf(stderr, "translate failed: rc=%d (%s)\n", n, at_model_error());
+            return 3;
+        }
+        printf("result     : %s\n", out);
+        printf("bytes      : %d\n", n);
+        return 0;
     }
 
     n = at_model_translate(text, argv[3], out, (int)sizeof(out));

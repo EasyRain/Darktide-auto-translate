@@ -62,8 +62,26 @@ AT_API int at_model_load(const char* dir_utf8);
 // Translates `text_utf8` into `target_lang_utf8` ("zh-cn", "ja", ...).
 // Returns the number of bytes written to out_text, or a negative value:
 //   -1 nothing loaded, -2 bad arguments, -3 encode/decode failed, -4 inference failed
+//
+// BLOCKS for ~0.8 s per string. Inside the game use at_model_submit/at_model_poll
+// instead - this entry point is for tools and tests.
 AT_API int at_model_translate(const char* text_utf8, const char* target_lang_utf8,
                               char* out_text, int out_cap);
+
+// ---------------------------------------------------------------------------
+// Asynchronous translation - the shape the game uses
+//
+// The frame callback must never wait on inference, so a string is handed over and
+// collected a few frames later.
+// ---------------------------------------------------------------------------
+
+// Hands one string to the background worker.
+//   1 = accepted, 0 = busy (a job is running or a result is waiting), <0 = refused
+AT_API int at_model_submit(const char* text_utf8, const char* target_lang_utf8);
+
+// Collects the result of the last accepted submit.
+//   0 = still working, >0 = bytes written to out_text, <0 = failed (at_model_error())
+AT_API int at_model_poll(char* out_text, int out_cap);
 
 // Last failure, human readable. Never NULL.
 AT_API const char* at_model_error(void);

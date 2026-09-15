@@ -29,8 +29,10 @@
 //     PieceToId() tells us whether the piece really exists.
 #include <cstdio>
 #include <cstring>
+#include <condition_variable>
 #include <mutex>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include <ctranslate2/models/model.h>
@@ -291,20 +293,20 @@ int at_model_load(const char* dir_utf8)
     return 1;
 }
 
-int at_model_translate(const char* text_utf8, const char* target_lang_utf8,
-                       char* out_text, int out_cap)
+// The inference itself, with no locking and no output buffer: the synchronous entry
+// point and the background worker both go through this.
+static int translate_to_string(const char* text_utf8, const char* target_lang_utf8, std::string& out)
 {
-    std::lock_guard<std::mutex> guard(g_lock);
+    out.clear();
 
     if (!g_ready || !g_translator || !g_spm) {
         set_error("no model is loaded");
         return -1;
     }
-    if (!text_utf8 || !target_lang_utf8 || !out_text || out_cap <= 0) {
+    if (!text_utf8 || !target_lang_utf8) {
         set_error("missing argument");
         return -2;
     }
-    out_text[0] = 0;
 
     char flores[32] = { 0 };
     if (!at_model_lang_code(target_lang_utf8, flores, (int)sizeof(flores))) {
@@ -357,17 +359,155 @@ int at_model_translate(const char* text_utf8, const char* target_lang_utf8,
             set_error("the model returned an empty translation");
             return -4;
         }
-        if ((int)decoded.size() >= out_cap) {
-            set_error("the translation does not fit the output buffer");
-            return -4;
-        }
 
-        std::memcpy(out_text, decoded.c_str(), decoded.size() + 1);
-        return (int)decoded.size();
+        out.swap(decoded);
+        return (int)out.size();
     } catch (const std::exception& e) {
         std::snprintf(g_error, sizeof(g_error), "inference failed: %s", e.what());
         return -4;
     }
+}
+
+int at_model_translate(const char* text_utf8, const char* target_lang_utf8,
+                       char* out_text, int out_cap)
+{
+    std::lock_guard<std::mutex> guard(g_lock);
+
+    if (!text_utf8 || !target_lang_utf8 || !out_text || out_cap <= 0) {
+        set_error("missing argument");
+        return -2;
+    }
+    out_text[0] = 0;
+
+    std::string result;
+    const int rc = translate_to_string(text_utf8, target_lang_utf8, result);
+    if (rc < 0) {
+        return rc;
+    }
+    if ((int)result.size() >= out_cap) {
+        set_error("the translation does not fit the output buffer");
+        return -4;
+    }
+
+    std::memcpy(out_text, result.data(), result.size() + 1);
+    return (int)result.size();
+}
+
+// ---------------------------------------------------------------------------
+// Asynchronous translation
+//
+// Loading reads ~600 MB and a single string costs ~0.8 s. Both are far too slow
+// for the game's frame callback, which is why the HTTP queue has the same
+// submit/poll shape. The Lua side submits one string, keeps drawing, and collects
+// the answer a few frames later; nothing on the game thread ever waits here.
+//
+// One job at a time is enough: the mod's queue is sequential by design. A submit
+// while a job is running (or while an uncollected result is waiting) is refused
+// with 0 rather than queued, so a stuck job cannot build up a backlog.
+// ---------------------------------------------------------------------------
+namespace {
+
+std::mutex g_job_lock;
+std::condition_variable g_job_cv;
+bool g_job_thread_started = false;
+bool g_job_pending = false;
+bool g_job_done = false;
+std::string g_job_text;
+std::string g_job_lang;
+std::string g_job_result;
+int g_job_rc = 0;
+
+void job_worker()
+{
+    for (;;) {
+        std::string text;
+        std::string lang;
+        {
+            std::unique_lock<std::mutex> lock(g_job_lock);
+            g_job_cv.wait(lock, []() { return g_job_pending; });
+            text = g_job_text;
+            lang = g_job_lang;
+            g_job_pending = false;
+        }
+
+        std::string result;
+        int rc;
+        {
+            std::lock_guard<std::mutex> guard(g_lock);   // the model itself
+            rc = translate_to_string(text.c_str(), lang.c_str(), result);
+        }
+
+        {
+            std::lock_guard<std::mutex> lock(g_job_lock);
+            g_job_result = result;
+            g_job_rc = rc;
+            g_job_done = true;
+        }
+    }
+}
+
+}  // namespace
+
+// 1 = accepted, 0 = busy or a result is still waiting, <0 = refused (no model, bad args)
+int at_model_submit(const char* text_utf8, const char* target_lang_utf8)
+{
+    if (!g_ready || !g_spm) {
+        set_error("no model is loaded");
+        return -1;
+    }
+    if (!text_utf8 || !target_lang_utf8 || !text_utf8[0]) {
+        set_error("missing argument");
+        return -2;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(g_job_lock);
+        if (g_job_pending || g_job_done) {
+            return 0;
+        }
+        if (!g_job_thread_started) {
+            // Detached on purpose: at exit the model objects are leaked rather than
+            // destroyed (see the note at the top), and the same applies to this
+            // thread - the process is going away anyway.
+            std::thread(job_worker).detach();
+            g_job_thread_started = true;
+        }
+        g_job_text = text_utf8;
+        g_job_lang = target_lang_utf8;
+        g_job_result.clear();
+        g_job_rc = 0;
+        g_job_pending = true;
+        g_job_done = false;
+    }
+
+    g_job_cv.notify_one();
+    return 1;
+}
+
+// 0 = still working, >0 = bytes written, <0 = the job failed (at_model_error())
+int at_model_poll(char* out_text, int cap)
+{
+    if (!out_text || cap <= 0) {
+        set_error("missing argument");
+        return -2;
+    }
+
+    std::lock_guard<std::mutex> lock(g_job_lock);
+    if (!g_job_done) {
+        return 0;
+    }
+
+    g_job_done = false;
+    if (g_job_rc < 0) {
+        return g_job_rc;
+    }
+    if ((int)g_job_result.size() >= cap) {
+        set_error("the translation does not fit the output buffer");
+        return -4;
+    }
+
+    std::memcpy(out_text, g_job_result.data(), g_job_result.size() + 1);
+    return (int)g_job_result.size();
 }
 
 }  // extern "C"
