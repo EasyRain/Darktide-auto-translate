@@ -235,34 +235,64 @@ check("plan: the literal \\n form is alone too",
     plan({ "Ammo", "one\\ntwo", "Block" }), "Ammo / one\\ntwo / Block")
 
 -- ---------------------------------------------------------------------------
--- The two answers to "the glossary placeholder was dropped"
+-- The refusal budget and the parked-key marker
 --
--- 1. A string that was *entirely* known terms is answered from the token list, without a
---    request: measured, a bare placeholder is exactly what the model mangles ("⟦0⟧" ->
---    "⁇ 0 ⁇ "), so "Right" and "Hive Scum" used to be refused forever even though their
---    official translation was sitting right there.
--- 2. Everything else gets one unmasked retry, tagged src = "unmasked" so the answers can
---    be reviewed. It has to be once only, or a string that keeps losing its term would be
---    translated forever.
+-- A refusal is a content problem, so the same model asked the same way answers the same
+-- way: retrying it forever wastes the run and makes the "refused" counter meaningless.
+-- After three refusals the key is parked for that engine, and any other engine picks it up
+-- again - which is what makes "switch to the API" redo the work. Two things can go wrong
+-- here and both are destructive in different ways: parking a key for *every* engine (it
+-- would never be translated again) or losing the counter (it would be retried forever).
 -- ---------------------------------------------------------------------------
-local protected = online.is_fully_protected_for_tests
-local tokens1 = { { term = "右側", source = "Right" } }
-check("fully protected: 'Right' -> the token list",
-    protected("Right", "\226\159\1660\226\159\167", tokens1), true)
-check("fully protected: leading space is fine",
-    protected(" Hive Scum", "\226\159\1660\226\159\167", tokens1), true)
-check("fully protected: a phrase with letters left is not",
-    protected("Chem Toxin", "\226\159\1660\226\159\167 Toxin", tokens1), false)
-check("fully protected: nothing was masked",
-    protected("Chem Toxin", "Chem Toxin", {}), false)
-check("fully protected: no tokens", protected("Right", "\226\159\1660\226\159\167", {}), false)
+local retry = online.retry_after_refusal_for_tests
+check("refusal budget: 3 tries", online.max_local_refusals, 3)
+check("refusal budget: 1st refusal retries", retry(1), true)
+check("refusal budget: 2nd refusal retries", retry(2), true)
+check("refusal budget: 3rd refusal parks", retry(3), false)
+check("refusal budget: later refusals stay parked", retry(9), false)
+check("refusal budget: a missing count retries", retry(nil), true)
 
-local retry = online.should_retry_unmasked_for_tests
-check("unmasked retry: lost placeholder, first time", retry({}, "tokens"), true)
-check("unmasked retry: lost placeholder, already retried",
-    retry({ tried_unmasked = true }, "tokens"), false)
-check("unmasked retry: an unknown token is not a masking problem", retry({}, "unsafe"), false)
-check("unmasked retry: no reason given", retry({}, nil), false)
+local store_mod = assert(loadfile(here .. "/../scripts/mods/auto_translate/modules/store.lua"))()
+store_mod.init({ TRANSLATIONS_DIR = ".", file_exists = function() return false end })
+
+local data = {}
+check("store: first refusal counts 1", store_mod.note_refusal(data, "k", "Hello", "h1", "local_base"), 1)
+check("store: second refusal counts 2", store_mod.note_refusal(data, "k", "Hello", "h1", "local_base"), 2)
+check("store: third refusal counts 3", store_mod.note_refusal(data, "k", "Hello", "h1", "local_base"), 3)
+check("store: parked for that engine", (store_mod.parked_for(data, "k", "h1")), "local_base")
+check("store: lookup still says untranslated", store_mod.lookup(data, "k", "Hello", "h1"), nil)
+-- another engine gets a fresh count, and a changed source is not parked at all
+check("store: another engine starts over",
+    store_mod.note_refusal(data, "k", "Hello", "h1", "deepl"), 1)
+check("store: now parked for the other engine", (store_mod.parked_for(data, "k", "h1")), "deepl")
+check("store: a changed source is not parked", store_mod.parked_for(data, "k", "h2"), nil)
+-- a stored translation ends the failure story
+check("store: storing clears the marker", (function()
+    store_mod.set_entry(data, "k", "Hello", "h1", "你好", "local_base")
+    return store_mod.parked_for(data, "k", "h1")
+end)(), nil)
+check("store: and the text is there", store_mod.lookup(data, "k", "Hello", "h1"), "你好")
+-- the marker has to survive a save, or every launch would retry the same strings
+local parked_text = store_mod.serialize("m", "zh-tw", { entries = {
+    k = { en = "Hello", hash = "h1", refused_by = "local_base", refusals = 3 },
+} })
+check("store: the marker is written to the file",
+    parked_text:find("refused_by = \"local_base\"", 1, true) ~= nil
+        and parked_text:find("refusals = 3", 1, true) ~= nil, true)
+
+-- Round trip through a real file: the count is the whole point of writing it down, so
+-- "serialize looks right" is not enough - it has to load back as a parked key.
+do
+    local path = os.tmpname()
+    local f = assert(io.open(path, "wb"))
+    f:write(parked_text)
+    f:close()
+    local reloaded = assert(loadfile(path))()
+    os.remove(path)
+    check("store: the marker survives a save/load round trip",
+        store_mod.parked_for(reloaded, "k", "h1"), "local_base")
+    check("store: and the count came back", select(2, store_mod.parked_for(reloaded, "k", "h1")), 3)
+end
 
 print(string.format("%d failure(s)", failures))
 

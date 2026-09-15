@@ -914,13 +914,10 @@ M.state = {
     skipped = 0,
     live = 0,
     unchanged = 0,
-    unmasked = 0,         -- stored from a retry with the glossary masking switched off
+    parked = 0,           -- keys the offline engine gave up on (see MAX_LOCAL_REFUSALS)
     last_error = nil,
 }
 
--- The `src` tag of an entry produced by the unmasked retry, so those answers can be
--- found again (search the store for src = "unmasked") and reviewed.
-local UNMASKED_SRC = "unmasked"
 
 -- The "cores for the offline model" setting, in the form the core wants:
 --   0  = automatic (min(cores/2, 8)), which is the default
@@ -1222,9 +1219,9 @@ local function finish(mod, reason)
         util.info(mod, "%d key(s) came back unchanged (font names, key labels, numbers) and are marked src = 'unchanged'",
             M.state.unchanged)
     end
-    if (M.state.unmasked or 0) > 0 then
-        util.info(mod, "%d key(s) were stored without glossary protection (src = 'unmasked'): the model dropped the placeholder, so they were translated again with the terms left in the text",
-            M.state.unmasked)
+    if (M.state.parked or 0) > 0 then
+        util.info(mod, "%d key(s) were parked: the offline model refused them %d times, so they are left alone until another engine translates this language",
+            M.state.parked, MAX_LOCAL_REFUSALS)
     end
 
     -- One message per run, and it says what the player has to do: mod option texts
@@ -1259,10 +1256,8 @@ local accept_translation
 local fail_item
 
 -- Starts a request for one queued item. Returns false when nothing was started.
--- dispatch_lines() and dispatch_unmasked() are defined further down, next to the accept
--- path they have to use.
+-- dispatch_lines() is defined further down, next to the accept path it has to use.
 local dispatch_lines
-local dispatch_unmasked
 
 local function dispatch(mod)
     local ffi = Mods.lua.ffi
@@ -1318,12 +1313,6 @@ local function dispatch(mod)
             return dispatch_lines(mod, item)
         end
 
-        -- The second attempt at an item whose glossary term went missing: no masking, so
-        -- the model sees the whole phrase, and one string at a time (its answer is not
-        -- allowed back into a batch).
-        if item.tried_unmasked then
-            return dispatch_unmasked(mod, item)
-        end
 
         local batch = take_batch(item)
         local parts, tokens = {}, {}
@@ -1486,8 +1475,8 @@ function accept_translation(mod, req, raw, src)
 
     local restored, missing = glossary.unmask(raw, req.tokens)
     if missing and missing > 0 then
-        -- "tokens" is the only failure a second attempt can plausibly fix: see the
-        -- unmasked retry in fail_item().
+        -- The code is kept for the log and the refusal budget in fail_item(): a lost
+        -- placeholder is the one refusal a *different* engine may well handle.
         return false, string.format("%d glossary term(s) were dropped by the service", missing), false, "tokens"
     end
 
@@ -1523,9 +1512,6 @@ function accept_translation(mod, req, raw, src)
 
     store_translation(mod, item, restored, src)
     M.state.done = M.state.done + 1
-    if src == UNMASKED_SRC then
-        M.state.unmasked = (M.state.unmasked or 0) + 1
-    end
 
     util.log(mod, "translated %s:%s -> %s", item.mod_id, item.key, restored)
     if M.state.done % LOG_EVERY == 0 then
@@ -1558,15 +1544,34 @@ local function handle_response(mod, req, body)
     return accept_translation(mod, req, ffi.string(out_buf, n), req.provider)
 end
 
--- Whether a failed local item gets one more attempt with the glossary masking switched
--- off. Only a lost placeholder qualifies (an unknown token or an unsafe result is not
--- something a different masking would change), and only once - otherwise a string that
--- keeps losing its term would be translated forever.
-local function should_retry_unmasked(item, code)
-    return code == "tokens" and item.tried_unmasked ~= true
+-- Records one refusal of an item by the engine in use and returns the running total.
+-- Written straight to the store (and marked dirty) so the budget survives a crash, a
+-- restart or a reload - a count that lived only in memory would be reset by exactly the
+-- events that make a player reload the translations.
+local function note_local_refusal(mod, item)
+    local data = data_for(item.mod_id, M.state.lang)
+    local total = store.note_refusal(data, item.key, item.en, item.hash, M.state.engine)
+    mark_dirty(item.mod_id, M.state.lang)
+    return total
 end
 
-M.should_retry_unmasked_for_tests = should_retry_unmasked
+-- How many times the offline model may refuse one string before the key is parked.
+--
+-- A refusal is a content problem: the same model asked the same way will answer the same
+-- way, so the alternative to a budget is either retrying it on every launch forever or
+-- dropping it silently. Three tries, then the refusal is written to the store
+-- (store.note_refusal) and the scanner leaves the key alone *for that engine*: switching
+-- to the API - or to the other model - picks it up again, which is exactly when a retry
+-- can produce something better.
+local MAX_LOCAL_REFUSALS = 3
+
+-- Whether the local engine should try this string again after `refusals` refusals.
+local function retry_after_refusal(refusals)
+    return (tonumber(refusals) or 0) < MAX_LOCAL_REFUSALS
+end
+
+M.retry_after_refusal_for_tests = retry_after_refusal
+M.max_local_refusals = MAX_LOCAL_REFUSALS
 M.is_fully_protected_for_tests = is_fully_protected
 
 -- Retries the current item on the next provider, or gives up on it.
@@ -1585,24 +1590,24 @@ function fail_item(mod, req, reason, http_status, transport, code)
     -- model that is actually broken is caught in dispatch() (not ready -> finish), so
     -- this cannot spin forever.
     if req.kind == "local" then
-        if should_retry_unmasked(item, code) then
-            -- One more try with the glossary out of the way. Measured, this is a real
-            -- trade: "Chem Toxin" comes back as 化学毒素 (right meaning, and the wrong
-            -- script variant for zh-tw) instead of nothing at all, while a string that
-            -- was *entirely* known terms is handled without the model (see
-            -- is_fully_protected) because an unmasked "Hive Scum" is 蜂巢 ⁇ . The entry
-            -- is tagged src = "unmasked" so the answers can be found and reviewed.
-            item.tried_unmasked = true
-            item.line = nil
-            util.info(mod, "%s:%s lost a glossary term; retrying it without masking",
-                item.mod_id, item.key)
+        -- Count the refusal (in the store, so it survives the run) and try again until the
+        -- budget is used up. What is *not* done any more is translating the string again
+        -- without the glossary masking: measured, that mostly traded a missing term for a
+        -- wrong script variant and lost the official terminology, and a refusal is the
+        -- honest outcome for a string this model cannot do.
+        local refusals = note_local_refusal(mod, item)
+        if retry_after_refusal(refusals) then
+            util.info(mod, "%s:%s was refused (%d of %d); trying it again",
+                item.mod_id, item.key, refusals, MAX_LOCAL_REFUSALS)
             q_unshift(item)
             return
         end
+
         M.state.last_error = reason
         M.state.refused = M.state.refused + 1
-        util.info(mod, "the offline model could not translate %s:%s (%s)",
-            item.mod_id, item.key, tostring(reason))
+        M.state.parked = (M.state.parked or 0) + 1
+        util.info(mod, "%s:%s refused %d times by '%s' (%s); parked until another engine translates this language",
+            item.mod_id, item.key, refusals, tostring(M.state.engine), tostring(reason))
         return
     end
 
@@ -1756,31 +1761,6 @@ local function is_local_request(kind)
     return kind == "local" or kind == "local_batch" or kind == "local_line"
 end
 
--- The second attempt at an item whose glossary term went missing: the same string with
--- no masking at all, one request of its own. Whatever comes back is stored with
--- src = "unmasked" (see fail_item), which is what makes these answers findable.
-function dispatch_unmasked(mod, item)
-    local accepted = core.at_submit(item.en, M.state.lang)
-    if accepted == 0 then
-        q_unshift(item)
-        return false
-    end
-    if accepted < 0 then
-        local why = cstr(core.at_model_error()) or "the offline engine refused the text"
-        fail_item(mod, { kind = "local", item = item }, why, 0, false, "core")
-        return true
-    end
-
-    inflight = {
-        kind = "local",
-        item = item,
-        masked = item.en,
-        tokens = {},
-        src = UNMASKED_SRC,
-    }
-    next_slot = elapsed
-    return true
-end
 
 -- Sends the next line of a multi-line item, or stores the item once every line is in.
 -- The state lives on the item (item.line), so an item can go back into the queue between
@@ -1788,14 +1768,7 @@ end
 function dispatch_lines(mod, item)
     local state = item.line
     if not state then
-        -- On the second attempt (a glossary term went missing) the lines are sent
-        -- unmasked, so the model sees whole phrases; the line structure is still kept.
-        local masked, tokens
-        if item.tried_unmasked then
-            masked, tokens = item.en, {}
-        else
-            masked, tokens = glossary.mask(item.en, M.state.lang, true)
-        end
+        local masked, tokens = glossary.mask(item.en, M.state.lang, true)
         local segments, separators = split_lines(masked)
         state = {
             masked = masked,
@@ -1818,7 +1791,7 @@ function dispatch_lines(mod, item)
             item = item,
             masked = state.masked,
             tokens = state.tokens,
-            src = item.tried_unmasked and UNMASKED_SRC or M.state.engine,
+            src = M.state.engine,
         }
         local ok, why, transport, code = accept_translation(mod, req, assemble_lines(state), req.src)
         if ok then

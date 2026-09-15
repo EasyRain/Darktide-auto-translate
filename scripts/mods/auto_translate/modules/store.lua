@@ -117,6 +117,22 @@ function M.serialize(mod_id, lang, data)
                 out[#out + 1] = "            ts = " .. tostring(math.floor(e.ts)) .. ","
             end
             out[#out + 1] = "        },"
+        elseif type(e) == "table" and type(e.refused_by) == "string" and e.refused_by ~= "" then
+            -- A key an engine gave up on: no text, but the refusal count has to survive
+            -- the run or every launch would try the same strings again.
+            out[#out + 1] = "        [" .. lua_quote(k) .. "] = {"
+            if type(e.en) == "string" and e.en ~= "" then
+                out[#out + 1] = "            en = " .. lua_quote(e.en) .. ","
+            end
+            if type(e.hash) == "string" and e.hash ~= "" then
+                out[#out + 1] = "            hash = " .. lua_quote(e.hash) .. ","
+            end
+            out[#out + 1] = "            refused_by = " .. lua_quote(e.refused_by) .. ","
+            out[#out + 1] = "            refusals = " .. tostring(math.floor(tonumber(e.refusals) or 0)) .. ","
+            if tonumber(e.ts) and tonumber(e.ts) > 0 then
+                out[#out + 1] = "            ts = " .. tostring(math.floor(e.ts)) .. ","
+            end
+            out[#out + 1] = "        },"
         end
     end
 
@@ -199,6 +215,10 @@ function M.set_entry(data, key, en, hash, text, src, ts)
         prev.text = text
         prev.src = src or prev.src or "local"
         prev.ts = ts or now()
+        -- A stored translation ends the key's history as a failure: whatever engine gave
+        -- up on it before, this text is what the player sees now.
+        prev.refused_by = nil
+        prev.refusals = nil
 
         if data.manual == true then
             data.manual = false
@@ -232,6 +252,69 @@ function M.count(data)
         end
     end
     return n
+end
+
+-- ---------------------------------------------------------------------------
+-- Keys an engine gave up on
+--
+-- A refusal is a content problem: the model cannot translate this string, and asking
+-- again does not help. Retrying it on every run forever wastes the only thing the queue
+-- has (time) and keeps the "refused" counter meaningless. So the count is written to the
+-- file: after the third refusal the key is *parked* for that engine, and it is picked up
+-- again by any other engine - which is what makes switching to the API redo the work
+-- instead of silently keeping the old result.
+--
+-- The marker lives on an entry with no `text`, so lookup() keeps treating the key as
+-- untranslated; only the scanner reads the marker, and only to decide "pending" versus
+-- "parked for the engine in use".
+-- ---------------------------------------------------------------------------
+
+-- Records one refusal of `key` by `engine` and returns the total for that engine.
+-- The count restarts when a different engine refuses the same key.
+function M.note_refusal(data, key, en, hash, engine)
+    data = normalize(data)
+    if type(key) ~= "string" or key == "" or type(engine) ~= "string" or engine == "" then
+        return 0
+    end
+
+    local entry = data.entries[key]
+    if type(entry) ~= "table" then
+        entry = {}
+        data.entries[key] = entry
+    end
+
+    if entry.refused_by ~= engine then
+        entry.refused_by = engine
+        entry.refusals = 0
+    end
+    entry.refusals = (tonumber(entry.refusals) or 0) + 1
+    entry.en = en or entry.en
+    entry.hash = hash or entry.hash
+    entry.ts = now()
+    return entry.refusals
+end
+
+-- The engine that gave up on this key, or nil. Only reported while the entry has no
+-- usable translation and the source text is unchanged: a changed source deserves a fresh
+-- attempt, and a stored translation is not a failure any more.
+function M.parked_for(data, key, hash)
+    if type(data) ~= "table" or type(data.entries) ~= "table" then
+        return nil
+    end
+    local e = data.entries[key]
+    if type(e) ~= "table" then
+        return nil
+    end
+    if type(e.text) == "string" and e.text ~= "" then
+        return nil
+    end
+    if type(e.hash) == "string" and e.hash ~= "" and e.hash ~= hash then
+        return nil
+    end
+    if type(e.refused_by) == "string" and e.refused_by ~= "" then
+        return e.refused_by, tonumber(e.refusals) or 0
+    end
+    return nil
 end
 
 return M

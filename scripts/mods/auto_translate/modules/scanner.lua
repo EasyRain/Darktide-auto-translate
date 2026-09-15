@@ -43,8 +43,8 @@ end
 -- Scans a single mod for the target language. Manual translation files are still
 -- fully read and validated: only their existing translations are protected, while
 -- missing or out of date keys stay pending so an engine can fill them in.
-function M.scan_mod(name, lang)
-    local entry = { name = name, total = 0, already = 0, ready = {}, pending = {}, stale = 0 }
+function M.scan_mod(name, lang, opts)
+    local entry = { name = name, total = 0, already = 0, ready = {}, pending = {}, stale = 0, parked = 0 }
 
     local mod_file = find_mod_file(name)
     if not mod_file then
@@ -83,6 +83,11 @@ function M.scan_mod(name, lang)
                 local text, reason = store.lookup(data, key, value["en"], hash)
                 if text then
                     entry.ready[#entry.ready + 1] = { key = key, en = value["en"], hash = hash, text = text, src = reason }
+                elseif opts and opts.engine and store.parked_for(data, key, hash) == opts.engine then
+                    -- This engine already refused it the allowed number of times: asking
+                    -- again on every run is what the refusal budget exists to stop. Any
+                    -- other engine picks it up, so "switch to the API" retries it.
+                    entry.parked = entry.parked + 1
                 else
                     -- no translation yet, or the source text changed since it was written
                     entry.pending[#entry.pending + 1] = { key = key, en = value["en"], hash = hash }
@@ -102,8 +107,9 @@ function M.scan_mod(name, lang)
 end
 
 -- Whether a stored entry came from an offline model rather than from a service or a
--- human. The `src` values are the engine ids ("local_base", "local_large") plus
--- "unmasked" for the retry that runs without glossary masking.
+-- human. The `src` values are the engine ids ("local_base", "local_large"); "unmasked" is
+-- kept because stores written while that retry existed still contain it, and those
+-- entries are offline answers just the same.
 function M.is_local_source(src)
     if type(src) ~= "string" then
         return false
@@ -115,7 +121,7 @@ function M.scan(mod, lang, opts)
     local report = {
         lang = lang,
         mods = {},
-        stats = { mods_total = 0, keys_total = 0, already = 0, ready = 0, pending = 0, stale = 0, skipped = 0, redo = 0 },
+        stats = { mods_total = 0, keys_total = 0, already = 0, ready = 0, pending = 0, stale = 0, skipped = 0, redo = 0, parked = 0 },
     }
 
     local dmf = get_mod("DMF")
@@ -132,7 +138,7 @@ function M.scan(mod, lang, opts)
 
     for _, name in ipairs(names) do
         if not SKIP_MODS[name] then
-            local entry = M.scan_mod(name, lang)
+            local entry = M.scan_mod(name, lang, opts)
 
             -- Offline answers are answers of last resort. With a better engine available
             -- (opts.redo_local, decided by the caller: the option is on *and* an online
@@ -164,6 +170,7 @@ function M.scan(mod, lang, opts)
             st.ready = st.ready + #entry.ready
             st.pending = st.pending + #entry.pending
             st.stale = st.stale + entry.stale
+            st.parked = st.parked + (entry.parked or 0)
             st.redo = st.redo + (entry.redo or 0)
             if entry.skipped then
                 st.skipped = st.skipped + 1

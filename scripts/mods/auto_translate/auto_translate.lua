@@ -97,22 +97,26 @@ end
 
 install_hook()
 
--- Scan options. The only thing a scan can be told today is whether to treat entries the
--- *offline* model produced as pending again.
+-- Scan options.
 --
--- Why it is decided here and not in the scanner: it only makes sense while a better
--- engine is actually in use. Ticking the option with a local model selected would make
--- the model re-translate its own output on every run, forever - so an online engine is
--- part of the condition, not just the checkbox.
+-- `engine` is always passed: a key the engine in use has already refused three times is
+-- *parked* rather than pending, so it stops being retried on every launch (see the refusal
+-- budget in modules/online.lua and store.note_refusal). Any other engine - the API, or the
+-- other model - picks the key up again, which is what makes switching engines redo the work.
+--
+-- `redo_local` is the extra step for entries the offline model already *translated*: with
+-- an online engine in use, and the option ticked, they are scanned as pending again.
+-- Ticking it while a local model is selected would make the model re-translate its own
+-- output on every run, so the engine being online is part of the condition, not just the box.
 local function scan_opts(lang)
-    if mod:get("retranslate_local") ~= true then
-        return nil
-    end
     local engine = engines.resolve(mod, lang)
-    if engine == nil or engines.is_local_engine(engine) then
-        return nil
+    local opts = { engine = engine }
+
+    if mod:get("retranslate_local") == true and engine ~= nil and not engines.is_local_engine(engine) then
+        opts.redo_local = true
     end
-    return { redo_local = true }
+
+    return opts
 end
 
 -- Pauses translation and tells the player when the selected engine is not usable

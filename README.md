@@ -116,10 +116,10 @@ return {
   localised wiki pages).
 * Use **Test glossary** in the options to see masking/restoring in the log.
 
-### When the placeholder is dropped
+### When the placeholder is dropped, and when a key is given up on
 
 Masking is a protection, not a translation strategy: a model can lose a placeholder, and the string
-then has no trustworthy answer at all. Two things happen instead of "refused forever".
+then has no trustworthy answer at all. Two things happen.
 
 **1. A string that is nothing but known terms is answered from the token list, with no request.**
 A bare placeholder is exactly what these models mangle — `⟦0⟧` came back as `⁇ 0 ⁇ ` — so `Right`
@@ -128,17 +128,24 @@ in the token list. Measured on the probe set (121 translatable strings, 16 with 
 **2 strings** take this path, and they now store the official `右側` and `巢都敗類`. It also catches
 strings that are a single known term plus nothing else, e.g. `Reload Speed` → `裝彈速度`.
 
-**2. Everything else gets one retry with the masking switched off.** The model then sees the whole
-phrase, and whatever comes back is stored with `src = "unmasked"` so the answers can be found and
-reviewed. The trade is real and measured: `Chem Toxin` (masked as `⟦0⟧ Toxin`, placeholder lost)
-comes back as `化学毒素` — the right meaning, and a Simplified character in a Traditional store —
-where before it stored nothing at all. It cannot rescue every case: an unmasked `Hive Scum` is
-`蜂巢 ⁇ `, which the unknown-token guard refuses anyway. Each item is retried at most once, so a
-string that keeps losing its term ends up refused rather than translated forever.
+**2. Every refusal is counted, and after three of them the key is parked.** A refusal is a content
+problem: the same model asked the same way answers the same way, so retrying forever only wastes the
+run and makes the "refused" counter meaningless. The count is written into the store
+(`refused_by`/`refusals` on an entry with no `text`), so it survives restarts and reloads; the
+scanner then leaves the key alone *for that engine* and counts it as `parked` in the scan line.
 
-To review the entries this produced, search the store for `src = "unmasked"`; to switch the retry
-itself off, make `should_retry_unmasked()` in `modules/online.lua` return false (the deterministic
-first path is independent of it).
+What that buys: **switching engines retries the work**, which is the point of treating the offline
+model as a fallback. Parked by `local_base`? Selecting `local_large`, or adding an API key (which
+makes Automatic pick the API), scans it as pending again. A key parked by a *different* engine is
+never left behind, a changed source text is never parked (it deserves a fresh attempt), and storing
+a translation clears the marker. An entry the model simply cannot do costs three requests once,
+rather than three requests on every launch.
+
+There is deliberately **no** "translate it again without the glossary" second attempt. It was built
+and measured: `Chem Toxin` came back as `化学毒素` — the right meaning, a Simplified character in a
+Traditional store, and the official term lost — and a string that was entirely known terms came back
+as `蜂巢 ⁇ ` and was refused anyway. Losing the terminology to gain a wrong-variant answer is not a
+trade worth making, so the masking stays and a refusal is reported as a refusal.
 
 ## Engines and language support
 
