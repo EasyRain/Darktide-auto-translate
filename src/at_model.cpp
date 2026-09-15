@@ -234,10 +234,18 @@ int at_model_tokenize(const char* text_utf8, char* out, int cap)
     return used;
 }
 
-int at_model_load(const char* dir_utf8)
-{
-    std::lock_guard<std::mutex> guard(g_lock);
+namespace {
 
+// Set while a background load is running, so at_model_loading() can answer without
+// touching the model lock (which the loader holds for the whole load).
+std::mutex g_load_lock;
+bool g_loading = false;
+std::string g_load_dir;
+
+// The load itself. The caller must hold g_lock: while this runs, no translation may
+// start, and at_model_ready() stays false so submits are refused rather than queued.
+int load_model_locked(const char* dir_utf8)
+{
     if (g_ready) {
         return 1;
     }
@@ -291,6 +299,60 @@ int at_model_load(const char* dir_utf8)
     g_ready = true;
     set_error("");
     return 1;
+}
+
+}  // namespace
+
+int at_model_load(const char* dir_utf8)
+{
+    std::lock_guard<std::mutex> guard(g_lock);
+    return load_model_locked(dir_utf8);
+}
+
+// Loading reads ~600 MB, which on a cold page cache takes seconds. Doing that in the
+// frame callback would freeze the game, so the same trick as translation: a detached
+// worker loads while the game keeps drawing, and at_model_loading()/at_model_status()
+// report progress.
+//   1 = a load was started, 0 = already loaded or already loading, <0 = refused
+int at_model_load_async(const char* dir_utf8)
+{
+    if (!dir_utf8 || !dir_utf8[0]) {
+        set_error("no model directory given");
+        return -2;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(g_load_lock);
+        if (g_ready || g_loading) {
+            return 0;
+        }
+        g_loading = true;
+        g_load_dir = dir_utf8;
+    }
+
+    std::thread([]() {
+        std::string dir;
+        {
+            std::lock_guard<std::mutex> lock(g_load_lock);
+            dir = g_load_dir;
+        }
+
+        {
+            std::lock_guard<std::mutex> guard(g_lock);
+            load_model_locked(dir.c_str());     // failure lands in at_model_error()
+        }
+
+        std::lock_guard<std::mutex> lock(g_load_lock);
+        g_loading = false;
+    }).detach();
+
+    return 1;
+}
+
+int at_model_loading(void)
+{
+    std::lock_guard<std::mutex> lock(g_load_lock);
+    return g_loading ? 1 : 0;
 }
 
 // The inference itself, with no locking and no output buffer: the synchronous entry

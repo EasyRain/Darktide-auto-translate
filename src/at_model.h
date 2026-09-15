@@ -57,7 +57,19 @@ AT_API int at_model_ready(void);
 
 // Loads the model in `dir_utf8`. Returns 1 on success, 0 on failure
 // (at_model_error() then says why).
+//
+// BLOCKS for about a second on a warm page cache and several seconds when the file
+// has to come off the disk. Inside the game use at_model_load_async().
 AT_API int at_model_load(const char* dir_utf8);
+
+// Starts the load on a background thread and returns at once.
+//   1 = started, 0 = already loaded or already loading, <0 = refused
+// Poll at_model_loading() / at_model_status(), then read at_model_error() if the
+// model never becomes ready.
+AT_API int at_model_load_async(const char* dir_utf8);
+
+// 1 while a background load is in progress.
+AT_API int at_model_loading(void);
 
 // Translates `text_utf8` into `target_lang_utf8` ("zh-cn", "ja", ...).
 // Returns the number of bytes written to out_text, or a negative value:

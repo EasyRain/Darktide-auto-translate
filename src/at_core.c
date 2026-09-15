@@ -930,6 +930,36 @@ int at_load_model(void)
     return at_model_load(g_model_dir);
 }
 
+// Same, but the loading happens off the game thread. The Lua side polls
+// at_model_status() and shows progress while it runs.
+int at_load_model_async(void)
+{
+    if (g_model_dir[0] == 0) {
+        set_error("no model directory has been set");
+        return -2;
+    }
+    return at_model_load_async(g_model_dir);
+}
+
+// The game-facing translation entry point: submit now, collect later. Never blocks.
+int at_submit(const char* text_utf8, const char* target_lang_utf8)
+{
+    if (!text_utf8 || !target_lang_utf8 || !text_utf8[0]) {
+        set_error("missing argument");
+        return -2;
+    }
+    if (!at_model_ready()) {
+        set_error("the offline model is not loaded");
+        return -1;
+    }
+    return at_model_submit(text_utf8, target_lang_utf8);
+}
+
+int at_poll(char* out_text, int out_cap)
+{
+    return at_model_poll(out_text, out_cap);
+}
+
 int at_translate(const char* text_utf8, const char* target_lang_utf8, char* out_text, int out_cap)
 {
     if (!text_utf8 || !target_lang_utf8 || !out_text || out_cap <= 0) {
@@ -945,11 +975,15 @@ int at_translate(const char* text_utf8, const char* target_lang_utf8, char* out_
     return at_model_translate(text_utf8, target_lang_utf8, out_text, out_cap);
 }
 
-// 0 = no model on disk, 1 = model files present, 2 = loaded and ready.
+// 0 = no model on disk, 1 = model files present, 2 = loaded and ready,
+// 3 = a background load is running (at_load_model_async).
 int at_model_status(void)
 {
     if (at_model_ready()) {
         return 2;
+    }
+    if (at_model_loading()) {
+        return 3;
     }
 
     char missing[256];

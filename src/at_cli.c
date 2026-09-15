@@ -1031,6 +1031,98 @@ static int cmd_model(int argc, char** argv)
 }
 
 // ---------------------------------------------------------------------------
+// load — the model startup path the game uses
+//
+// Start the load, then poll the status the way a frame callback would. The point is
+// that nothing here waits on the disk: the first call returns at once and the loading
+// happens on a background thread.
+// ---------------------------------------------------------------------------
+static int cmd_load(int argc, char** argv)
+{
+    char out[8192] = { 0 };
+    char text[4096] = { 0 };
+    const char* dir;
+    DWORD start;
+    int status;
+    int rc;
+    int i;
+    int n;
+
+    if (argc < 3) {
+        fprintf(stderr, "usage: at_cli.exe load <model-dir> [target-lang] [text...]\n");
+        return 1;
+    }
+    dir = argv[2];
+
+    printf("model dir  : %s\n", dir);
+    printf("files      : %d/4 present\n", at_set_model_dir(dir));
+
+    start = GetTickCount();
+    rc = at_load_model_async();
+    printf("start      : rc=%d after %lu ms (returns immediately)\n", rc,
+           (unsigned long)(GetTickCount() - start));
+    if (rc < 0) {
+        fprintf(stderr, "load refused: %s\n", at_model_error());
+        return 3;
+    }
+
+    // What the frame callback does: read the status, keep drawing, come back.
+    for (;;) {
+        status = at_model_status();
+        if (status != 3) {
+            break;
+        }
+        if (GetTickCount() - start > 120000) {
+            fprintf(stderr, "load timed out\n");
+            return 3;
+        }
+        Sleep(50);
+    }
+    printf("status     : %d after %lu ms (%s)\n", status, (unsigned long)(GetTickCount() - start),
+           status == 2 ? "loaded and ready" : "not loaded");
+    if (status != 2) {
+        fprintf(stderr, "load failed: %s\n", at_model_error());
+        return 3;
+    }
+
+    if (argc >= 5) {
+        for (i = 4; i < argc; i++) {
+            size_t used = strlen(text);
+            size_t need = strlen(argv[i]);
+            if (used + need + 2 >= sizeof(text)) {
+                break;
+            }
+            if (used) {
+                text[used++] = ' ';
+                text[used] = 0;
+            }
+            strcat(text, argv[i]);
+        }
+
+        rc = at_submit(text, argv[3]);
+        printf("submit     : %d\n", rc);
+        if (rc != 1) {
+            fprintf(stderr, "submit refused: %s\n", at_model_error());
+            return 3;
+        }
+        for (;;) {
+            n = at_poll(out, (int)sizeof(out));
+            if (n != 0) {
+                break;
+            }
+            Sleep(20);
+        }
+        if (n < 0) {
+            fprintf(stderr, "translate failed: %s\n", at_model_error());
+            return 3;
+        }
+        printf("result     : %s\n", out);
+    }
+
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
 // proxy — what would be used, and why
 // ---------------------------------------------------------------------------
 static int cmd_proxy(int argc, char** argv)
@@ -1097,7 +1189,8 @@ static void usage(void)
     printf("  at_cli.exe http <host> <path>\n");
     printf("  at_cli.exe provider <name> <target-lang> <text...> [--key <api-key>]\n");
     printf("  at_cli.exe model <model-dir> <target-lang> <text...>  (offline NLLB, no network)\n");
-    printf("             [--src en|zh-cn|ja|...] [--compute int8|int8_float32|float32|auto|default]\n\n");
+    printf("             [--src en|zh-cn|ja|...] [--compute int8|int8_float32|float32|auto|default]\n");
+    printf("  at_cli.exe load <model-dir> [target-lang] [text...]    (async load + submit/poll)\n\n");
     printf("providers: google_clients5, google_gtx, mymemory, google_api\n");
     printf("any command accepts --proxy <host:port> (e.g. --proxy 127.0.0.1:7890)\n");
 }
@@ -1137,6 +1230,8 @@ int main(int argc, char** argv)
         rc = cmd_provider(argc, argv);
     } else if (_stricmp(argv[1], "model") == 0) {
         rc = cmd_model(argc, argv);
+    } else if (_stricmp(argv[1], "load") == 0) {
+        rc = cmd_load(argc, argv);
     } else {
         fprintf(stderr, "unknown command: %s\n", argv[1]);
         usage();

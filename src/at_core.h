@@ -81,10 +81,22 @@ AT_API int  at_translate(const char* text_utf8, const char* target_lang_utf8,
 AT_API int  at_set_model_dir(const char* dir_utf8);
 
 // Loads the model from the directory set above. 1 = ready, 0 = failed; the reason
-// is in at_model_error().
+// is in at_model_error(). BLOCKS (about a second warm, several seconds cold) - inside
+// the game use at_load_model_async().
 AT_API int  at_load_model(void);
 
-// 0 = no model files found, 1 = files present but not loaded, 2 = loaded and ready.
+// Same, on a background thread: 1 = started, 0 = already loaded/loading, <0 = refused.
+AT_API int  at_load_model_async(void);
+
+// The game-facing translation pair. at_submit hands a string over and returns at once
+// (1 = accepted, 0 = busy, <0 = refused); at_poll collects it a few frames later
+// (0 = still working, > 0 = bytes written, < 0 = failed). Neither ever blocks on
+// inference, which is what keeps the frame callback honest.
+AT_API int  at_submit(const char* text_utf8, const char* target_lang_utf8);
+AT_API int  at_poll(char* out_text, int out_cap);
+
+// 0 = no model files found, 1 = files present but not loaded, 2 = loaded and ready,
+// 3 = a background load is running.
 AT_API int  at_model_status(void);
 
 // Size in bytes of the model files on disk, 0 when there is nothing to load.
