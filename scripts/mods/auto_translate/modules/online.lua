@@ -422,6 +422,38 @@ local function usable_providers(list)
     return out
 end
 
+-- Throws away responses left in the core's result queue.
+--
+-- A request that is already in flight cannot be cancelled, so when a run is
+-- stopped (reload, setting change) its answer arrives later and sits in the queue.
+-- If the next run polls it as "its own" first response, that translation is stored
+-- under the wrong key and EVERY following translation is shifted by one - silent
+-- data corruption. Draining here removes the ones that already arrived; the job id
+-- check in M.update catches the ones still running.
+local function drain_results(mod)
+    if not core or not ensure_buffers() then
+        return 0
+    end
+    local dropped = 0
+    while dropped < 64 do
+        if core.at_http_poll(id_buf, result_buf, code_buf, body_buf, BODY_CAP, len_buf, win_buf) ~= 1 then
+            break
+        end
+        dropped = dropped + 1
+    end
+    if dropped > 0 then
+        util.info(mod, "discarded %d response(s) left over from the previous queue", dropped)
+    end
+    return dropped
+end
+
+-- True when the provider copes with the game's rich-text markup on its own.
+-- DeepL passes "{#color(162,158,145)}Citadel Rakarth Flesh{#reset()}" through
+-- intact and translates the words (verified against the live API), so masking the
+-- tags would only add placeholders it can drop. The free Google endpoints return
+-- such a string untranslated, so for them the tags stay masked.
+local MARKUP_SAFE = { deepl = true }
+
 -- ---------------------------------------------------------------------------
 -- Pacing
 -- ---------------------------------------------------------------------------
@@ -588,6 +620,8 @@ function M.start(mod, report, lang)
 end
 
 function M.stop(mod)
+    -- Drain before clearing: see drain_results() for why this matters.
+    drain_results(mod)
     q_clear()
     inflight = nil
     M.state.running = false
@@ -667,8 +701,9 @@ local function dispatch(mod)
     end
 
     -- Glossary masking: official terms become placeholders so a service cannot
-    -- paraphrase them; they are restored from the token list afterwards.
-    local masked, tokens = glossary.mask(item.en, M.state.lang)
+    -- paraphrase them; they are restored from the token list afterwards. Rich-text
+    -- markup is masked too, but only for providers that cannot handle it.
+    local masked, tokens = glossary.mask(item.en, M.state.lang, not MARKUP_SAFE[provider])
 
     if core.at_online_host(provider, api_key, host_buf, 512) == 0 then
         M.state.last_error = cstr(core.at_online_error())
@@ -845,6 +880,16 @@ function M.update(mod, dt)
         local rc = core.at_http_poll(id_buf, result_buf, code_buf, body_buf, BODY_CAP, len_buf, win_buf)
 
         if rc == 1 then
+            local got_id = id_buf[0]
+
+            -- The answer must belong to the request we are waiting for. A response
+            -- from a queue we already discarded would otherwise be attributed to the
+            -- item in hand, and every later translation would be off by one.
+            if got_id ~= inflight.job then
+                util.info(mod, "discarding stale response %d (waiting for %d)", got_id, inflight.job)
+                return
+            end
+
             local req = inflight
             inflight = nil
             local result = result_buf[0]   -- 0 = completed, <0 = transport failure

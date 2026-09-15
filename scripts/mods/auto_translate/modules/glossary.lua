@@ -126,8 +126,11 @@ end
 local MARKUP = "{[#%w][^{}]*}"
 
 -- Replaces known terms of `lang` with placeholders.
+-- `mask_markup` defaults to true; pass false for a provider that keeps rich-text
+-- markup intact on its own (DeepL does), so no pointless placeholders are added
+-- that it could then drop.
 -- Returns the masked text and the token list (tokens[i].term is the replacement).
-function M.mask(text, lang)
+function M.mask(text, lang, mask_markup)
     if type(text) ~= "string" or text == "" then
         return text, {}
     end
@@ -153,16 +156,18 @@ function M.mask(text, lang)
 
     -- Markup goes into the same token list, so one unmask() restores everything.
     -- Identical tags share a token to keep the placeholder count down.
-    local seen = {}
-    result = result:gsub(MARKUP, function(tag)
-        local index = seen[tag]
-        if not index then
-            tokens[#tokens + 1] = { term = tag, source = tag, markup = true }
-            index = #tokens
-            seen[tag] = index
-        end
-        return PLACEHOLDER_OPEN .. (index - 1) .. PLACEHOLDER_CLOSE
-    end)
+    if mask_markup ~= false then
+        local seen = {}
+        result = result:gsub(MARKUP, function(tag)
+            local index = seen[tag]
+            if not index then
+                tokens[#tokens + 1] = { term = tag, source = tag, markup = true }
+                index = #tokens
+                seen[tag] = index
+            end
+            return PLACEHOLDER_OPEN .. (index - 1) .. PLACEHOLDER_CLOSE
+        end)
+    end
 
     return result, tokens
 end
