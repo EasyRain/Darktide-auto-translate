@@ -133,7 +133,10 @@ function M.mark_stale(mod)
 end
 
 -- Re-localises every mod's widget titles and tooltips from the keys recorded in
--- M.raw. Returns how many strings were actually replaced.
+-- M.raw. Only counts strings that actually change, so the caller can decide
+-- whether a rebuild is worth it: with nothing translated there is nothing to show
+-- and rebuilding the options screen would be pure waste.
+-- Returns how many strings were replaced.
 function M.reapply(mod)
     local dmf = get_mod("DMF")
     if type(dmf) ~= "table" or type(dmf.options_widgets_data) ~= "table" then
@@ -141,6 +144,13 @@ function M.reapply(mod)
     end
 
     local updated = 0
+
+    local function assign(target, field, value)
+        if target[field] ~= value then
+            target[field] = value
+            updated = updated + 1
+        end
+    end
 
     for _, mod_data in ipairs(dmf.options_widgets_data) do
         local header = mod_data[1]
@@ -152,15 +162,14 @@ function M.reapply(mod)
             -- The mod's own entry in the options list.
             local title = target:localize("mod_name")
             if not is_key_missing(title) then
-                header.title = title
+                assign(header, "title", title)
                 if header.readable_mod_name ~= nil then
-                    header.readable_mod_name = title
+                    assign(header, "readable_mod_name", title)
                 end
-                updated = updated + 1
             end
             local description = target:localize("mod_description")
             if not is_key_missing(description) and header.description ~= nil then
-                header.description = description
+                assign(header, "description", description)
             end
 
             -- Its widgets.
@@ -170,8 +179,7 @@ function M.reapply(mod)
                 if keys then
                     local widget_title = target:localize(keys.title or widget.setting_id)
                     if not is_key_missing(widget_title) then
-                        widget.title = widget_title
-                        updated = updated + 1
+                        assign(widget, "title", widget_title)
                     end
 
                     local tooltip
@@ -181,7 +189,7 @@ function M.reapply(mod)
                         tooltip = dmf.quick_localize(target, widget.setting_id .. "_description")
                     end
                     if not is_key_missing(tooltip) then
-                        widget.tooltip = tooltip
+                        assign(widget, "tooltip", tooltip)
                     end
                 end
             end

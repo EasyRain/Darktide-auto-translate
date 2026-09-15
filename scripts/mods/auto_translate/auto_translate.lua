@@ -284,9 +284,18 @@ function mod.update(dt)
         if not iok then
             util.warn(mod, "could not re-inject finished translations: %s", tostring(ierr))
         end
-        -- and make the mod names / settings texts pickable up by the options screen
-        pcall(options_refresh.reapply, mod)
-        options_refresh.mark_stale(mod)
+        -- Pick up the mod names / settings texts the run produced. The options
+        -- screen is only asked to rebuild when one of them really changed: a run
+        -- that only touched text a mod looks up at runtime needs no rebuild at all,
+        -- and once the work is finished nothing here fires again.
+        local refreshed = 0
+        pcall(function()
+            refreshed = options_refresh.reapply(mod)
+        end)
+        if refreshed > 0 then
+            options_refresh.mark_stale(mod)
+            util.info(mod, "%d option string(s) refreshed; close and reopen the options screen to see them", refreshed)
+        end
     end
 end
 
@@ -322,14 +331,18 @@ function mod.reload_translations()
     end
 
     -- DMF turned the option titles into plain strings while the game was starting,
-    -- so re-localise them from the keys recorded at that moment and arrange for the
-    -- options screen to rebuild the next time it is opened.
+    -- so re-localise them from the keys recorded at that moment. Only ask for a
+    -- rebuild when something actually changed - with nothing new to show, clearing
+    -- the cached options would be pure waste.
     local refreshed = options_refresh.reapply(mod)
-    options_refresh.mark_stale(mod)
-    util.info(mod, "re-applied %d option string(s); close and reopen the options screen to see them", refreshed)
-
-    if type(mod.notify) == "function" then
-        pcall(mod.notify, mod, mod:localize("reload_done", refreshed))
+    if refreshed > 0 then
+        options_refresh.mark_stale(mod)
+        util.info(mod, "re-applied %d option string(s); close and reopen the options screen to see them", refreshed)
+        if type(mod.notify) == "function" then
+            pcall(mod.notify, mod, mod:localize("reload_done", refreshed))
+        end
+    else
+        util.info(mod, "no option text needed re-applying; the options screen is left as it is")
     end
 end
 
