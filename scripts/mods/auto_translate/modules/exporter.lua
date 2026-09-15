@@ -1,0 +1,150 @@
+-- exporter.lua — collects official terminology for the current game language.
+--
+-- Why: the game can only be switched to another language through Steam + a
+-- restart, so instead of asking for that repeatedly, every launch writes out the
+-- terms of the CURRENT language (once per language / key list version). The player
+-- closes the game, switches language, launches again — and after a few rounds all
+-- languages are collected.
+--
+-- Output: ../mods/auto_translate/translations/export/<language>.lua
+--     return { lang = "ja", version = 1, exported_at = 0, terms = { ["loc_key"] = "…" } }
+local M = {}
+
+local util
+function M.init(u)
+    util = u
+end
+
+local function load_key_list()
+    local path = util.MOD_DIR .. "/translations/term_keys.lua"
+    if not util.file_exists(path) then
+        return nil, "term_keys.lua not found"
+    end
+    local data, err = util.load_lua_file(path)
+    if type(data) ~= "table" or type(data.keys) ~= "table" then
+        return nil, "term_keys.lua has no 'keys' table (" .. tostring(err) .. ")"
+    end
+    return data
+end
+
+local function export_path(lang)
+    return util.MOD_DIR .. "/translations/export/" .. tostring(lang) .. ".lua"
+end
+
+-- Reads a localization key in the current game language.
+-- Returns nil when the key does not exist (the game hands back the key itself).
+local function lookup(key)
+    local localize = rawget(_G, "Localize")
+    if type(localize) ~= "function" then
+        return nil
+    end
+    local ok, text = pcall(localize, key)
+    if not ok or type(text) ~= "string" or text == "" then
+        return nil
+    end
+    if text == key or text:sub(1, 1) == "<" then
+        return nil
+    end
+    return text
+end
+
+-- Keeps non-ASCII text readable (unlike string.format("%q", ...)).
+local function quote(s)
+    s = tostring(s or "")
+    s = s:gsub("\\", "\\\\"):gsub("\"", "\\\""):gsub("\n", "\\n"):gsub("\r", "")
+    return "\"" .. s .. "\""
+end
+
+local function now()
+    local oslib = (Mods and Mods.lua and Mods.lua.os) or os
+    return (oslib and oslib.time and oslib.time()) or 0
+end
+
+local function serialize(lang, version, terms)
+    local out = {}
+    out[#out + 1] = "-- Auto Translate term export for language: " .. tostring(lang)
+    out[#out + 1] = "-- Generated automatically from the game's own localisation; safe to delete."
+    out[#out + 1] = "return {"
+    out[#out + 1] = "    lang = " .. quote(lang) .. ","
+    out[#out + 1] = string.format("    version = %d,", version or 0)
+    out[#out + 1] = string.format("    exported_at = %d,", now())
+    out[#out + 1] = "    terms = {"
+
+    local keys = {}
+    for k in pairs(terms) do
+        keys[#keys + 1] = k
+    end
+    table.sort(keys)
+
+    for _, k in ipairs(keys) do
+        out[#out + 1] = "        [" .. quote(k) .. "] = " .. quote(terms[k]) .. ","
+    end
+
+    out[#out + 1] = "    },"
+    out[#out + 1] = "}"
+    out[#out + 1] = ""
+    return table.concat(out, "\n")
+end
+
+-- Returns true when this run exported something.
+function M.run(mod, lang)
+    local list, err = load_key_list()
+    if not list then
+        util.warn(mod, "term export skipped: %s", tostring(err))
+        return false
+    end
+
+    local path = export_path(lang)
+
+    -- already collected for this language at the current key list version?
+    if util.file_exists(path) then
+        local existing = util.load_lua_file(path)
+        if type(existing) == "table" and existing.version == list.version then
+            util.log(mod, "terms for '%s' already exported (version %s)", lang, tostring(list.version))
+            return false
+        end
+    end
+
+    local terms = {}
+    local missing = 0
+    for _, key in ipairs(list.keys) do
+        local text = lookup(key)
+        if text then
+            terms[key] = text
+        else
+            missing = missing + 1
+        end
+    end
+
+    local count = 0
+    for _ in pairs(terms) do
+        count = count + 1
+    end
+
+    if count == 0 then
+        util.warn(mod, "term export: no key resolved (is Localize() available? language '%s')", tostring(lang))
+        return false
+    end
+
+    util.ensure_dir(util.MOD_DIR .. "/translations/export")
+    local ok = util.write_file_atomic(path, serialize(lang, list.version, terms))
+    if not ok then
+        util.warn(mod, "term export: could not write %s", path)
+        return false
+    end
+
+    util.info(mod, "exported %d term(s) for '%s' (skipped %d unknown keys) -> translations/export/%s.lua",
+        count, tostring(lang), missing, tostring(lang))
+
+    local message = mod:localize("term_export_done", tostring(lang), count)
+    if type(mod.notify) == "function" then
+        pcall(mod.notify, mod, message)
+    end
+    if type(mod.echo) == "function" then
+        pcall(mod.echo, mod, message)
+    end
+
+    return true
+end
+
+return M

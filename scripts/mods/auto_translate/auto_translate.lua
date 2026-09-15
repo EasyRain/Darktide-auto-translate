@@ -25,6 +25,9 @@ engines.init(util, store)
 local glossary = mod:io_dofile(BASE .. "glossary")
 glossary.init(util)
 
+local exporter = mod:io_dofile(BASE .. "exporter")
+exporter.init(util)
+
 -- Language we translate INTO (configured, or the game's current language).
 local function current_lang()
     return util.target_language(mod)
@@ -177,6 +180,13 @@ function mod.on_all_mods_loaded()
     local ok, err = pcall(run_pipeline, "startup")
     if not ok then
         util.warn(mod, "startup pipeline error: %s", tostring(err))
+    end
+
+    -- Collect the current language's official terminology (independent of the
+    -- translation switches: it only writes a file, so it is always safe).
+    local eok, eerr = pcall(exporter.run, mod, current_lang())
+    if not eok then
+        util.warn(mod, "term export failed: %s", tostring(eerr))
     end
 end
 

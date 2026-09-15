@@ -87,6 +87,10 @@ return {
         en = "Test glossary",
         ["zh-cn"] = "术语表自检",
     },
+    term_export_done = {
+        en = "Auto Translate: exported %d term(s) for language '%s'. You can close the game, switch the language in Steam and launch once more.",
+        ["zh-cn"] = "Auto Translate：已导出「%s」的 %d 条术语。现在可以关闭游戏，去 Steam 切换语言后再启动一次。",
+    },
     test_glossary_description = {
         en = "Shows in the log how known terms are masked before translation and restored afterwards.",
         ["zh-cn"] = "在日志中演示已知术语在翻译前如何被占位、翻译后如何还原。",
