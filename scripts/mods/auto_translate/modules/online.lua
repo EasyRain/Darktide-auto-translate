@@ -707,6 +707,14 @@ local function dispatch(mod)
         return false
     end
 
+    -- A request from a run we already threw away can still be finishing, and its
+    -- answer would sit at the head of the result queue. Nothing of ours is in flight
+    -- here (dispatch is only reached with inflight == nil), so anything already
+    -- queued belongs to the old run: dropping it here means the next poll cannot
+    -- mistake it for our own first response and shift every later translation by one.
+    -- The job-id check in M.update covers whatever is still running right now.
+    drain_results(mod)
+
     local provider = nil
     for i = item.provider_index or 1, #item.providers do
         if not disabled_providers[item.providers[i]] then
