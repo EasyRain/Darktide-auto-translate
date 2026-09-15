@@ -125,7 +125,9 @@ local function check_engine_settings(lang)
     -- local model selected but its files are not downloaded yet
     if engines.is_local_engine(engine) and not engines.model_available(engine) then
         util.warn(mod, "engine '%s' is selected but its model is not downloaded", engine)
-        local message = mod:localize("model_missing")
+        -- The path is part of the message: with no automatic download yet, copying the
+        -- files there is the only thing the player can do.
+        local message = mod:localize("model_missing", tostring(engines.model_dir(engine)))
         if type(mod.notify) == "function" then
             pcall(mod.notify, mod, message)
         end
@@ -442,7 +444,19 @@ end
 
 mod.on_setting_changed = function(setting_id)
     if setting_id == "download_model_small" or setting_id == "download_model_large" then
-        util.info(mod, "model download toggles are registered but the downloader is not implemented yet")
+        -- The downloader is not written yet. Logging that only was the wrong call: the
+        -- player flips the switch, nothing happens, and there is no way to tell whether
+        -- it is broken or simply absent. So the notice is player-visible and says what
+        -- to do instead.
+        local which = setting_id == "download_model_large" and "large" or "small"
+        local dir = util.MOD_DIR .. "/models/" .. which
+        util.warn(mod, "the automatic model download is not implemented yet; place the 4 model files in %s", dir)
+        if type(mod.notify) == "function" then
+            pcall(mod.notify, mod, mod:localize("model_download_missing", dir))
+        end
+        if type(mod.echo) == "function" then
+            pcall(mod.echo, mod, mod:localize("model_download_missing", dir))
+        end
     elseif setting_id == "target_language" or setting_id == "engine"
         or setting_id == "online_api_key" or setting_id == "proxy" then
         -- These all change what the queue should even contain, so stopping is not

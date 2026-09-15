@@ -146,32 +146,40 @@ return {
         ["zh-cn"] = "Google Cloud 翻译",
     },
     engine_auto_description = {
-        en = "Automatic: the official API when a key is set, otherwise the largest downloaded offline model. The free public services are no longer used - they are rate limited and blocked too easily.",
-        ["zh-cn"] = "自动：填了密钥就用正式 API，否则用已下载的最大离线模型。不再使用免费公共服务——它们限流严重且容易被掐。",
+        en = "Automatic: the API when a key is set, otherwise the largest downloaded offline model.",
+        ["zh-cn"] = "自动：填了密钥就用正式 API，否则用已下载的最大离线模型。",
     },
     model_missing = {
-        en = "Auto Translate: a local model engine is selected but its model is not downloaded yet. Turn on the matching model download option (or switch to an online engine) to start translating.",
-        ["zh-cn"] = "Auto Translate：已选择本地模型引擎，但模型尚未下载。请打开对应模型的下载开关（或改用在线引擎），之后才会开始翻译。",
+        en = "Auto Translate: a local model engine is selected but its model is not downloaded. Automatic download is not implemented yet - copy the four model files (model.bin, config.json, shared_vocabulary.json, sentencepiece.bpe.model) into: %s",
+        ["zh-cn"] = "Auto Translate：已选择本地模型引擎，但模型尚未下载。自动下载功能尚未实现——请把 4 个模型文件（model.bin、config.json、shared_vocabulary.json、sentencepiece.bpe.model）放到：%s",
     },
+    model_download_missing = {
+        en = "Auto Translate: the automatic model download is not implemented yet. Place the 4 model files (model.bin, config.json, shared_vocabulary.json, sentencepiece.bpe.model) in: %s",
+        ["zh-cn"] = "Auto Translate：自动下载功能尚未实现。请把 4 个模型文件（model.bin、config.json、shared_vocabulary.json、sentencepiece.bpe.model）放到：%s",
+    },
+    -- DMF shows this as the setting's hover tooltip (options.lua: it falls back to
+    -- "<setting_id>_description" when the option has no explicit tooltip key), which is
+    -- where the explanations belong - in the dropdown itself they made every entry too
+    -- long to read.
     engine_description = {
-        en = "Which engine is used for new translations. The offline models need no network at all; the API is more accurate.",
-        ["zh-cn"] = "选择用于翻译新文本的引擎。离线模型完全不需要网络；正式 API 的译文质量更好。",
+        en = "Which engine is used for new translations.\nAutomatic: the API when a key is set, otherwise the largest downloaded model.\nOnline API: best quality, needs a key.\nLocal model (large, ~1.3 GB): offline fallback.\nLocal model (small, ~600 MB): NOT RECOMMENDED - too few parameters, it invents text for short labels and drops parts of longer sentences.",
+        ["zh-cn"] = "选择用于翻译新文本的引擎。\n自动：填了密钥就用正式 API，否则用已下载的最大离线模型。\n在线（正式 API）：质量最好，需要密钥。\n本地模型（大，约 1.3 GB）：离线兜底。\n本地模型（小，约 600 MB）：不推荐——参数太少，短标签容易产生幻觉，长句还会丢内容。",
     },
     engine_auto = {
         en = "Automatic (recommended)",
         ["zh-cn"] = "自动（推荐）",
     },
     engine_online_api = {
-        en = "Online (official API, needs key) - best quality",
-        ["zh-cn"] = "在线（正式 API，需密钥）——质量最好",
+        en = "Online (official API)",
+        ["zh-cn"] = "在线（正式 API）",
     },
     engine_local_small = {
-        en = "Local model (small, ~600 MB) - NOT RECOMMENDED: too few parameters, it invents text and drops parts of longer sentences",
-        ["zh-cn"] = "本地模型（小，约 600 MB）——不推荐：参数太少，容易产生幻觉，长句还会丢内容",
+        en = "Local model (small)",
+        ["zh-cn"] = "本地模型（小）",
     },
     engine_local_large = {
-        en = "Local model (large, ~1.3 GB) - offline fallback, better than the small one",
-        ["zh-cn"] = "本地模型（大，约 1.3 GB）——离线兜底，比小模型好",
+        en = "Local model (large)",
+        ["zh-cn"] = "本地模型（大）",
     },
     online_api_key = {
         en = "API key",
@@ -206,17 +214,19 @@ return {
         en = "Download small model",
         ["zh-cn"] = "下载小模型",
     },
+    -- The automatic downloader is not written yet, so these tooltips say what the
+    -- switch does today instead of promising a download that never starts.
     download_model_small_description = {
-        en = "Turn on to download, turn off to delete the local file.",
-        ["zh-cn"] = "开启开始下载，关闭则删除本地文件。",
+        en = "Automatic download is not implemented yet - this switch does nothing at the moment. To use the small model, copy the four files into models/small inside the mod folder (the mod console and show_status report the exact path).",
+        ["zh-cn"] = "自动下载功能尚未实现，此开关目前无作用。若要使用小模型，请把 4 个模型文件手动放到本 mod 的 models/small 目录（日志与「显示状态」按钮会给出完整路径）。",
     },
     download_model_large = {
         en = "Download large model",
         ["zh-cn"] = "下载大模型",
     },
     download_model_large_description = {
-        en = "Turn on to download, turn off to delete the local file.",
-        ["zh-cn"] = "开启开始下载，关闭则删除本地文件。",
+        en = "Automatic download is not implemented yet - this switch does nothing at the moment. To use the large model, copy the four files into models/large inside the mod folder (the mod console and show_status report the exact path).",
+        ["zh-cn"] = "自动下载功能尚未实现，此开关目前无作用。若要使用大模型，请把 4 个模型文件手动放到本 mod 的 models/large 目录（日志与「显示状态」按钮会给出完整路径）。",
     },
     progress_hud = {
         en = "Show progress",
