@@ -87,9 +87,22 @@ return {
         en = "Test glossary",
         ["zh-cn"] = "术语表自检",
     },
+    -- NOTE for all term_export_* keys: placeholder order is always %d first, then %s.
     term_export_done = {
-        en = "Auto Translate: exported terms for language '%s' (%d entries). You can close the game, switch the language in Steam and launch once more.",
-        ["zh-cn"] = "Auto Translate：已导出「%s」的 %d 条术语。现在可以关闭游戏，去 Steam 切换语言后再启动一次。",
+        en = "Auto Translate: exported %d term(s) for '%s'.",
+        ["zh-cn"] = "Auto Translate：已导出 %d 条术语（%s）。",
+    },
+    term_export_skipped = {
+        en = "Auto Translate: %d term(s) for '%s' were collected earlier already, nothing to export.",
+        ["zh-cn"] = "Auto Translate：%d 条术语（%s）此前已收集过，无需重复导出。",
+    },
+    term_export_progress = {
+        en = "Auto Translate: term collection progress %d/%d, still missing: %s. Close the game, switch language in Steam, launch again.",
+        ["zh-cn"] = "Auto Translate：术语收集进度 %d/%d，还缺：%s。关闭游戏、在 Steam 切换语言后再启动一次。",
+    },
+    term_export_all_done = {
+        en = "all languages",
+        ["zh-cn"] = "全部完成",
     },
     test_glossary_description = {
         en = "Shows in the log how known terms are masked before translation and restored afterwards.",

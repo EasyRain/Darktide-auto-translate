@@ -15,6 +15,52 @@ function M.init(u)
     util = u
 end
 
+-- Languages the game ships (used for the "what is still missing" progress note).
+local TRACKED_LANGS = { "en", "zh-cn", "zh-tw", "ja", "ko", "ru", "de", "fr", "es", "it", "pl", "pt-br" }
+
+local function export_path(lang)
+    return util.MOD_DIR .. "/translations/export/" .. tostring(lang) .. ".lua"
+end
+
+-- Returns done[], missing[], done_count, total
+function M.progress()
+    local done, missing = {}, {}
+    for _, lang in ipairs(TRACKED_LANGS) do
+        if util.file_exists(export_path(lang)) then
+            done[#done + 1] = lang
+        else
+            missing[#missing + 1] = lang
+        end
+    end
+    return done, missing, #done, #TRACKED_LANGS
+end
+
+-- Number of terms in an existing export file (for the "already collected" note).
+local function existing_count(lang)
+    local data = util.load_lua_file(export_path(lang))
+    if type(data) ~= "table" or type(data.terms) ~= "table" then
+        return nil
+    end
+    local n = 0
+    for _ in pairs(data.terms) do
+        n = n + 1
+    end
+    return n
+end
+
+local function notify(mod, key, ...)
+    local ok, message = pcall(mod.localize, mod, key, ...)
+    if not ok or type(message) ~= "string" or message == "" then
+        return
+    end
+    if type(mod.notify) == "function" then
+        pcall(mod.notify, mod, message)
+    end
+    if type(mod.echo) == "function" then
+        pcall(mod.echo, mod, message)
+    end
+end
+
 local function load_key_list()
     local path = util.MOD_DIR .. "/translations/term_keys.lua"
     if not util.file_exists(path) then
@@ -25,10 +71,6 @@ local function load_key_list()
         return nil, "term_keys.lua has no 'keys' table (" .. tostring(err) .. ")"
     end
     return data
-end
-
-local function export_path(lang)
-    return util.MOD_DIR .. "/translations/export/" .. tostring(lang) .. ".lua"
 end
 
 -- Reads a localization key in the current game language.
@@ -101,6 +143,9 @@ function M.run(mod, lang)
         local existing = util.load_lua_file(path)
         if type(existing) == "table" and existing.version == list.version then
             util.log(mod, "terms for '%s' already exported (version %s)", lang, tostring(list.version))
+            local count = existing_count(lang) or 0
+            notify(mod, "term_export_skipped", count, tostring(lang))
+            M.notify_progress(mod)
             return false
         end
     end
@@ -136,24 +181,18 @@ function M.run(mod, lang)
     util.info(mod, "exported %d term(s) for '%s' (skipped %d unknown keys) -> translations/export/%s.lua",
         count, tostring(lang), missing, tostring(lang))
 
-    -- Note: %s (language) comes before %d (count) in every translation of this key,
-    -- and the call is pcall'ed so a bad format string can never break the export.
-    local message
-    local mok, mres = pcall(mod.localize, mod, "term_export_done", tostring(lang), count)
-    if mok and type(mres) == "string" and mres ~= "" then
-        message = mres
-    end
-
-    if message then
-        if type(mod.notify) == "function" then
-            pcall(mod.notify, mod, message)
-        end
-        if type(mod.echo) == "function" then
-            pcall(mod.echo, mod, message)
-        end
-    end
+    -- Note: placeholders are ordered %d then %s in every translation of these keys.
+    notify(mod, "term_export_done", count, tostring(lang))
+    M.notify_progress(mod)
 
     return true
+end
+
+-- Tells the player how many languages are collected and which ones are still missing.
+function M.notify_progress(mod)
+    local _, missing, done, total = M.progress()
+    local missing_text = (#missing > 0) and table.concat(missing, ", ") or mod:localize("term_export_all_done")
+    notify(mod, "term_export_progress", done, total, missing_text)
 end
 
 return M
