@@ -236,6 +236,41 @@ end
 -- returns this character, so the check costs the online path nothing.
 local UNK_MARKER = "\226\129\135"   -- UTF-8 for U+2047, written byte-wise: Lua 5.1
 
+-- Characters, not bytes: Lua's '#' counts bytes, so a 13-character Chinese translation
+-- measures 39 - which made the first version of the guard below let the truncated
+-- description through. This counts UTF-8 lead bytes, which LuaJIT can do without a
+-- utf8 library.
+local function char_count(text)
+    local n = 0
+    for i = 1, #text do
+        local b = text:byte(i)
+        if not b or b < 0x80 or b >= 0xC0 then
+            n = n + 1
+        end
+    end
+    return n
+end
+
+-- A translation that keeps only a fraction of the source is not a translation.
+--
+-- The offline model truncates: "Match curios whose Health blessing is at least this
+-- percent (max roll 21). 0 disables this check." (102 characters) came back as
+-- "請與此相關的好奇心相匹配," (13), with "curios" read as "curiosity" - two thirds of the
+-- sentence simply gone, and nothing above noticed because the format-specifier check
+-- has nothing to compare when the source carries no specifiers.
+--
+-- The bar is deliberately low, because Chinese, Japanese and Korean are far more
+-- compact than English: a fourth of the character count means content was dropped, not
+-- that the target language is concise. Short strings are exempt - a label is short by
+-- nature - which is also why this cannot replace the guards above.
+local function too_short(source, translated)
+    local source_chars = char_count(source)
+    if source_chars < 30 then
+        return false
+    end
+    return char_count(translated) * 4 < source_chars
+end
+
 -- Returns true when the translation is safe to store, or false plus a reason.
 function M.text_is_safe(source, translated)
     if type(source) ~= "string" or type(translated) ~= "string" or translated == "" then
@@ -244,6 +279,11 @@ function M.text_is_safe(source, translated)
 
     if translated:find(UNK_MARKER, 1, true) then
         return false, "the model could not represent part of the text (unknown tokens)"
+    end
+
+    if too_short(source, translated) then
+        return false, string.format("the translation dropped most of the text (%d characters for %d)",
+                                    #translated, #source)
     end
 
     local src_counts, src_total = scan_format(source)

@@ -63,6 +63,22 @@ check("text_is_safe('%s', '没有任何问题')", online.text_is_safe("%s", "没
 check("text_is_safe('%d ms', '%d 毫秒')", online.text_is_safe("%d ms", "%d 毫秒"), true)
 check("text_is_safe('Ammo', '')", online.text_is_safe("Ammo", ""), false)
 
+-- The truncation guard, with the string that got through in game: the offline model
+-- returned a quarter of it ("curios" also read as "curiosity"), and nothing refused it
+-- because the source carries no format specifiers to compare.
+local long_en = "Match curios whose Health blessing is at least this percent (max roll 21). 0 disables this check."
+check("text_is_safe(truncated description)",
+    online.text_is_safe(long_en, "請與此相關的好奇心相匹配,"), false)
+check("text_is_safe(full description, zh-cn)",
+    online.text_is_safe(long_en, "匹配生命祝福至少达到此百分比（最大值为21）的圣物。0 禁用此检查。"), true)
+-- A genuinely compact target language must still pass: German runs longer than English,
+-- Chinese shorter, and the bar has to leave room for both.
+check("text_is_safe(short but complete)",
+    online.text_is_safe("Shows the thin colored line above the connection values.",
+                        "顯示連接數值上方的細彩色線條。"), true)
+check("text_is_safe(label unaffected)",
+    online.text_is_safe("Ammo", "彈"), true)
+
 print(string.format("%d failure(s)", failures))
 
 -- ---------------------------------------------------------------------------
