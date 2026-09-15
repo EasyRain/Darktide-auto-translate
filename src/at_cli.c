@@ -1031,6 +1031,108 @@ static int cmd_model(int argc, char** argv)
 }
 
 // ---------------------------------------------------------------------------
+// queue — translate several strings in sequence, the way the game's queue does
+//
+// This is the regression test for the pairing between a submitted string and the
+// answer that comes back. One translate proves nothing here: an off-by-one only
+// shows up on the second and later items, which is exactly the bug this
+// reproduces (stored translations belonging to the previous key).
+// ---------------------------------------------------------------------------
+static int cmd_queue(int argc, char** argv)
+{
+    char out[8192] = { 0 };
+    const char* dir;
+    const char* lang;
+    int i;
+    int problems = 0;
+
+    if (argc < 5) {
+        fprintf(stderr, "usage: at_cli.exe queue <model-dir> <target-lang> <text> [text...]\n");
+        return 1;
+    }
+    dir = argv[2];
+    lang = argv[3];
+
+    printf("loading     : %s\n", dir);
+    if (!at_model_load(dir)) {
+        fprintf(stderr, "load failed: %s\n", at_model_error());
+        return 3;
+    }
+
+    // The regression this command exists for: a submit issued while the previous
+    // string is still being translated must be refused. It used to be accepted, and
+    // the core then held two results while the caller polled one per frame, which
+    // shifted every later translation onto the next key.
+    {
+        int first = at_submit(argv[4], lang);
+        int second = first == 1 ? at_submit(argv[5], lang) : 0;
+        int n;
+
+        printf("double submit: first=%d second=%d (second must be 0)\n", first, second);
+        if (first == 1 && second != 0) {
+            printf("FAIL: a second submit was accepted while the first was running\n");
+            problems++;
+        }
+
+        // Collect the first one; it must belong to the first string.
+        for (;;) {
+            n = at_poll(out, (int)sizeof(out));
+            if (n != 0) {
+                break;
+            }
+            Sleep(5);
+        }
+        printf("first result : %s -> %s\n", argv[4], n > 0 ? out : at_model_error());
+
+        // Then the second, which was refused and has to be submitted again.
+        if (second == 0 && at_submit(argv[5], lang) != 1) {
+            printf("FAIL: the refused string could not be submitted afterwards\n");
+            problems++;
+        } else {
+            for (;;) {
+                n = at_poll(out, (int)sizeof(out));
+                if (n != 0) {
+                    break;
+                }
+                Sleep(5);
+            }
+            printf("second result: %s -> %s\n", argv[5], n > 0 ? out : at_model_error());
+        }
+    }
+
+    for (i = 4; i < argc; i++) {
+        const char* text = argv[i];
+        int accepted;
+        int n;
+
+        accepted = at_submit(text, lang);
+        if (accepted != 1) {
+            printf("[%02d] %-34s -> submit refused (%d): %s\n", i - 3, text, accepted, at_model_error());
+            problems++;
+            continue;
+        }
+
+        for (;;) {
+            n = at_poll(out, (int)sizeof(out));
+            if (n != 0) {
+                break;
+            }
+            Sleep(5);
+        }
+
+        if (n < 0) {
+            printf("[%02d] %-34s -> FAILED %s\n", i - 3, text, at_model_error());
+            problems++;
+        } else {
+            printf("[%02d] %-34s -> %s\n", i - 3, text, out);
+        }
+    }
+
+    printf("%d item(s), %d problem(s)\n", argc - 4, problems);
+    return problems ? 1 : 0;
+}
+
+// ---------------------------------------------------------------------------
 // load — the model startup path the game uses
 //
 // Start the load, then poll the status the way a frame callback would. The point is
@@ -1232,6 +1334,8 @@ int main(int argc, char** argv)
         rc = cmd_model(argc, argv);
     } else if (_stricmp(argv[1], "load") == 0) {
         rc = cmd_load(argc, argv);
+    } else if (_stricmp(argv[1], "queue") == 0) {
+        rc = cmd_queue(argc, argv);
     } else {
         fprintf(stderr, "unknown command: %s\n", argv[1]);
         usage();

@@ -473,7 +473,26 @@ std::mutex g_job_lock;
 std::condition_variable g_job_cv;
 bool g_job_thread_started = false;
 bool g_job_pending = false;
-bool g_job_done = false;
+// One job in flight, strictly - and this needs a real state, not a "pending" flag.
+//
+// The first version cleared the pending flag the moment the worker picked the job
+// up, so while a translation was being computed the core looked idle and a second
+// submit was accepted. The core then produced two results in a row while the caller
+// - which polls once per frame - attributed the first one to the second string.
+// From that point every translation belonged to the next key, for the rest of the
+// run, silently: it was found in the game log as a chain of off-by-one entries
+// (bar_color_cooldown holding bar_color's translation).
+//
+// With the state below, a submit is refused until the previous result has actually
+// been collected, so submit/poll stay paired no matter how the caller interleaves
+// them.
+enum {
+    JOB_IDLE = 0,       // nothing to do, nothing to collect
+    JOB_RUNNING = 1,    // accepted; queued or being computed
+    JOB_DONE = 2,       // finished, the result is waiting for at_model_poll
+};
+
+int g_job_state = JOB_IDLE;   // guarded by g_job_lock
 std::string g_job_text;
 std::string g_job_lang;
 std::string g_job_result;
@@ -486,10 +505,12 @@ void job_worker()
         std::string lang;
         {
             std::unique_lock<std::mutex> lock(g_job_lock);
-            g_job_cv.wait(lock, []() { return g_job_pending; });
+            // Only RUNNING is work to pick up: DONE means "waiting to be collected",
+            // and treating that as work would translate the same string twice.
+            g_job_cv.wait(lock, []() { return g_job_state == JOB_RUNNING; });
             text = g_job_text;
             lang = g_job_lang;
-            g_job_pending = false;
+            // deliberately left RUNNING for the whole computation
         }
 
         std::string result;
@@ -503,7 +524,7 @@ void job_worker()
             std::lock_guard<std::mutex> lock(g_job_lock);
             g_job_result = result;
             g_job_rc = rc;
-            g_job_done = true;
+            g_job_state = JOB_DONE;
         }
     }
 }
@@ -524,7 +545,9 @@ int at_model_submit(const char* text_utf8, const char* target_lang_utf8)
 
     {
         std::lock_guard<std::mutex> lock(g_job_lock);
-        if (g_job_pending || g_job_done) {
+        // Busy, or a result nobody has collected yet: either way a new job would
+        // push the pairing out of step (see the note above job_worker).
+        if (g_job_state != JOB_IDLE) {
             return 0;
         }
         if (!g_job_thread_started) {
@@ -538,8 +561,7 @@ int at_model_submit(const char* text_utf8, const char* target_lang_utf8)
         g_job_lang = target_lang_utf8;
         g_job_result.clear();
         g_job_rc = 0;
-        g_job_pending = true;
-        g_job_done = false;
+        g_job_state = JOB_RUNNING;
     }
 
     g_job_cv.notify_one();
@@ -555,11 +577,11 @@ int at_model_poll(char* out_text, int cap)
     }
 
     std::lock_guard<std::mutex> lock(g_job_lock);
-    if (!g_job_done) {
+    if (g_job_state != JOB_DONE) {
         return 0;
     }
 
-    g_job_done = false;
+    g_job_state = JOB_IDLE;
     if (g_job_rc < 0) {
         return g_job_rc;
     }

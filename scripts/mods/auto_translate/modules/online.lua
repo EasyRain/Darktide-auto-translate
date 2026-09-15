@@ -228,10 +228,22 @@ local function scan_format(text)
     return counts, total, strays
 end
 
+-- The offline model marks anything it could not represent with SentencePiece's
+-- unknown-token marker (U+2047). It appears whenever the model produced <unk> -
+-- an out-of-vocabulary word, or a glossary placeholder whose bracket characters it
+-- could not encode - and it means content was lost. Stored, it shows up in the game
+-- as "⁇" in the middle of a sentence, so it is refused instead. A service never
+-- returns this character, so the check costs the online path nothing.
+local UNK_MARKER = "\226\129\135"   -- UTF-8 for U+2047, written byte-wise: Lua 5.1
+
 -- Returns true when the translation is safe to store, or false plus a reason.
 function M.text_is_safe(source, translated)
     if type(source) ~= "string" or type(translated) ~= "string" or translated == "" then
         return false, "empty translation"
+    end
+
+    if translated:find(UNK_MARKER, 1, true) then
+        return false, "the model could not represent part of the text (unknown tokens)"
     end
 
     local src_counts, src_total = scan_format(source)
@@ -255,6 +267,30 @@ end
 -- Text with no letters at all ("12", "—", "100") has nothing to translate.
 local function has_letters(text)
     return tostring(text or ""):find("[%a]") ~= nil
+end
+
+-- Key labels - "[F10]", "[TAB]", "[Ctrl+S]", "[Mouse 1]" - are key names, not prose.
+--
+-- A translation service returns them untouched, which is why they were never a
+-- problem before; the offline model answers them with an invented sentence instead
+-- ("[TAB]" came back as "這就是我想要的.", "[F10]" as "沒有任何其他方法"), which then
+-- gets stored and shown in the game's UI. Skipping them is the honest fix: there is
+-- nothing to translate in a key name.
+local function is_key_label(text)
+    return text:match("^%[.-%]$") ~= nil
+end
+
+local function translatable(text, lang)
+    if not has_letters(text) then
+        return false
+    end
+    if is_key_label(text) then
+        return false
+    end
+    if CJK_TARGETS[lang] and contains_cjk(text) then
+        return false
+    end
+    return true
 end
 
 -- Colour-picker entries: the whole string is one {#color(r,g,b)}...#reset() run.
@@ -295,16 +331,6 @@ local function contains_cjk(text)
         end
     end
     return false
-end
-
-local function translatable(text, lang)
-    if not has_letters(text) then
-        return false
-    end
-    if CJK_TARGETS[lang] and contains_cjk(text) then
-        return false
-    end
-    return true
 end
 
 -- ---------------------------------------------------------------------------
