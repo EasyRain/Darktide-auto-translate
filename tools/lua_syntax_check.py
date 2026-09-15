@@ -5,16 +5,15 @@
 # this parses the files instead of running them (running them would call get_mod()
 # and fail for reasons that have nothing to do with syntax).
 #
-# Two parsers, best first:
-#   1. a real Lua binary - luac55 -p (or LUA_SYNTAX_LUAC=...) parses without running,
-#      which is exactly what is wanted. D:\Tools\Lua\luac55.exe is picked up even when
-#      it is not on PATH.
-#   2. lupa (Lua bindings for Python) if no binary is around: `pip install lupa`.
+# Three parsers, best first:
+#   1. LuaJIT - the runtime the game itself uses (5.1 plus a little 5.2), so parsing
+#      with it is the faithful check. tools/luajit_parse.lua does the work.
+#   2. luac55 -p: a real Lua parser, but 5.5, which accepts a superset and would not
+#      catch a 5.3+ feature the game rejects. D:\Tools\Lua\luac55.exe is picked up
+#      even when it is not on PATH.
+#   3. lupa (Lua bindings for Python) if no binary is around: `pip install lupa`.
 #
-# Caveat either way: both are Lua 5.5, while the game runs LuaJIT (5.1 + a bit of
-# 5.2). 5.5 accepts a superset, so this catches real syntax errors but would NOT catch
-# a 5.3+ feature the game rejects - that is how "\u{27E6}" in a string once slipped
-# through. Dropping a luajit.exe next to this script would close that gap.
+# Override either path with LUA_SYNTAX_LUAJIT / LUA_SYNTAX_LUAC.
 #
 #   python tools/lua_syntax_check.py
 import glob
@@ -23,8 +22,15 @@ import shutil
 import subprocess
 import sys
 
-ROOT = os.path.normpath(os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), "..", "scripts"))
+HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.normpath(os.path.join(HERE, "..", "scripts"))
+PARSER_LUA = os.path.join(HERE, "luajit_parse.lua")
+
+KNOWN_LUAJIT = [
+    os.environ.get("LUA_SYNTAX_LUAJIT", ""),
+    shutil.which("luajit") or "",
+    r"D:\Tools\Lua\luajit\src\luajit.exe",
+]
 
 KNOWN_LUAC = [
     os.environ.get("LUA_SYNTAX_LUAC", ""),
@@ -33,11 +39,21 @@ KNOWN_LUAC = [
 ]
 
 
-def find_luac():
-    for path in KNOWN_LUAC:
+def first_existing(candidates):
+    for path in candidates:
         if path and os.path.isfile(path):
             return path
     return None
+
+
+def check_with_luajit(luajit, files):
+    # One process for all files: LuaJIT parses them with loadfile() and exits non-zero
+    # if any of them has a syntax error.
+    proc = subprocess.run([luajit, PARSER_LUA] + files, capture_output=True, text=True)
+    print((proc.stdout or "").strip() or f"parser: {luajit}")
+    if proc.stderr:
+        print(proc.stderr.rstrip())
+    return proc.returncode != 0 and 1 or 0, proc.returncode
 
 
 def check_with_luac(luac, files):
@@ -74,11 +90,21 @@ def main():
         print("no Lua files found under", ROOT)
         return 1
 
-    luac = find_luac()
+    luajit = first_existing(KNOWN_LUAJIT)
+    luac = first_existing(KNOWN_LUAC)
+
+    if luajit:
+        failed, code = check_with_luajit(luajit, files)
+        return code
+    if luac:
+        failed = check_with_luac(luac, files)
+        print(f"{len(files)} file(s) parsed, {failed} failed")
+        return 1 if failed else 0
+
     try:
-        failed = check_with_luac(luac, files) if luac else check_with_lupa(files)
+        failed = check_with_lupa(files)
     except ImportError:
-        print("no Lua parser available: set LUA_SYNTAX_LUAC to a luac binary, or")
+        print("no Lua parser available: set LUA_SYNTAX_LUAJIT / LUA_SYNTAX_LUAC, or")
         print("`pip install lupa`")
         return 2
 

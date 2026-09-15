@@ -313,6 +313,12 @@ that quietly fails to load:
 python tools\lua_syntax_check.py                 # parses all 13 files, runs nothing
 ```
 
+It parses with **LuaJIT when one is available** (`D:\Tools\Lua\luajit\src\luajit.exe`
+is found even when it is not on PATH, or set `LUA_SYNTAX_LUAJIT`), because LuaJIT is
+the runtime the game uses. Falling back to `luac55 -p` or `lupa` still catches ordinary
+mistakes, but those are Lua 5.5 and accept a superset: a file using `//` or a `\u{}`
+escape passes there and is rejected by the game.
+
 `selftest` is the useful one: it exercises the JSON reader, URL building, language code
 mapping, HTML entity decoding and every provider's response parsing — the same code the game
 runs — and exits non-zero on the first mismatch.
