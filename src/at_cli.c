@@ -936,6 +936,14 @@ static int cmd_model(int argc, char** argv)
                files < 4 ? ", missing: " : "", missing);
         printf("size       : %.1f MB\n", (double)bytes / (1024.0 * 1024.0));
 
+        // How many of the table's languages this model file really covers.
+        {
+            char absent[256] = { 0 };
+            const int have = at_model_check_vocab(argv[2], absent, (int)sizeof(absent));
+            printf("languages  : %d/%d present%s%s\n", have, at_model_lang_count(),
+                   have < at_model_lang_count() ? ", missing: " : "", absent);
+        }
+
         char flores[32] = { 0 };
         if (at_model_lang_code(argv[3], flores, (int)sizeof(flores))) {
             printf("lang code  : %s -> %s\n", argv[3], flores);

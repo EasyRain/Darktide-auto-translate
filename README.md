@@ -163,6 +163,41 @@ look like a vocabulary or precision problem when it is neither. Compute type
 `shared_vocabulary.json` (an extra `<pad>` at index 1) and the language-token ids were
 all checked and are **not** the cause.
 
+### Languages
+
+The engine covers everything Lingua Imperialis covers, plus the game's split
+scripts. Every row was checked against the real model (`EN → X`,
+"The Emperor protects"):
+
+| key | language | FLORES-200 |
+| --- | --- | --- |
+| `en` | English | `eng_Latn` |
+| `de` | Deutsch | `deu_Latn` |
+| `fr` | Français | `fra_Latn` |
+| `es` | Español | `spa_Latn` |
+| `pt` / `pt-br` | Português | `por_Latn` |
+| `it` | Italiano | `ita_Latn` |
+| `ru` | Русский | `rus_Cyrl` |
+| `pl` | Polski | `pol_Latn` |
+| `nl` | Nederlands | `nld_Latn` |
+| `sv` | Svenska | `swe_Latn` |
+| `tr` | Türkçe | `tur_Latn` |
+| `uk` / `ua` | Українська | `ukr_Cyrl` |
+| `zh` / `zh-cn` | 中文（简体） | `zho_Hans` |
+| `zh-tw` | 中文（繁體） | `zho_Hant` |
+| `ja` | 日本語 | `jpn_Jpan` |
+| `ko` | 한국어 | `kor_Hang` |
+| `ar` | العربية | `arb_Arab` |
+
+The aliases are deliberate: the same language is spelled differently by the game
+(`language_id = "pt-br"`), by mod localization tables (the community's Ukrainian mod
+writes `ua`, not the ISO `uk`) and by Lingua Imperialis (`pt`, `zh`). Accepting all
+spellings is what lets the mod read a mod's *source* language straight out of its
+localization file keys instead of guessing with a language detector.
+
+`at_cli.exe model <dir> <lang> …` reports how many of these a model file actually
+carries (`languages : 17/17 present`).
+
 Check the engine without launching the game:
 
 ```
@@ -181,6 +216,8 @@ code page, so `"狂信徒"` used to reach the model as `"?????"` and come back a
 tokens. The CLI now reads the wide command line and converts it to UTF-8 itself
 (`use_utf8_argv` in `at_cli.c`). The mod was never affected — Lua passes UTF-8
 strings to the core directly.
+
+## The online engine: API services
 
 **API service** — why DeepL is the default:
 

@@ -254,10 +254,11 @@ int at_model_load(const char* dir_utf8)
     // translate everything into noise, so it is refused here instead.
     {
         char absent[256] = { 0 };
-        if (at_model_check_vocab(dir_utf8, absent, (int)sizeof(absent)) < 13) {
+        const int wanted = at_model_lang_count();
+        if (at_model_check_vocab(dir_utf8, absent, (int)sizeof(absent)) < wanted) {
             std::snprintf(g_error, sizeof(g_error),
-                          "the vocabulary has no NLLB language tokens (missing: %s); "
-                          "this is not an NLLB-200 conversion", absent);
+                          "the vocabulary is missing NLLB language tokens (%s); "
+                          "this is not a complete NLLB-200 conversion", absent);
             return 0;
         }
     }

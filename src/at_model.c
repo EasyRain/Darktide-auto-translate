@@ -97,6 +97,13 @@ long long at_model_dir_size(const char* dir_utf8)
 // "zho_Hans", ...). Getting one wrong does not fail loudly - it translates into a
 // different language - so the mapping is written out rather than derived, and the
 // Simplified/Traditional distinction is explicit.
+//
+// Several keys may share one code on purpose: the same language is spelled
+// differently by the game (language_id "pt-br"), by mod localization tables (the
+// community's Ukrainian mod writes "ua", not the ISO "uk") and by Lingua
+// Imperialis ("pt", "zh"). Aliases remove the need to guess which spelling is in
+// front of us, and they are also what makes the per-mod source language work: we
+// resolve whatever key the localization file uses.
 // ---------------------------------------------------------------------------
 typedef struct {
     const char* internal;
@@ -105,8 +112,21 @@ typedef struct {
 
 static const ModelLangMap MODEL_LANGS[] = {
     { "en",    "eng_Latn" },
+
+    // Chinese: the game ships both scripts; "zh" alone means Simplified here,
+    // because that is what the game's own default is.
+    { "zh",    "zho_Hans" },
     { "zh-cn", "zho_Hans" },
     { "zh-tw", "zho_Hant" },
+
+    // Ukrainian: ISO says uk, the Darktide modding ecosystem writes ua.
+    { "uk",    "ukr_Cyrl" },
+    { "ua",    "ukr_Cyrl" },
+
+    // Portuguese: the game ships pt-br, Lingua writes pt.
+    { "pt",    "por_Latn" },
+    { "pt-br", "por_Latn" },
+
     { "ja",    "jpn_Jpan" },
     { "ko",    "kor_Hang" },
     { "ru",    "rus_Cyrl" },
@@ -115,8 +135,10 @@ static const ModelLangMap MODEL_LANGS[] = {
     { "es",    "spa_Latn" },
     { "it",    "ita_Latn" },
     { "pl",    "pol_Latn" },
-    { "pt-br", "por_Latn" },
-    { "uk",    "ukr_Cyrl" },
+    { "nl",    "nld_Latn" },
+    { "sv",    "swe_Latn" },
+    { "tr",    "tur_Latn" },
+    { "ar",    "arb_Arab" },
 };
 
 int at_model_lang_code(const char* internal_lang, char* out, int cap)
@@ -245,6 +267,21 @@ int at_model_check_vocab(const char* dir_utf8, char* out_missing, int cap)
 
     for (i = 0; i < sizeof(MODEL_LANGS) / sizeof(MODEL_LANGS[0]); i++) {
         char quoted[64];
+        size_t j;
+        int duplicate = 0;
+
+        // Aliases map several keys onto one language, so count each code once -
+        // otherwise "found" would stay high even when a whole language is absent.
+        for (j = 0; j < i; j++) {
+            if (_stricmp(MODEL_LANGS[j].flores, MODEL_LANGS[i].flores) == 0) {
+                duplicate = 1;
+                break;
+            }
+        }
+        if (duplicate) {
+            continue;
+        }
+
         _snprintf_s(quoted, sizeof(quoted), _TRUNCATE, "\"%s\"", MODEL_LANGS[i].flores);
         if (strstr(text, quoted)) {
             found++;
@@ -260,4 +297,25 @@ int at_model_check_vocab(const char* dir_utf8, char* out_missing, int cap)
 
     free(text);
     return found;
+}
+
+// Number of distinct languages in the table above, aliases not counted twice.
+int at_model_lang_count(void)
+{
+    size_t i, j;
+    int distinct = 0;
+
+    for (i = 0; i < sizeof(MODEL_LANGS) / sizeof(MODEL_LANGS[0]); i++) {
+        int duplicate = 0;
+        for (j = 0; j < i; j++) {
+            if (_stricmp(MODEL_LANGS[j].flores, MODEL_LANGS[i].flores) == 0) {
+                duplicate = 1;
+                break;
+            }
+        }
+        if (!duplicate) {
+            distinct++;
+        }
+    }
+    return distinct;
 }

@@ -26,7 +26,9 @@ AT_API long long at_model_dir_size(const char* dir_utf8);
 //
 // NLLB is a many-to-many model steered by these tokens, so a wrong code does not
 // fail loudly - it translates into the wrong language. Hence the table is explicit
-// rather than derived from the ISO code.
+// rather than derived from the ISO code. Aliases are deliberate: "zh"/"zh-cn",
+// "pt"/"pt-br" and "uk"/"ua" all resolve, because the game, mod localization tables
+// and Lingua Imperialis spell the same language differently.
 AT_API int at_model_lang_code(const char* internal_lang, char* out, int cap);
 
 // How many of our language tokens the model's shared_vocabulary.json actually
@@ -34,6 +36,10 @@ AT_API int at_model_lang_code(const char* internal_lang, char* out, int cap);
 // SentencePiece model, so a vocabulary without them means the directory is not an
 // NLLB-200 conversion - it would load and then answer with noise.
 AT_API int at_model_check_vocab(const char* dir_utf8, char* out_missing, int cap);
+
+// How many distinct languages the table knows (aliases counted once). Compare with
+// at_model_check_vocab() to see whether a model really covers all of them.
+AT_API int at_model_lang_count(void);
 
 // 1 when the caller has to append the source EOS token itself, which is the case
 // for the shipped conversion: its config.json claims "add_source_eos": false while
