@@ -136,12 +136,21 @@ function M.run(mod, lang)
     util.info(mod, "exported %d term(s) for '%s' (skipped %d unknown keys) -> translations/export/%s.lua",
         count, tostring(lang), missing, tostring(lang))
 
-    local message = mod:localize("term_export_done", tostring(lang), count)
-    if type(mod.notify) == "function" then
-        pcall(mod.notify, mod, message)
+    -- Note: %s (language) comes before %d (count) in every translation of this key,
+    -- and the call is pcall'ed so a bad format string can never break the export.
+    local message
+    local mok, mres = pcall(mod.localize, mod, "term_export_done", tostring(lang), count)
+    if mok and type(mres) == "string" and mres ~= "" then
+        message = mres
     end
-    if type(mod.echo) == "function" then
-        pcall(mod.echo, mod, message)
+
+    if message then
+        if type(mod.notify) == "function" then
+            pcall(mod.notify, mod, message)
+        end
+        if type(mod.echo) == "function" then
+            pcall(mod.echo, mod, message)
+        end
     end
 
     return true
