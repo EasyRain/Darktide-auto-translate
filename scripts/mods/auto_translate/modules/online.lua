@@ -235,8 +235,38 @@ function M.text_is_safe(source, translated)
 end
 
 -- Text with no letters at all ("12", "—", "100") has nothing to translate.
-local function translatable(text)
+local function has_letters(text)
     return tostring(text or ""):find("[%a]") ~= nil
+end
+
+-- A mod may write `en = Localize("loc_some_game_key")`. That is evaluated when the
+-- file loads, so "en" ends up holding the *game's own text in the player's current
+-- language* — already Chinese for a Chinese player. Sending that to a translator
+-- means translating Chinese into Chinese. (Design note 3 in
+-- i18n/AUTO_TRANSLATE_DESIGN.md.)
+--
+-- Detected by script: one leading byte in E3..ED means a three-byte UTF-8 sequence
+-- in U+3000..U+DFFF, which covers CJK ideographs, kana and Hangul.
+local CJK_TARGETS = { ["zh-cn"] = true, ["zh-tw"] = true, ja = true, ko = true }
+
+local function contains_cjk(text)
+    for i = 1, #text do
+        local b = text:byte(i)
+        if b and b >= 0xE3 and b <= 0xED then
+            return true
+        end
+    end
+    return false
+end
+
+local function translatable(text, lang)
+    if not has_letters(text) then
+        return false
+    end
+    if CJK_TARGETS[lang] and contains_cjk(text) then
+        return false
+    end
+    return true
 end
 
 -- ---------------------------------------------------------------------------
@@ -484,7 +514,7 @@ function M.start(mod, report, lang)
     for _, entry in ipairs(report.mods) do
         if not entry.skipped and #entry.pending > 0 then
             for _, item in ipairs(entry.pending) do
-                if translatable(item.en) then
+                if translatable(item.en, lang) then
                     q_push({
                         mod_id = entry.name,
                         key = item.key,
