@@ -124,14 +124,18 @@ static int cmd_selftest(void)
 
     printf("\n== request building ==\n");
     expect_true("google_clients5 host",
-                at_online_host("google_clients5", out, (int)sizeof(out)) && strcmp(out, "clients5.google.com") == 0);
+                at_online_host("google_clients5", NULL, out, (int)sizeof(out)) &&
+                    strcmp(out, "clients5.google.com") == 0);
     expect_true("google_gtx host",
-                at_online_host("google_gtx", out, (int)sizeof(out)) && strcmp(out, "translate.googleapis.com") == 0);
+                at_online_host("google_gtx", NULL, out, (int)sizeof(out)) &&
+                    strcmp(out, "translate.googleapis.com") == 0);
     expect_true("mymemory host",
-                at_online_host("mymemory", out, (int)sizeof(out)) && strcmp(out, "api.mymemory.translated.net") == 0);
+                at_online_host("mymemory", NULL, out, (int)sizeof(out)) &&
+                    strcmp(out, "api.mymemory.translated.net") == 0);
     expect_true("google_api host",
-                at_online_host("google_api", out, (int)sizeof(out)) && strcmp(out, "translation.googleapis.com") == 0);
-    expect_true("unknown host rejected", !at_online_host("nope", out, (int)sizeof(out)));
+                at_online_host("google_api", NULL, out, (int)sizeof(out)) &&
+                    strcmp(out, "translation.googleapis.com") == 0);
+    expect_true("unknown host rejected", !at_online_host("nope", NULL, out, (int)sizeof(out)));
 
     expect_true("gtx path",
                 at_online_path("google_gtx", NULL, "en", "zh-cn", "Hello", path, (int)sizeof(path)) &&
@@ -161,6 +165,54 @@ static int cmd_selftest(void)
     expect_true("gtx path encodes UTF-8 byte-wise",
                 at_online_path("google_gtx", NULL, "en", "ja", "\xE4\xBD\xA0\xE5\xA5\xBD", path, (int)sizeof(path)) &&
                     strstr(path, "q=%E4%BD%A0%E5%A5%BD") != NULL);
+
+    // DeepL serves free and paid keys from different hosts; the key decides.
+    expect_true("deepl free key -> api-free",
+                at_online_host("deepl", "abc:fx", out, (int)sizeof(out)) &&
+                    strcmp(out, "api-free.deepl.com") == 0);
+    expect_true("deepl paid key -> api",
+                at_online_host("deepl", "abc-123", out, (int)sizeof(out)) &&
+                    strcmp(out, "api.deepl.com") == 0);
+
+    printf("\n== deepL ==\n");
+    expect_true("deepl uses POST", at_online_uses_post("deepl") && !at_online_uses_post("google_api"));
+    expect_true("deepl path carries no query",
+                at_online_path("deepl", "k", "en", "ja", "Hello", path, (int)sizeof(path)) &&
+                    strcmp(path, "/v2/translate") == 0);
+    // ZH-HANS / ZH-HANT are DeepL's explicit Simplified / Traditional codes
+    expect_true("deepl zh-cn -> ZH-HANS",
+                at_online_lang_code_for("deepl", "zh-cn", out, (int)sizeof(out)) &&
+                    strcmp(out, "ZH-HANS") == 0);
+    expect_true("deepl zh-tw -> ZH-HANT",
+                at_online_lang_code_for("deepl", "zh-tw", out, (int)sizeof(out)) &&
+                    strcmp(out, "ZH-HANT") == 0);
+    expect_true("google zh-cn stays zh-CN",
+                at_online_lang_code_for("google_gtx", "zh-cn", out, (int)sizeof(out)) &&
+                    strcmp(out, "zh-CN") == 0);
+    expect_true("deepl body",
+                at_online_body("deepl", "en", "zh-cn", "a&b", path, (int)sizeof(path)) &&
+                    strcmp(path, "text=a%26b&source_lang=EN&target_lang=ZH-HANS") == 0);
+    expect_true("deepl body rejected for a GET provider",
+                !at_online_body("google_gtx", "en", "ja", "Hi", path, (int)sizeof(path)));
+    expect_true("deepl auth header",
+                at_online_headers("deepl", "KEY:fx", path, (int)sizeof(path)) &&
+                    strcmp(path, "Authorization: DeepL-Auth-Key KEY:fx\r\n") == 0);
+    expect_true("deepl without a key is refused",
+                !at_online_headers("deepl", "", path, (int)sizeof(path)));
+    expect_true("deepl content type",
+                at_online_content_type("deepl") &&
+                    strcmp(at_online_content_type("deepl"), "application/x-www-form-urlencoded") == 0);
+    expect_true("got translation",
+                at_online_parse("deepl",
+                                "{\"translations\":[{\"detected_source_language\":\"EN\","
+                                "\"text\":\"\xE3\x82\xAD\xE3\x83\xBC\"}]}",
+                                out, (int)sizeof(out)) > 0 &&
+                    strcmp(out, "\xE3\x82\xAD\xE3\x83\xBC") == 0);
+    expect_true("deepl error surfaces the message",
+                at_online_parse("deepl", "{\"message\":\"Wrong endpoint. Use api-free.deepl.com\"}",
+                                out, (int)sizeof(out)) < 0 &&
+                    strstr(at_online_error(), "Wrong endpoint") != NULL);
+    expect_true("deepl without a key needs one", at_online_needs_key("deepl"));
 
     printf("\n== google_clients5 parsing ==\n");
     expect_true("flat form (sl=en)",
@@ -287,15 +339,18 @@ static int cmd_selftest(void)
                     strcmp(out, "x") == 0);
 
     printf("\n== provider table ==\n");
-    expect_true("known providers", at_online_provider_known("google_clients5") &&
+    expect_true("known providers", at_online_provider_known("deepl") &&
+                                       at_online_provider_known("google_api") &&
+                                       at_online_provider_known("google_clients5") &&
                                        at_online_provider_known("google_gtx") &&
-                                       at_online_provider_known("mymemory") &&
-                                       at_online_provider_known("google_api"));
-    expect_true("unknown provider rejected", !at_online_provider_known("deepl"));
-    expect_true("only google_api needs a key", !at_online_needs_key("google_clients5") &&
-                                                   !at_online_needs_key("google_gtx") &&
-                                                   !at_online_needs_key("mymemory") &&
-                                                   at_online_needs_key("google_api"));
+                                       at_online_provider_known("mymemory"));
+    expect_true("unknown provider rejected", !at_online_provider_known("deepl_free") &&
+                                                 !at_online_provider_known(""));
+    expect_true("only the official APIs need a key", !at_online_needs_key("google_clients5") &&
+                                                         !at_online_needs_key("google_gtx") &&
+                                                         !at_online_needs_key("mymemory") &&
+                                                         at_online_needs_key("google_api") &&
+                                                         at_online_needs_key("deepl"));
 
     printf("\n%d checks, %d failure(s)\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 3;
@@ -354,11 +409,13 @@ static int split_url(const char* url, char* host, int host_cap, char* path, int 
     return 1;
 }
 
-// Runs one GET and hands back the body. Returns 0 when the request completed with
-// a 2xx status, non-zero otherwise.
-static int fetch(const char* host, const char* path, char* body_out, int cap, int* out_len)
+// Runs one request and hands back the body. Pass body == NULL for a GET.
+// Returns 0 when the request completed with a 2xx status, non-zero otherwise.
+static int fetch(const char* host, const char* path, const char* content_type,
+                 const char* headers, const char* body, char* body_out, int cap, int* out_len)
 {
-    int id = at_http_get(host, path);
+    int id = body ? at_http_post(host, path, content_type, headers, body)
+                  : at_http_get(host, path);
     int spins = 0;
 
     if (id <= 0) {
@@ -460,7 +517,7 @@ static int cmd_http(int argc, char** argv)
 
     {
         int len = 0;
-        int rc = fetch(host, path, body, BODY_CAP, &len);
+        int rc = fetch(host, path, NULL, NULL, NULL, body, BODY_CAP, &len);
         if (rc != 0) {
             free(body);
             return rc;
@@ -538,7 +595,7 @@ static int cmd_provider(int argc, char** argv)
         return 1;
     }
 
-    if (!at_online_host(name, host, (int)sizeof(host))) {
+    if (!at_online_host(name, api_key, host, (int)sizeof(host))) {
         fprintf(stderr, "error: %s\n", at_online_error());
         return 1;
     }
@@ -560,17 +617,53 @@ static int cmd_provider(int argc, char** argv)
     }
 
     printf("provider : %s\nhost     : %s\ntarget   : %s\nsource   : %s\n", name, host, lang, text);
-    printf("path     : %s\n\n", path);
+    printf("path     : %s\n", path);
 
     {
-        int len = 0;
-        rc = fetch(host, path, body, BODY_CAP, &len);
-        if (rc != 0) {
-            free(path);
-            free(body);
-            return rc;
+        // Providers that POST (DeepL) carry the query in the body and often need
+        // an auth header; the GET family puts everything in the URL.
+        char* post_body = NULL;
+        char* post_headers = NULL;
+        const char* ctype = NULL;
+        int rc2;
+
+        if (at_online_uses_post(name)) {
+            post_body = (char*)malloc(16384);
+            post_headers = (char*)malloc(1024);
+            if (!post_body || !post_headers) {
+                fprintf(stderr, "error: out of memory\n");
+                free(path); free(body); free(post_body); free(post_headers);
+                return 3;
+            }
+            if (!at_online_body(name, "en", lang, text, post_body, 16384)) {
+                fprintf(stderr, "error: %s\n", at_online_error());
+                free(path); free(body); free(post_body); free(post_headers);
+                return 1;
+            }
+            if (!at_online_headers(name, api_key, post_headers, 1024)) {
+                fprintf(stderr, "error: %s\n", at_online_error());
+                free(path); free(body); free(post_body); free(post_headers);
+                return 1;
+            }
+            ctype = at_online_content_type(name);
+            printf("method   : POST\nbody     : %s\nheaders  : %s", post_body, post_headers);
+        } else {
+            printf("method   : GET\n");
         }
-        body[len] = 0;
+        printf("\n");
+
+        {
+            int len = 0;
+            rc2 = fetch(host, path, ctype, post_headers, post_body, body, BODY_CAP, &len);
+            free(post_body);
+            free(post_headers);
+            if (rc2 != 0) {
+                free(path);
+                free(body);
+                return rc2;
+            }
+            body[len] = 0;
+        }
     }
 
     {
@@ -639,7 +732,7 @@ static int cmd_translate(int argc, char** argv)
 // ---------------------------------------------------------------------------
 static int cmd_probe(int argc, char** argv)
 {
-    static const char* PROVIDERS[] = { "google_clients5", "google_gtx", "mymemory", NULL };
+    static const char* PROVIDERS[] = { "deepl", "google_api", "google_clients5", "mymemory", NULL };
     const char* langs[2];
     const char* sample = "Keystone unlocked";
     int reachable = 0;
@@ -669,7 +762,7 @@ static int cmd_probe(int argc, char** argv)
             char out[8192];
             int rc;
 
-            if (!at_online_host(PROVIDERS[i], host, (int)sizeof(host))) {
+            if (!at_online_host(PROVIDERS[i], "PROBE", host, (int)sizeof(host))) {
                 printf("%-15s %-6s  SKIPPED (%s)\n", PROVIDERS[i], langs[l], at_online_error());
                 continue;
             }
@@ -691,7 +784,7 @@ static int cmd_probe(int argc, char** argv)
 
             {
                 int len = 0;
-                rc = fetch(host, path, body, BODY_CAP, &len);
+                rc = fetch(host, path, NULL, NULL, NULL, body, BODY_CAP, &len);
                 if (rc == 0) {
                     body[len] = 0;
                     {

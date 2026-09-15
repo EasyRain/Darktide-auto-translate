@@ -49,10 +49,18 @@ return {
                 default_value = "auto",
                 options = {
                     { text = "engine_auto",       value = "auto" },
-                    { text = "engine_online_free", value = "online_free" },
                     { text = "engine_online_api",  value = "online_api" },
                     { text = "engine_local_small", value = "local_small" },
                     { text = "engine_local_large", value = "local_large" },
+                },
+            },
+            {
+                setting_id = "api_provider",
+                type = "dropdown",
+                default_value = "deepl",
+                options = {
+                    { text = "api_deepl",  value = "deepl" },
+                    { text = "api_google", value = "google" },
                 },
             },
             {

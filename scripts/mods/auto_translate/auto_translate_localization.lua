@@ -128,6 +128,30 @@ return {
         en = "Translation engine",
         ["zh-cn"] = "翻译引擎",
     },
+    no_engine_available = {
+        en = "Auto Translate: no translation engine is available yet. Either turn on 'Download small model' (offline, ~600 MB) or fill in an API key in the options. Translation stays paused until one of them is set up.",
+        ["zh-cn"] = "Auto Translate：目前没有可用的翻译引擎。请打开「下载小模型」（离线，约 600 MB），或在设置里填写 API 密钥。在配置好其中之一之前不会进行翻译。",
+    },
+    api_provider = {
+        en = "API service",
+        ["zh-cn"] = "API 服务商",
+    },
+    api_provider_description = {
+        en = "Which official translation API the key belongs to. DeepL has a free tier (500,000 characters per month) and is reachable from mainland China; Google Cloud is blocked there.",
+        ["zh-cn"] = "密钥属于哪家正式翻译 API。DeepL 有免费额度（每月 50 万字符）且国内可直连；Google Cloud 在国内被墙。",
+    },
+    api_deepl = {
+        en = "DeepL (recommended)",
+        ["zh-cn"] = "DeepL（推荐）",
+    },
+    api_google = {
+        en = "Google Cloud Translation",
+        ["zh-cn"] = "Google Cloud 翻译",
+    },
+    engine_auto_description = {
+        en = "Automatic: the largest downloaded offline model first, then the API if a key is set. The free public services are no longer used - they are rate limited and blocked too easily.",
+        ["zh-cn"] = "自动：优先用已下载的最大离线模型，其次用填了密钥的正式 API。不再使用免费公共服务——它们限流严重且容易被掐。",
+    },
     model_missing = {
         en = "Auto Translate: a local model engine is selected but its model is not downloaded yet. Turn on the matching model download option (or switch to an online engine) to start translating.",
         ["zh-cn"] = "Auto Translate：已选择本地模型引擎，但模型尚未下载。请打开对应模型的下载开关（或改用在线引擎），之后才会开始翻译。",
@@ -139,10 +163,6 @@ return {
     engine_auto = {
         en = "Automatic (recommended)",
         ["zh-cn"] = "自动（推荐）",
-    },
-    engine_online_free = {
-        en = "Online (free public service)",
-        ["zh-cn"] = "在线（免费公共服务）",
     },
     engine_online_api = {
         en = "Online (official API, needs key)",
@@ -175,10 +195,6 @@ return {
     proxy_description = {
         en = "Leave empty to use the Windows proxy setting automatically. Fill in host:port (e.g. 127.0.0.1:7890) if your VPN runs in TUN mode or its system proxy is off - WinHTTP does not read the Windows proxy setting by itself.",
         ["zh-cn"] = "留空＝自动使用 Windows 的代理设置。若你的加速器是 TUN 模式、或系统代理开关是关的，请填 host:port（如 127.0.0.1:7890）——WinHTTP 自己不会读 Windows 的代理设置。",
-    },
-    proxy_notice = {
-        en = "Auto Translate: a proxy (%s) is configured in Windows but switched off. If you use a VPN, enter its address in this mod's 'Proxy' option - WinHTTP ignores the Windows proxy setting.",
-        ["zh-cn"] = "Auto Translate：Windows 里配置了代理（%s）但开关是关的。如果你在用加速器，请把该地址填进本模组的「代理」选项——WinHTTP 不会读 Windows 的代理设置。",
     },
     engine_paused_failures = {
         en = "Auto Translate: translation paused after 3 failed requests in a row. Check your API key or connection, then change a setting or press 'Reload translation files' to resume.",

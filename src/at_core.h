@@ -34,6 +34,12 @@ AT_API const char* at_version(void);
 // Keeping them apart matters: a single value where 0 means "no error" and 200
 // means "success" is how callers end up treating every 200 as a failure.
 AT_API int  at_http_get(const char* host_utf8, const char* path_utf8);
+
+// POST with a body, for APIs that take their query in the request body (DeepL).
+// `headers` is an extra header block ("Name: value\r\n") used for API keys;
+// `content_type` may be NULL. Returns a request id like at_http_get.
+AT_API int  at_http_post(const char* host_utf8, const char* path_utf8, const char* content_type,
+                         const char* headers, const char* body_utf8);
 AT_API int  at_http_poll(int* out_id, int* out_result, int* out_http_code, char* out_body, int out_cap,
                          int* out_len, unsigned long* out_win_error);
 AT_API int  at_http_pending(void);

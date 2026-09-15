@@ -20,8 +20,12 @@
 
 typedef struct Job {
     int id;
+    int post;              // 0 = GET, 1 = POST
     char* host;
     char* path;
+    char* content_type;    // POST only
+    char* headers;         // extra header block, "Name: value\r\n"
+    char* body;            // POST only
     struct Job* next;
 } Job;
 
@@ -358,24 +362,25 @@ static char* read_body(HINTERNET request, int* out_len)
 // failure; `out_http_code` carries the HTTP status in the completed case. They are
 // separate on purpose: one value meaning both "no error" and "the 200 we got" is
 // exactly how a caller ends up treating every successful response as a failure.
-static void do_http_get(const char* host, const char* path, int* out_status, int* out_http_code,
-                        char** out_body, int* out_len)
+static void do_http(const Job* job, int* out_status, int* out_http_code, char** out_body, int* out_len)
 {
     HINTERNET session = NULL;
     HINTERNET connect = NULL;
     HINTERNET request = NULL;
     wchar_t whost[256];
     wchar_t wpath[2048];
-    wchar_t headers[256];
+    wchar_t headers[1024];
     char hbuf[256];
     INTERNET_PORT port = INTERNET_DEFAULT_HTTPS_PORT;
     DWORD flags = WINHTTP_FLAG_SECURE;
-    const char* bare_host = host;
+    const char* bare_host = job->host;
+    const char* path = job->path;
     int status = 0;
     int http_code = 0;
     int failure = 0;
     char* body = NULL;
     int len = 0;
+    DWORD body_len = 0;
 
     *out_status = -1;
     *out_http_code = 0;
@@ -386,12 +391,12 @@ static void do_http_get(const char* host, const char* path, int* out_status, int
     // The caller may prefix the host with a scheme. Everything we talk to in
     // production is HTTPS; the plaintext branch exists so the CLI can smoke test
     // local endpoints without a certificate.
-    if (_strnicmp(host, "http://", 7) == 0) {
-        bare_host = host + 7;
+    if (_strnicmp(job->host, "http://", 7) == 0) {
+        bare_host = job->host + 7;
         port = INTERNET_DEFAULT_HTTP_PORT;
         flags = 0;
-    } else if (_strnicmp(host, "https://", 8) == 0) {
-        bare_host = host + 8;
+    } else if (_strnicmp(job->host, "https://", 8) == 0) {
+        bare_host = job->host + 8;
     }
 
     // An explicit ":port" (or "[v6]:port") overrides the scheme default. The port
@@ -472,15 +477,41 @@ static void do_http_get(const char* host, const char* path, int* out_status, int
         goto done;
     }
 
-    request = WinHttpOpenRequest(connect, L"GET", wpath, NULL, WINHTTP_NO_REFERER,
+    request = WinHttpOpenRequest(connect, job->post ? L"POST" : L"GET", wpath, NULL, WINHTTP_NO_REFERER,
                                  WINHTTP_DEFAULT_ACCEPT_TYPES, flags);
     if (!request) {
         failure = fail_with(-12);
         goto done;
     }
 
-    wcscpy_s(headers, 256, L"Accept: application/json\r\n");
-    if (!WinHttpSendRequest(request, headers, (DWORD)-1L, WINHTTP_NO_REQUEST_DATA, 0, 0, 0)) {
+    // Accept, plus whatever the caller needs (DeepL wants an Authorization line),
+    // plus a Content-Type when there is a body.
+    {
+        wchar_t wextra[768];
+        wchar_t wtype[128];
+
+        headers[0] = 0;
+        wcscat_s(headers, 1024, L"Accept: application/json\r\n");
+
+        if (job->headers && job->headers[0] &&
+            MultiByteToWideChar(CP_UTF8, 0, job->headers, -1, wextra, 768) > 0) {
+            wcscat_s(headers, 1024, wextra);
+        }
+        if (job->post && job->content_type && job->content_type[0] &&
+            MultiByteToWideChar(CP_UTF8, 0, job->content_type, -1, wtype, 128) > 0) {
+            wcscat_s(headers, 1024, L"Content-Type: ");
+            wcscat_s(headers, 1024, wtype);
+            wcscat_s(headers, 1024, L"\r\n");
+        }
+    }
+
+    if (job->post) {
+        body_len = (DWORD)strlen(job->body ? job->body : "");
+    }
+
+    if (!WinHttpSendRequest(request, headers, (DWORD)-1L,
+                            job->post ? (LPVOID)job->body : WINHTTP_NO_REQUEST_DATA,
+                            body_len, body_len, 0)) {
         failure = fail_with(-13);
         goto done;
     }
@@ -554,7 +585,7 @@ static DWORD WINAPI worker_main(LPVOID param)
             char* body = NULL;
             int len = 0;
             DWORD win_error = 0;
-            do_http_get(job->host, job->path, &status, &http_code, &body, &len);
+            do_http(job, &status, &http_code, &body, &len);
             if (status < 0) {
                 win_error = last_win_error();
             }
@@ -563,6 +594,9 @@ static DWORD WINAPI worker_main(LPVOID param)
 
         free(job->host);
         free(job->path);
+        free(job->content_type);
+        free(job->headers);
+        free(job->body);
         free(job);
     }
 
@@ -586,6 +620,9 @@ static void shutdown_core(void)
         g_jobs_head = j->next;
         free(j->host);
         free(j->path);
+        free(j->content_type);
+        free(j->headers);
+        free(j->body);
         free(j);
     }
     while (g_results_head) {
@@ -629,7 +666,10 @@ const char* at_error(void)
     return g_error;
 }
 
-int at_http_get(const char* host_utf8, const char* path_utf8)
+// Shared by at_http_get and at_http_post. Takes ownership of nothing; every
+// string is copied.
+static int enqueue_job(int post, const char* host_utf8, const char* path_utf8,
+                       const char* content_type, const char* headers, const char* body)
 {
     Job* job;
     int id;
@@ -641,16 +681,24 @@ int at_http_get(const char* host_utf8, const char* path_utf8)
         return 0;
     }
 
-    job = (Job*)malloc(sizeof(Job));
+    job = (Job*)calloc(1, sizeof(Job));
     if (!job) {
         return 0;
     }
+    job->post = post;
     job->host = dup_str(host_utf8);
     job->path = dup_str(path_utf8);
+    job->content_type = dup_str(content_type);
+    job->headers = dup_str(headers);
+    job->body = dup_str(body);
     job->next = NULL;
-    if (!job->host || !job->path) {
+
+    if (!job->host || !job->path || (post && !job->body)) {
         free(job->host);
         free(job->path);
+        free(job->content_type);
+        free(job->headers);
+        free(job->body);
         free(job);
         return 0;
     }
@@ -667,6 +715,19 @@ int at_http_get(const char* host_utf8, const char* path_utf8)
     LeaveCriticalSection(&g_lock);
 
     return id;
+}
+
+int at_http_get(const char* host_utf8, const char* path_utf8)
+{
+    return enqueue_job(0, host_utf8, path_utf8, NULL, NULL, NULL);
+}
+
+// POST with a body. `headers` is an extra header block ("Name: value\r\n") used
+// for API keys; `content_type` may be NULL to send no Content-Type.
+int at_http_post(const char* host_utf8, const char* path_utf8, const char* content_type,
+                 const char* headers, const char* body_utf8)
+{
+    return enqueue_job(1, host_utf8, path_utf8, content_type, headers, body_utf8);
 }
 
 int at_http_poll(int* out_id, int* out_result, int* out_http_code, char* out_body, int out_cap,

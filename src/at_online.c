@@ -28,42 +28,53 @@ const char* at_online_error(void)
 //
 // Our internal codes are lower case and match the game's language ids; every
 // provider wants its own spelling, and getting this wrong silently translates
-// into the wrong language.
+// into the wrong language. DeepL for instance distinguishes Simplified and
+// Traditional Chinese as ZH-HANS / ZH-HANT (ZH alone means "unspecified").
 // ---------------------------------------------------------------------------
 typedef struct {
     const char* internal;
-    const char* provider;
+    const char* google;
+    const char* deepl;
 } LangMap;
 
 static const LangMap LANG_MAP[] = {
-    { "en",    "en" },
-    { "zh-cn", "zh-CN" },
-    { "zh-tw", "zh-TW" },
-    { "ja",    "ja" },
-    { "ko",    "ko" },
-    { "ru",    "ru" },
-    { "de",    "de" },
-    { "fr",    "fr" },
-    { "es",    "es" },
-    { "it",    "it" },
-    { "pl",    "pl" },
-    { "pt-br", "pt-BR" },
-    { "uk",    "uk" },
+    { "en",    "en",    "EN" },
+    { "zh-cn", "zh-CN", "ZH-HANS" },
+    { "zh-tw", "zh-TW", "ZH-HANT" },
+    { "ja",    "ja",    "JA" },
+    { "ko",    "ko",    "KO" },
+    { "ru",    "ru",    "RU" },
+    { "de",    "de",    "DE" },
+    { "fr",    "fr",    "FR" },
+    { "es",    "es",    "ES" },
+    { "it",    "it",    "IT" },
+    { "pl",    "pl",    "PL" },
+    { "pt-br", "pt-BR", "PT-BR" },
+    { "uk",    "uk",    "UK" },
 };
 
-int at_online_lang_code(const char* internal_lang, char* out, int cap)
+int at_online_lang_code_for(const char* provider, const char* internal_lang, char* out, int cap)
 {
     size_t i;
+    int deepl;
+
     if (!internal_lang || !out || cap <= 0) {
         return 0;
     }
+    deepl = provider && _stricmp(provider, "deepl") == 0;
+
     for (i = 0; i < sizeof(LANG_MAP) / sizeof(LANG_MAP[0]); i++) {
         if (_stricmp(LANG_MAP[i].internal, internal_lang) == 0) {
-            strncpy_s(out, (size_t)cap, LANG_MAP[i].provider, _TRUNCATE);
+            strncpy_s(out, (size_t)cap, deepl ? LANG_MAP[i].deepl : LANG_MAP[i].google, _TRUNCATE);
             return 1;
         }
     }
     return 0;
+}
+
+int at_online_lang_code(const char* internal_lang, char* out, int cap)
+{
+    return at_online_lang_code_for("google", internal_lang, out, cap);
 }
 
 // ---------------------------------------------------------------------------
@@ -240,23 +251,48 @@ int at_online_provider_known(const char* provider)
     if (!provider) {
         return 0;
     }
-    return _stricmp(provider, "google_clients5") == 0 || _stricmp(provider, "google_gtx") == 0 ||
-           _stricmp(provider, "mymemory") == 0 || _stricmp(provider, "google_api") == 0;
+    return _stricmp(provider, "deepl") == 0 ||
+           _stricmp(provider, "google_api") == 0 ||
+           _stricmp(provider, "google_clients5") == 0 ||
+           _stricmp(provider, "google_gtx") == 0 ||
+           _stricmp(provider, "mymemory") == 0;
 }
 
 int at_online_needs_key(const char* provider)
 {
-    return provider && _stricmp(provider, "google_api") == 0;
+    return provider && (_stricmp(provider, "google_api") == 0 || _stricmp(provider, "deepl") == 0);
 }
 
-int at_online_host(const char* provider, char* out, int cap)
+int at_online_uses_post(const char* provider)
+{
+    return provider && _stricmp(provider, "deepl") == 0;
+}
+
+// DeepL serves free and paid keys from different hosts. Free keys end in ":fx",
+// which is what DeepL documents, so the suffix picks the host.
+static const char* deepl_host(const char* api_key)
+{
+    size_t n;
+    if (!api_key) {
+        return "api-free.deepl.com";
+    }
+    n = strlen(api_key);
+    if (n >= 3 && _stricmp(api_key + n - 3, ":fx") == 0) {
+        return "api-free.deepl.com";
+    }
+    return "api.deepl.com";
+}
+
+int at_online_host(const char* provider, const char* api_key, char* out, int cap)
 {
     const char* host = NULL;
 
     if (!provider || !out || cap <= 0) {
         return 0;
     }
-    if (_stricmp(provider, "google_clients5") == 0) {
+    if (_stricmp(provider, "deepl") == 0) {
+        host = deepl_host(api_key);
+    } else if (_stricmp(provider, "google_clients5") == 0) {
         host = "clients5.google.com";
     } else if (_stricmp(provider, "google_gtx") == 0) {
         host = "translate.googleapis.com";
@@ -286,11 +322,11 @@ int at_online_path(const char* provider, const char* api_key, const char* source
         set_error("missing argument");
         return 0;
     }
-    if (!at_online_lang_code(source_lang ? source_lang : "en", src, (int)sizeof(src))) {
+    if (!at_online_lang_code_for(provider, source_lang ? source_lang : "en", src, (int)sizeof(src))) {
         set_errorf("unsupported source language '%s'%s", source_lang, "");
         return 0;
     }
-    if (!at_online_lang_code(target_lang, dst, (int)sizeof(dst))) {
+    if (!at_online_lang_code_for(provider, target_lang, dst, (int)sizeof(dst))) {
         set_errorf("unsupported target language '%s'%s", target_lang, "");
         return 0;
     }
@@ -308,7 +344,15 @@ int at_online_path(const char* provider, const char* api_key, const char* source
         return 0;
     }
 
-    if (_stricmp(provider, "google_clients5") == 0) {
+    if (_stricmp(provider, "deepl") == 0) {
+        if (!api_key || !*api_key) {
+            free(encoded);
+            set_error("this provider needs an API key");
+            return 0;
+        }
+        // The query travels in the POST body; see at_online_body().
+        written = _snprintf_s(out, (size_t)cap, _TRUNCATE, "/v2/translate");
+    } else if (_stricmp(provider, "google_clients5") == 0) {
         // The dictionary endpoint. Unlike the others it needs no dt= flag, and
         // "client=dict-chrome-ex" is what makes it answer with plain text.
         written = _snprintf_s(out, (size_t)cap, _TRUNCATE,
@@ -362,7 +406,18 @@ static int parse_google_gtx(const char* body, char* out, int cap)
     }
 
     segments = json_at(root, 0);
-    if (!segments || segments->type != J_ARR) {
+    if (!segments) {
+        json_free(root);
+        set_error("the service returned no translation for this text");
+        return -1;
+    }
+    if (segments->type == J_NULL) {
+        // Google answers [null,null,"en",...] for text it declines to translate
+        json_free(root);
+        set_error("the service declined to translate this text");
+        return -1;
+    }
+    if (segments->type != J_ARR) {
         json_free(root);
         set_error("unexpected response shape (expected an array of segments)");
         return -1;
@@ -584,6 +639,126 @@ static int parse_google_clients5(const char* body, char* out, int cap)
     return used;
 }
 
+// ---------------------------------------------------------------------------
+// POST support (DeepL)
+// ---------------------------------------------------------------------------
+int at_online_body(const char* provider, const char* source_lang, const char* target_lang,
+                   const char* text_utf8, char* out, int cap)
+{
+    char src[16];
+    char dst[16];
+    char* encoded;
+    size_t need;
+    int written;
+
+    if (!provider || !out || cap <= 0 || !text_utf8) {
+        set_error("missing argument");
+        return 0;
+    }
+    if (_stricmp(provider, "deepl") != 0) {
+        set_errorf("provider '%s' does not use a request body%s", provider, "");
+        return 0;
+    }
+    if (!at_online_lang_code_for(provider, source_lang ? source_lang : "en", src, (int)sizeof(src))) {
+        set_errorf("unsupported source language '%s'%s", source_lang, "");
+        return 0;
+    }
+    if (!at_online_lang_code_for(provider, target_lang, dst, (int)sizeof(dst))) {
+        set_errorf("unsupported target language '%s'%s", target_lang, "");
+        return 0;
+    }
+
+    need = strlen(text_utf8) * 3 + 1;
+    encoded = (char*)malloc(need);
+    if (!encoded) {
+        set_error("out of memory");
+        return 0;
+    }
+    if (!url_encode(text_utf8, encoded, (int)need)) {
+        free(encoded);
+        set_error("text too long to encode");
+        return 0;
+    }
+
+    written = _snprintf_s(out, (size_t)cap, _TRUNCATE,
+                          "text=%s&source_lang=%s&target_lang=%s", encoded, src, dst);
+    free(encoded);
+
+    if (written < 0) {
+        _snprintf_s(g_error, sizeof(g_error), _TRUNCATE, "request body too long (buffer: %d bytes)", cap);
+        return 0;
+    }
+    return 1;
+}
+
+int at_online_headers(const char* provider, const char* api_key, char* out, int cap)
+{
+    if (!provider || !out || cap <= 0) {
+        set_error("missing argument");
+        return 0;
+    }
+    out[0] = 0;
+
+    if (_stricmp(provider, "deepl") == 0) {
+        if (!api_key || !*api_key) {
+            set_error("this provider needs an API key");
+            return 0;
+        }
+        if (_snprintf_s(out, (size_t)cap, _TRUNCATE, "Authorization: DeepL-Auth-Key %s\r\n", api_key) < 0) {
+            set_error("API key is too long for a header");
+            return 0;
+        }
+    }
+    return 1;
+}
+
+const char* at_online_content_type(const char* provider)
+{
+    if (provider && _stricmp(provider, "deepl") == 0) {
+        return "application/x-www-form-urlencoded";
+    }
+    return NULL;
+}
+
+// deepl: {"translations":[{"detected_source_language":"EN","text":"..."}]}
+static int parse_deepl(const char* body, char* out, int cap)
+{
+    JVal* root = json_parse(body);
+    const char* message;
+    const char* text;
+    int n;
+
+    if (!root) {
+        set_error("response was not valid JSON");
+        return -1;
+    }
+
+    // errors arrive as {"message":"..."} with a 4xx status
+    message = json_str(json_get(root, "message"));
+    if (message && *message) {
+        set_errorf("API error: %s%s", message, "");
+        json_free(root);
+        return -1;
+    }
+
+    text = json_str(json_path(root, "translations.0.text"));
+    if (!text || !*text) {
+        set_error("response contained no translated text");
+        json_free(root);
+        return -1;
+    }
+
+    n = (int)strlen(text);
+    if (n >= cap) {
+        json_free(root);
+        set_error("translated text does not fit the output buffer");
+        return -1;
+    }
+    memcpy(out, text, (size_t)n + 1);
+    json_free(root);
+    return n;
+}
+
 int at_online_parse(const char* provider, const char* body_utf8, char* out, int cap)
 {
     if (!provider || !body_utf8 || !out || cap <= 0) {
@@ -592,6 +767,9 @@ int at_online_parse(const char* provider, const char* body_utf8, char* out, int 
     }
     out[0] = 0;
 
+    if (_stricmp(provider, "deepl") == 0) {
+        return parse_deepl(body_utf8, out, cap);
+    }
     if (_stricmp(provider, "google_clients5") == 0) {
         return parse_google_clients5(body_utf8, out, cap);
     }

@@ -69,30 +69,33 @@ function M.is_local_engine(name)
 end
 
 -- ---------------------------------------------------------------------------
--- Online providers and what they can actually produce.
+-- Online providers.
 --
--- The "free" engine is a list of providers, tried in this order:
+-- The mod offers two engines now: the official API (with a key) and the local
+-- model. The free public endpoints are still implemented and still pass their
+-- offline tests, and they can still be selected by hand, but they are no longer
+-- offered in the options and 'auto' never falls back to them: they get rate
+-- limited and blocked too easily to build on. Google's translate.* hosts in
+-- particular are reset during the TLS handshake in mainland China.
 --
---   google_clients5  clients5.google.com — the only free endpoint verified
---                    reachable from mainland China, and it answers zh-CN in
---                    Simplified and zh-TW in Traditional (verified 2026-09-15).
---   google_gtx       translate.googleapis.com — same engine, but this host is
---                    reset during the TLS handshake in China (SNI filtering),
---                    so it is the second choice rather than the first.
---   mymemory         reachable in China, but always answers in Traditional
---                    Chinese whatever you ask for — the Lingua Imperialis author
---                    confirmed this is a MyMemory limitation, not a caller bug
---                    ("If you want to translate your outgoing messages to Chinese
---                    Simplified, use either Google Translate or the offline NLLB").
+-- Kept here rather than deleted because they are the only zero-setup path and are
+-- handy for testing; see src/at_online.c for the reachability notes.
 --
--- So a provider that cannot produce the requested language is removed *before*
--- any request is made, and a wrong-but-present translation is never stored: it
--- would be silently shipped to the player as if it were correct.
---
--- Endpoint behaviour was measured, not assumed — see at_cli.exe selftest and the
--- notes in src/at_online.c.
+--   google_clients5  clients5.google.com — reachable from mainland China, and the
+--                    only free endpoint verified to answer zh-CN in Simplified.
+--   google_gtx       translate.googleapis.com — reset during the TLS handshake in
+--                    China (SNI filtering).
+--   mymemory         reachable, but always answers in Traditional Chinese whatever
+--                    you ask for — a MyMemory limitation, not a caller bug.
 -- ---------------------------------------------------------------------------
 M.FREE_PROVIDERS = { "google_clients5", "google_gtx", "mymemory" }
+
+-- Official APIs. DeepL is the default because it is reachable from mainland
+-- China (verified); translation.googleapis.com is not.
+M.API_PROVIDERS = {
+    deepl = "deepl",
+    google = "google_api",
+}
 
 -- provider -> { requested language = language it returns instead }
 local PROVIDER_GAPS = {
@@ -210,6 +213,17 @@ function M.note_success()
     end
 end
 
+-- The official API provider the player chose ("deepl" or "google").
+function M.api_provider(mod)
+    local wanted = mod and mod:get("api_provider")
+    if type(wanted) == "string" and M.API_PROVIDERS[wanted] then
+        return M.API_PROVIDERS[wanted]
+    end
+    return M.API_PROVIDERS.deepl
+end
+
+-- Resolves the engine to use. Returns nil when nothing is usable, so the caller
+-- can say so instead of quietly picking something the player did not ask for.
 function M.resolve(mod, lang)
     local wanted = mod:get("engine") or "auto"
     if wanted ~= "auto" then
@@ -224,17 +238,14 @@ function M.resolve(mod, lang)
         return "local_small"
     end
 
-    -- No local model. If the free service cannot produce this language at all,
-    -- a configured API key is the only way to get a correct result, so it wins
-    -- over a free provider that would answer in the wrong language.
-    if M.gap("online_free", lang) then
-        local key = mod:get("online_api_key")
-        if type(key) == "string" and key ~= "" then
-            return "online_api"
-        end
+    -- no local model: an API key is the only remaining option. The free endpoints
+    -- are deliberately not used here.
+    local key = mod:get("online_api_key")
+    if type(key) == "string" and key ~= "" then
+        return "online_api"
     end
 
-    return "online_free"
+    return nil
 end
 
 function M.is_implemented(name)
@@ -242,13 +253,19 @@ function M.is_implemented(name)
     return e ~= nil and e.implemented == true
 end
 
--- Placeholder runner: reports what would be translated.
+-- Reports what a local-model engine would do. Reached only when a model engine
+-- resolved, so a nil engine here means "nothing configured".
 function M.run(mod, report, lang)
     local engine = M.resolve(mod, lang)
     local pending = report.stats.pending
 
     if pending == 0 then
-        util.info(mod, "nothing to translate (engine: %s, target: %s)", engine, tostring(lang))
+        util.info(mod, "nothing to translate (engine: %s, target: %s)", tostring(engine), tostring(lang))
+        return
+    end
+
+    if engine == nil then
+        util.info(mod, "%d key(s) awaiting translation into '%s', but no engine is available", pending, tostring(lang))
         return
     end
 

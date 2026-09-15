@@ -101,6 +101,19 @@ local function check_engine_settings(lang)
 
     local engine = engines.resolve(mod, lang)
 
+    -- Nothing configured at all: no downloaded model and no API key.
+    if engine == nil then
+        util.warn(mod, "no translation engine is available (no model downloaded, no API key set)")
+        local message = mod:localize("no_engine_available")
+        if type(mod.notify) == "function" then
+            pcall(mod.notify, mod, message)
+        end
+        if type(mod.echo) == "function" then
+            pcall(mod.echo, mod, message)
+        end
+        return false
+    end
+
     -- local model selected but its files are not downloaded yet
     if engines.is_local_engine(engine) and not engines.model_available(engine) then
         util.warn(mod, "engine '%s' is selected but its model is not downloaded", engine)
@@ -372,20 +385,25 @@ function mod.test_engines()
     util.info(mod, "engine routing test (setting: %s, api key: %s):", selected, has_key and "set" or "none")
     for _, lang in ipairs(util.LANGUAGES) do
         local engine = engines.resolve(mod, lang)
-        local providers = engines.providers_for(engine, lang)
-        local gap = engines.gap(engine, lang)
-
-        if gap then
-            util.info(mod, "  %-6s -> %s  [NO PROVIDER: would return '%s']", lang, engine, tostring(gap.actual))
-        elseif #providers > 0 then
-            util.info(mod, "  %-6s -> %s  [%s]", lang, engine, table.concat(providers, ", "))
+        if engine == nil then
+            util.info(mod, "  %-6s -> (nothing available: no model, no API key)", lang)
         else
-            util.info(mod, "  %-6s -> %s", lang, engine)
+            local providers = engines.providers_for(engine, lang)
+            local gap = engines.gap(engine, lang)
+
+            if gap then
+                util.info(mod, "  %-6s -> %s  [NO PROVIDER: would return '%s']", lang, engine, tostring(gap.actual))
+            elseif #providers > 0 then
+                util.info(mod, "  %-6s -> %s  [%s]", lang, engine, table.concat(providers, ", "))
+            else
+                util.info(mod, "  %-6s -> %s", lang, engine)
+            end
         end
     end
 
     if mod.echo then
-        pcall(mod.echo, mod, string.format("engine: %s (see log for the per-language table)", engines.resolve(mod, current_lang())))
+        pcall(mod.echo, mod, string.format("engine: %s (see log for the per-language table)",
+            tostring(engines.resolve(mod, current_lang()))))
     end
 end
 

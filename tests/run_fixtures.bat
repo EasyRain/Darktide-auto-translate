@@ -15,9 +15,14 @@ call :check google_clients5 tests\fixtures\clients5_auto.json
 call :check google_clients5 tests\fixtures\clients5_special.json
 call :check mymemory       tests\fixtures\mymemory_ja.json
 call :check mymemory       tests\fixtures\mymemory_entity.json
+REM Real DeepL responses, captured with a free-tier key (no key in the fixtures).
+call :check deepl          tests\fixtures\deepl_zhcn.json
+call :check deepl          tests\fixtures\deepl_ja.json
 
-REM These two must be *rejected*: the service reports a refusal with status 200.
+REM These must be *rejected*: the service reports a refusal with status 200.
 call :expect_fail mymemory tests\fixtures\mymemory_quota.json
+REM DeepL sends errors as {"message":...} with a 4xx status.
+call :expect_fail deepl    tests\fixtures\deepl_badlang.json
 
 if "%FAILED%"=="0" (
   echo.

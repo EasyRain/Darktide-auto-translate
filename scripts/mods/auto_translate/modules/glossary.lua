@@ -118,33 +118,51 @@ local function loose_pattern(s)
     return table.concat(out)
 end
 
+-- Rich-text markup has to be masked for the same reason glossary terms are, and
+-- for one more: given "{#color(14,127,120)}Citadel Coelia Greenshade{#reset()}"
+-- the free services hand the whole string straight back untranslated. Masking the
+-- tags leaves plain words to translate and puts the original markup back after.
+--   {#color(240,248,255)}  {#reset()}  {damage:%s}
+local MARKUP = "{[#%w][^{}]*}"
+
 -- Replaces known terms of `lang` with placeholders.
 -- Returns the masked text and the token list (tokens[i].term is the replacement).
 function M.mask(text, lang)
-    if type(text) ~= "string" or text == "" or type(lang) ~= "string" then
+    if type(text) ~= "string" or text == "" then
         return text, {}
     end
     if not terms then M.load() end
 
-    local list = by_language[lang]
-    if not list or #list == 0 then
-        return text, {}
-    end
-
     local tokens = {}
     local result = text
 
-    for _, item in ipairs(list) do
-        local pattern = "%f[%w]" .. loose_pattern(item.en) .. "%f[%W]"
-        local token_index = nil
-        result = result:gsub(pattern, function()
-            if not token_index then
-                tokens[#tokens + 1] = { term = item.term, source = item.en }
-                token_index = #tokens
-            end
-            return PLACEHOLDER_OPEN .. (token_index - 1) .. PLACEHOLDER_CLOSE
-        end)
+    local list = type(lang) == "string" and by_language[lang] or nil
+    if list and #list > 0 then
+        for _, item in ipairs(list) do
+            local pattern = "%f[%w]" .. loose_pattern(item.en) .. "%f[%W]"
+            local token_index = nil
+            result = result:gsub(pattern, function()
+                if not token_index then
+                    tokens[#tokens + 1] = { term = item.term, source = item.en }
+                    token_index = #tokens
+                end
+                return PLACEHOLDER_OPEN .. (token_index - 1) .. PLACEHOLDER_CLOSE
+            end)
+        end
     end
+
+    -- Markup goes into the same token list, so one unmask() restores everything.
+    -- Identical tags share a token to keep the placeholder count down.
+    local seen = {}
+    result = result:gsub(MARKUP, function(tag)
+        local index = seen[tag]
+        if not index then
+            tokens[#tokens + 1] = { term = tag, source = tag, markup = true }
+            index = #tokens
+            seen[tag] = index
+        end
+        return PLACEHOLDER_OPEN .. (index - 1) .. PLACEHOLDER_CLOSE
+    end)
 
     return result, tokens
 end

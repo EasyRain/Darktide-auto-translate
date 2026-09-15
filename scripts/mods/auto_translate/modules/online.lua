@@ -42,6 +42,7 @@ int at_available(void);
 const char* at_error(void);
 const char* at_version(void);
 int at_http_get(const char*, const char*);
+int at_http_post(const char*, const char*, const char*, const char*, const char*);
 int at_http_poll(int*, int*, int*, char*, int, int*, unsigned long*);
 int at_http_pending(void);
 const char* at_win_error_text(unsigned long);
@@ -50,11 +51,15 @@ const char* at_proxy_in_use(void);
 const char* at_proxy_hint(void);
 int at_online_provider_known(const char*);
 int at_online_needs_key(const char*);
-int at_online_host(const char*, char*, int);
+int at_online_uses_post(const char*);
+int at_online_host(const char*, const char*, char*, int);
 int at_online_path(const char*, const char*, const char*, const char*, const char*, char*, int);
+int at_online_body(const char*, const char*, const char*, const char*, char*, int);
+int at_online_headers(const char*, const char*, char*, int);
+const char* at_online_content_type(const char*);
 int at_online_parse(const char*, const char*, char*, int);
 const char* at_online_error(void);
-int at_online_lang_code(const char*, char*, int);
+int at_online_lang_code_for(const char*, const char*, char*, int);
 ]]
 
 -- Reads a C string safely: a NULL pointer is cdata (truthy!) in LuaJIT, so a
@@ -140,7 +145,7 @@ local SMALL_CAP = 8192
 local PATH_CAP = 16384
 
 local ffi_ready = nil
-local body_buf, host_buf, path_buf, out_buf, id_buf, result_buf, code_buf, len_buf, win_buf
+local body_buf, host_buf, path_buf, out_buf, id_buf, result_buf, code_buf, len_buf, win_buf, headers_buf
 
 local function ensure_buffers()
     if ffi_ready ~= nil then
@@ -151,10 +156,13 @@ local function ensure_buffers()
         ffi_ready = false
         return false
     end
+    -- body_buf doubles as the POST request body (the core copies it when the job
+    -- is queued) and as the response buffer.
     body_buf = ffi.new("char[?]", BODY_CAP)
     host_buf = ffi.new("char[?]", 512)
     path_buf = ffi.new("char[?]", PATH_CAP)
     out_buf = ffi.new("char[?]", SMALL_CAP)
+    headers_buf = ffi.new("char[?]", 1024)
     id_buf = ffi.new("int[1]")
     result_buf = ffi.new("int[1]")
     code_buf = ffi.new("int[1]")
@@ -272,32 +280,40 @@ end
 -- ---------------------------------------------------------------------------
 -- Queue
 --
--- A head index instead of table.remove(queue, 1): queues can hold thousands of
--- keys and shifting the table for every one of them would be quadratic.
+-- Head and tail are tracked explicitly. The obvious `#queue - qhead + 1` is
+-- wrong here: the table is deliberately left with nil holes where items were
+-- popped, and Lua's '#' is allowed to return any border of such a table. It
+-- reported a negative length and, worse, q_push could write over live entries.
 -- ---------------------------------------------------------------------------
-local queue, qhead = {}, 1
+local queue, qhead, qtail = {}, 1, 0
 local inflight = nil
 
 local function q_count()
-    return #queue - qhead + 1
+    return qtail - qhead + 1
 end
 
 local function q_push(item)
-    queue[#queue + 1] = item
+    qtail = qtail + 1
+    queue[qtail] = item
 end
 
 local function q_pop()
-    local item = queue[qhead]
-    if item then
-        queue[qhead] = nil
-        qhead = qhead + 1
+    if qhead > qtail then
+        return nil
     end
+    local item = queue[qhead]
+    queue[qhead] = nil
+    qhead = qhead + 1
     return item
 end
 
 local function q_unshift(item)
     qhead = qhead - 1
     queue[qhead] = item
+end
+
+local function q_clear()
+    queue, qhead, qtail = {}, 1, 0
 end
 
 -- Loaded translation files, keyed by mod+language. Cached on purpose: re-reading
@@ -427,14 +443,15 @@ M.state = {
 }
 
 local function provider_needs_key(name)
-    return name == "google_api"
+    return name == "google_api" or name == "deepl"
 end
 
-local function providers_for(engine, lang)
+local function providers_for(mod, engine, lang)
     if engine == "online_api" then
-        return { "google_api" }
+        return { engines.api_provider(mod) }
     end
     if engine == "online_free" then
+        -- not offered in the options any more; still usable if selected by hand
         return engines.providers_for(engine, lang)
     end
     return {}
@@ -458,13 +475,22 @@ function M.start(mod, report, lang)
 
     M.stop(mod)
 
+    if engine == nil then
+        util.warn(mod, "no translation engine is available (no downloaded model and no API key)")
+        M.state.finished = true
+        if type(mod.notify) == "function" then
+            pcall(mod.notify, mod, mod:localize("no_engine_available"))
+        end
+        return false
+    end
+
     if gap then
         util.warn(mod, "engine '%s' cannot produce '%s' (would return '%s'); nothing queued",
             engine, tostring(lang), tostring(gap.actual))
         return false
     end
 
-    local providers = providers_for(engine, lang)
+    local providers = providers_for(mod, engine, lang)
     if #providers == 0 then
         util.info(mod, "engine '%s' has no online provider for '%s'", engine, tostring(lang))
         return false
@@ -552,7 +578,7 @@ function M.start(mod, report, lang)
 end
 
 function M.stop(mod)
-    queue, qhead = {}, 1
+    q_clear()
     inflight = nil
     M.state.running = false
     M.state.finished = false
@@ -605,9 +631,14 @@ local function dispatch(mod)
     end
 
     if not provider then
-        -- every provider this language has was ruled out this session
-        M.state.refused = M.state.refused + 1
+        -- Every provider this language had was ruled out. Consuming the rest of
+        -- the queue here would count hundreds of "refusals" without a single
+        -- request (that happened: 252 items drained in two seconds), so stop.
         M.state.last_error = "no usable provider left"
+        util.warn(mod, "no online provider is usable for '%s'; stopping with %d key(s) left",
+            tostring(M.state.lang), q_count())
+        q_unshift(item)
+        finish(mod, "stopped: every provider was unreachable")
         return false
     end
     M.state.provider = provider
@@ -626,22 +657,42 @@ local function dispatch(mod)
     -- paraphrase them; they are restored from the token list afterwards.
     local masked, tokens = glossary.mask(item.en, M.state.lang)
 
-    if core.at_online_host(provider, host_buf, 512) == 0 then
-        M.state.last_error = ffi.string(core.at_online_error())
+    if core.at_online_host(provider, api_key, host_buf, 512) == 0 then
+        M.state.last_error = cstr(core.at_online_error())
         M.state.failed = M.state.failed + 1
         util.warn(mod, "could not build request for %s: %s", provider, tostring(M.state.last_error))
         return false
     end
     if core.at_online_path(provider, api_key, "en", M.state.lang, masked, path_buf, PATH_CAP) == 0 then
-        M.state.last_error = ffi.string(core.at_online_error())
+        M.state.last_error = cstr(core.at_online_error())
         M.state.failed = M.state.failed + 1
         util.warn(mod, "could not build request path for %s: %s", provider, tostring(M.state.last_error))
         return false
     end
 
-    local job = core.at_http_get(host_buf, path_buf)
+    -- Providers that take their query in the body (DeepL) also need an auth header.
+    local job
+    if core.at_online_uses_post(provider) == 1 then
+        if core.at_online_body(provider, "en", M.state.lang, masked, body_buf, BODY_CAP) == 0 then
+            M.state.last_error = cstr(core.at_online_error())
+            M.state.failed = M.state.failed + 1
+            util.warn(mod, "could not build the request body for %s: %s", provider, tostring(M.state.last_error))
+            return false
+        end
+        if core.at_online_headers(provider, api_key, headers_buf, 1024) == 0 then
+            M.state.last_error = cstr(core.at_online_error())
+            M.state.failed = M.state.failed + 1
+            util.warn(mod, "could not build the request headers for %s: %s", provider, tostring(M.state.last_error))
+            return false
+        end
+        job = core.at_http_post(host_buf, path_buf, core.at_online_content_type(provider),
+                                headers_buf, body_buf)
+    else
+        job = core.at_http_get(host_buf, path_buf)
+    end
+
     if job <= 0 then
-        M.state.last_error = ffi.string(core.at_error())
+        M.state.last_error = cstr(core.at_error())
         M.state.failed = M.state.failed + 1
         util.warn(mod, "request rejected by the native core: %s", tostring(M.state.last_error))
         return false
@@ -666,7 +717,14 @@ local function handle_response(mod, req, body)
 
     local n = core.at_online_parse(req.provider, body, out_buf, SMALL_CAP)
     if n < 0 then
-        return false, ffi.string(core.at_online_error()), true
+        -- A response we cannot read is a problem with *this text* or with the
+        -- reply, not with the connection: it must not count towards disabling the
+        -- provider or tripping the circuit breaker. (Google answers [null,...]
+        -- for text it will not translate, which used to take a healthy provider
+        -- offline after three keys.)
+        local why = cstr(core.at_online_error()) or "unreadable response"
+        util.warn(mod, "%s could not be read from %s: %s", item.key, req.provider, tostring(why))
+        return false, why, false
     end
 
     local raw = ffi.string(out_buf, n)
