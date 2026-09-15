@@ -93,6 +93,10 @@ AT_API int  at_load_model(void);
 // honoured or ignored.
 AT_API int  at_load_model_async(void);
 
+// A string out of a JSON response at a "a.b.0.c" path (numeric steps index arrays).
+// 1 = found, 0 = not there or not a string (at_error() says which).
+AT_API int  at_json_string_at(const char* json_utf8, const char* path_utf8, char* out, int cap);
+
 // The proxy currently in use (mod option first, then the Windows setting), as a wide
 // string, for code that opens its own WinHTTP session. Returns 1 when a proxy is set.
 AT_API int  at_proxy_wide(wchar_t* out, int cap);

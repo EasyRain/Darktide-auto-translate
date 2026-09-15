@@ -649,5 +649,91 @@ check("download: delete without a core deletes nothing", dl.delete(fake_mod), 0)
 check("download: cancel without a core is a no-op", dl.cancel(fake_mod), false)
 core_loaded = true
 
+-- ---------------------------------------------------------------------------
+-- custom.lua: the request a user-described endpoint gets
+--
+-- This is the module that turns nine settings into an HTTP request, and every part of it
+-- has a way to be silently wrong: a placeholder that is not substituted, a quote that
+-- breaks the JSON, a key that ends up escaped in an auth header, a response path read from
+-- the wrong place. The service itself cannot be tested here, so the strings can.
+-- ---------------------------------------------------------------------------
+local cu = assert(loadfile(here .. "/../scripts/mods/auto_translate/modules/custom.lua"))()
+
+local settings = {}
+local function fake_mod_with(values)
+    return {
+        get = function(_, key) return values[key] end,
+        localize = function(_, key) return key end,
+    }
+end
+
+local spec = cu.spec(fake_mod_with({
+    custom_url = "https://api.example.com/v1/chat?x=1",
+    custom_key = "sk-test",
+    custom_auth = "Authorization: Bearer {key}",
+    custom_method = "post",
+    custom_content_type = "application/json",
+    custom_body = '{"text":"{text}","from":"{source}","to":"{target}","sys":"{system}"}',
+    custom_prompt = "translate carefully",
+    custom_headers = "x-a: 1;; x-b: 2",
+    custom_path = "choices.0.message.content",
+}))
+check("custom: spec reads every field", spec.url, "https://api.example.com/v1/chat?x=1")
+check("custom: URL splits into host and path",
+    table.concat({ cu.split_url(spec.url) }, "|"), "https://api.example.com|/v1/chat?x=1")
+check("custom: a URL without a scheme is refused", cu.split_url("api.example.com/x"), nil)
+check("custom: a URL without a path still works",
+    table.concat({ cu.split_url("https://api.example.com") }, "|"), "https://api.example.com|/")
+check("custom: nothing missing in a complete spec", cu.problem(spec), nil)
+
+local values = cu.values(spec, "Reload Speed", "en", "zh-tw")
+check("custom: the body substitutes everything",
+    cu.build(spec, values),
+    '{"text":"Reload Speed","from":"en","to":"zh-tw","sys":"translate carefully"}')
+-- quotes and newlines have to survive inside a JSON string
+local nasty = cu.values(spec, 'say "hi"\nnow', "en", "zh-tw")
+check("custom: a quote and a newline are escaped",
+    cu.build(spec, nasty):find('"text":"say \\"hi\\"\\nnow"', 1, true) ~= nil, true)
+check("custom: the auth header carries the raw key",
+    cu.build_headers(spec, values), "Authorization: Bearer sk-test\r\nx-a: 1\r\nx-b: 2\r\n")
+
+local get_spec = cu.spec(fake_mod_with({
+    custom_url = "https://api.example.com/translate",
+    custom_method = "get",
+    custom_body = "q={text}&source={source}&target={target}",
+    custom_path = "translatedText",
+}))
+check("custom: a GET query is percent-encoded",
+    cu.query_for(get_spec, cu.values(get_spec, "Reload Speed!", "en", "zh-tw")),
+    "q=Reload%20Speed%21&source=en&target=zh-tw")
+check("custom: the query is appended to the path",
+    cu.append_query("/translate", "q=x"), "/translate?q=x")
+-- A URL that already carries a query keeps it and the template is appended: rewriting the
+-- query would silently drop whatever the player put in the URL.
+check("custom: an existing query gets an ampersand",
+    cu.append_query("/translate?key=1", "q=x"), "/translate?key=1&q=x")
+
+-- What is missing has to be reported as its own key, or the player gets "translation
+-- failed" for four different mistakes.
+check("custom: no URL is its own problem",
+    cu.problem(cu.spec(fake_mod_with({}))), "custom_url_missing")
+check("custom: a broken URL is its own problem",
+    cu.problem(cu.spec(fake_mod_with({ custom_url = "not a url", custom_path = "x" }))), "custom_url_invalid")
+check("custom: no response path is its own problem",
+    cu.problem(cu.spec(fake_mod_with({ custom_url = "https://a.example.com/x" }))), "custom_path_missing")
+-- defaults: an empty body/prompt/content-type still produces a usable OpenAI-style request
+local defaulted = cu.spec(fake_mod_with({ custom_url = "https://a.example.com/x", custom_path = "choices.0.message.content" }))
+check("custom: an empty body gets the default template",
+    defaulted.body:find('"messages"', 1, true) ~= nil, true)
+check("custom: an empty prompt gets the default one",
+    defaulted.prompt:find("Darktide", 1, true) ~= nil, true)
+check("custom: an empty content type becomes JSON", defaulted.content_type, "application/json")
+
+check("custom: 401/403 is named as an auth problem", cu.error_key(401), "custom_auth_failed")
+check("custom: 404 is named as a URL problem", cu.error_key(404), "custom_not_found")
+check("custom: 429 is named as rate limiting", cu.error_key(429), "custom_rate_limited")
+check("custom: 500 is named as a server error", cu.error_key(500), "custom_server_error")
+check("custom: 400 has no special name", cu.error_key(400), nil)
+
 print(string.format("%d failure(s) in total", failures))
 os.exit(failures == 0 and 0 or 1)

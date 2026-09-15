@@ -15,13 +15,15 @@ local store
 local glossary
 local engines
 local injector
+local custom          -- modules/custom.lua: builds requests for a user-described endpoint
 
-function M.init(u, s, g, e, i)
+function M.init(u, s, g, e, i, c)
     util = u
     store = s
     glossary = g
     engines = e
     injector = i
+    custom = c
 end
 
 -- ---------------------------------------------------------------------------
@@ -84,6 +86,7 @@ const char* at_download_path(void);
 int at_sha256_file(const char*, char*, int);
 long long at_file_size64(const char*);
 int at_delete_file(const char*);
+int at_json_string_at(const char*, const char*, char*, int);
 ]]
 
 -- Reads a C string safely: a NULL pointer is cdata (truthy!) in LuaJIT, so a
@@ -992,6 +995,8 @@ end
 M.proxy_hint = ""
 
 local function provider_needs_key(name)
+    -- The custom service has its own key field, which may be empty on purpose (a local
+    -- endpoint, or one that authenticates some other way).
     return name == "google_api" or name == "deepl"
 end
 
@@ -1263,6 +1268,7 @@ end
 -- have died with "attempt to call a nil value" instead of doing its job.
 local accept_translation
 local fail_item
+local dispatch_custom     -- defined below, next to handle_response()
 
 -- Starts a request for one queued item. Returns false when nothing was started.
 -- dispatch_lines() is defined further down, next to the accept path it has to use.
@@ -1406,6 +1412,14 @@ local function dispatch(mod)
     end
     M.state.provider = provider
 
+    -- Everything the core knows how to build is for the services it ships. A custom
+    -- endpoint is described by settings instead, so its request is built in
+    -- modules/custom.lua and handed to the generic HTTP entry points; the rest of the
+    -- path (masking, inflight, the accept guards) is exactly the same.
+    if provider == "custom" then
+        return dispatch_custom(mod, item)
+    end
+
     local api_key = nil
     if provider_needs_key(provider) then
         api_key = mod:get("online_api_key")
@@ -1532,11 +1546,119 @@ function accept_translation(mod, req, raw, src)
     return true
 end
 
+-- Reports a configuration problem with the custom endpoint once per session.
+--
+-- Without this, a wrong response path would print one identical notice per string (the
+-- failures are per item), which buries the one message that says what to fix.
+local custom_problems_seen = {}
+local function note_custom_problem(mod, key, detail)
+    if custom_problems_seen[key] then
+        return
+    end
+    custom_problems_seen[key] = true
+    util.popup(mod, key, tostring(detail))
+end
+
+-- Reads the translated string out of a reply. The services the core ships have a parser
+-- each; a custom endpoint instead names where the string is ("choices.0.message.content"),
+-- which at_json_string_at() walks. Returns the byte count (>0) or sets `why`.
+local function read_response(req, body, why_out)
+    if req.provider == "custom" then
+        local n = core.at_json_string_at(body, req.response_path, out_buf, SMALL_CAP)
+        if n == 0 then
+            why_out(nil, string.format("%s (path '%s')", tostring(cstr(core.at_error())),
+                tostring(req.response_path)))
+            return 0
+        end
+        return n
+    end
+
+    local n = core.at_online_parse(req.provider, body, out_buf, SMALL_CAP)
+    return n
+end
+
+-- Builds and sends a request for a user-described endpoint.
+--
+-- Everything that can go wrong here is a mis-configuration rather than a bad string, so a
+-- missing URL/path/body stops the run with a notice naming the field, instead of failing
+-- item by item with "translation failed".
+function dispatch_custom(mod, item)
+    if not custom then
+        M.state.last_error = "the custom API module is not loaded"
+        util.warn(mod, "%s", M.state.last_error)
+        finish(mod, "stopped: the custom API module is missing")
+        return false
+    end
+
+    local spec = custom.spec(mod)
+    local problem = custom.problem(spec)
+    if problem then
+        M.state.last_error = problem
+        -- The message names the field, and the URL is included when that is what is wrong.
+        if problem == "custom_url_invalid" then
+            util.popup(mod, problem, tostring(spec.url))
+        else
+            util.popup(mod, problem)
+        end
+        util.warn(mod, "the custom API is not usable: %s", problem)
+        q_unshift(item)
+        finish(mod, "stopped: the custom API is not configured")
+        return false
+    end
+
+    local host, path = custom.split_url(spec.url)
+    -- A custom endpoint is never trusted with rich-text markup (nothing is known about it),
+    -- so markup is masked exactly as it is for every provider but DeepL.
+    local masked, tokens = glossary.mask(item.en, M.state.lang, true)
+    local values = custom.values(spec, masked, "en", M.state.lang)
+
+    local job
+    if spec.method == "get" then
+        path = custom.append_query(path, custom.query_for(spec, values))
+        job = core.at_http_get(host, path)
+    else
+        local body = custom.build(spec, values)
+        local headers = custom.build_headers(spec)
+        job = core.at_http_post(host, path, spec.content_type, headers, body)
+    end
+
+    if job <= 0 then
+        M.state.last_error = cstr(core.at_error())
+        M.state.failed = M.state.failed + 1
+        util.warn(mod, "the custom request was rejected by the native core: %s", tostring(M.state.last_error))
+        return false
+    end
+
+    inflight = {
+        item = item,
+        provider = "custom",
+        job = job,
+        masked = masked,
+        tokens = tokens,
+        response_path = spec.path,
+    }
+    next_slot = elapsed + min_interval(M.state.engine)
+    return true
+end
+
 -- Parses a response and stores the result.
 -- Returns true, or false plus a reason and whether this was a transport problem.
 local function handle_response(mod, req, body)
     local ffi = Mods.lua.ffi
     local item = req.item
+
+    if req.provider == "custom" then
+        local parse_error
+        local n = read_response(req, body, function(_, message) parse_error = message end)
+        if n == 0 then
+            -- A reply we cannot read is a configuration problem, not a bad connection:
+            -- report it once with the path it looked at, and do not disable the provider.
+            util.warn(mod, "%s could not be read from custom: %s", item.key, tostring(parse_error))
+            note_custom_problem(mod, "custom_unreadable", tostring(parse_error))
+            return false, parse_error, false
+        end
+        return accept_translation(mod, req, ffi.string(out_buf, n), req.provider)
+    end
 
     local n = core.at_online_parse(req.provider, body, out_buf, SMALL_CAP)
     if n < 0 then
@@ -1618,6 +1740,15 @@ function fail_item(mod, req, reason, http_status, transport, code)
         util.info(mod, "%s:%s refused %d times by '%s' (%s); parked until another engine translates this language",
             item.mod_id, item.key, refusals, tostring(M.state.engine), tostring(reason))
         return
+    end
+
+    -- A custom endpoint's HTTP failures are almost always configuration, and each one has
+    -- a different fix (key, URL, quota), so they get their own wording - once per session.
+    if req.provider == "custom" and core and custom then
+        local key = custom.error_key(http_status)
+        if key then
+            note_custom_problem(mod, key, tostring(http_status))
+        end
     end
 
     if http_status == 429 or http_status == 403 then
@@ -1909,6 +2040,29 @@ function M.update(mod, dt)
             inflight = nil
             local result = result_buf[0]   -- 0 = completed, <0 = transport failure
             local http_code = code_buf[0]  -- only meaningful when result == 0
+
+            if req.kind == "probe" then
+                -- The test button: show what came back and stop. Nothing is stored, and the
+                -- reply is shown as it is, so a wrong response path is obvious.
+                local len = len_buf[0]
+                local body = len > 0 and ffi.string(body_buf, len) or ""
+                util.info(mod, "test reply (%d bytes) from %s: %s", #body, tostring(req.describe), body)
+                if result ~= 0 then
+                    util.popup(mod, "custom_test_failed", string.format("transport error %d", result))
+                elseif http_code < 200 or http_code >= 300 then
+                    local key = custom and custom.error_key(http_code)
+                    util.popup(mod, key or "custom_test_failed", tostring(http_code))
+                else
+                    local why
+                    local n = read_response(req, body, function(_, message) why = message end)
+                    if n == 0 then
+                        util.popup(mod, "custom_unreadable", tostring(why))
+                    else
+                        util.popup(mod, "custom_test_ok", req.item.en, ffi.string(out_buf, n))
+                    end
+                end
+                return
+            end
 
             if result == 0 and http_code >= 200 and http_code < 300 then
                 local len = len_buf[0]

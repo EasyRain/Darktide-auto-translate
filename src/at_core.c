@@ -15,6 +15,7 @@
 
 #include "at_core.h"
 #include "at_model.h"
+#include "at_json.h"
 
 #define AT_MAX_BODY (256 * 1024)
 #define AT_TIMEOUT_MS 20000
@@ -700,6 +701,45 @@ BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, LPVOID reserved)
 int at_available(void)
 {
     return (g_inited && g_thread) ? 1 : 0;
+}
+
+// A string out of a JSON document, at a "choices.0.message.content" style path. This is
+// what the custom API engine uses: the response shape of an endpoint nobody here has seen
+// is a user setting, so the reading half has to be generic (walking the tree is json_path()
+// in at_json.c, which already understands numeric array indices).
+//
+// 1 = a string was found and copied to out; 0 = no string there (at_error() says whether
+// the document was malformed or the path simply absent).
+int at_json_string_at(const char* json_utf8, const char* path_utf8, char* out, int cap)
+{
+    JVal* root;
+    JVal* node;
+    const char* text;
+
+    if (!json_utf8 || !path_utf8 || !path_utf8[0] || !out || cap <= 0) {
+        set_error("missing argument");
+        return 0;
+    }
+    out[0] = 0;
+
+    root = json_parse(json_utf8);
+    if (!root) {
+        set_error("the response is not valid JSON");
+        return 0;
+    }
+
+    node = json_path(root, path_utf8);
+    text = json_str(node);
+    if (!text) {
+        _snprintf_s(g_error, sizeof(g_error), _TRUNCATE,
+                    "the response has no string at '%s'", path_utf8);
+        json_free(root);
+        return 0;
+    }
+
+    _snprintf_s(out, (size_t)cap, _TRUNCATE, "%s", text);
+    json_free(root);
+    return 1;
 }
 
 const char* at_error(void)

@@ -157,9 +157,21 @@ M.FREE_PROVIDERS = { "google_clients5", "google_gtx", "mymemory" }
 
 -- Official APIs. DeepL is the default because it is reachable from mainland
 -- China (verified); translation.googleapis.com is not.
+-- The services the "Online API" engine can talk to. Google Cloud is *not* offered: it is
+-- blocked from mainland China (the TLS handshake to translation.googleapis.com is reset,
+-- verified) and its sign-up is the most involved of the three. Its code is still in
+-- at_online.c and passes its offline tests, so it can be brought back by adding one line
+-- here - but it is not a setting any more.
 M.API_PROVIDERS = {
     deepl = "deepl",
-    google = "google_api",
+    custom = "custom",
+}
+
+-- A settings file written before Google was dropped still says api_provider = "google".
+-- DeepL is the only shipped service left, so that value maps to it instead of selecting a
+-- provider the options no longer offer.
+local LEGACY_PROVIDERS = {
+    google = "deepl",
 }
 
 -- provider -> { requested language = language it returns instead }
@@ -275,8 +287,11 @@ end
 -- The official API provider the player chose ("deepl" or "google").
 function M.api_provider(mod)
     local wanted = mod and mod:get("api_provider")
-    if type(wanted) == "string" and M.API_PROVIDERS[wanted] then
-        return M.API_PROVIDERS[wanted]
+    if type(wanted) == "string" then
+        wanted = LEGACY_PROVIDERS[wanted] or wanted
+        if M.API_PROVIDERS[wanted] then
+            return M.API_PROVIDERS[wanted]
+        end
     end
     return M.API_PROVIDERS.deepl
 end

@@ -25,8 +25,10 @@ engines.init(util, store)
 local glossary = mod:io_dofile(BASE .. "glossary")
 glossary.init(util)
 
+local custom = mod:io_dofile(BASE .. "custom")
+
 local online = mod:io_dofile(BASE .. "online")
-online.init(util, store, glossary, engines, injector)
+online.init(util, store, glossary, engines, injector, custom)
 
 local exporter = mod:io_dofile(BASE .. "exporter")
 exporter.init(util)
@@ -163,6 +165,27 @@ local function check_engine_settings(lang)
 
     if engine ~= "online_api" then
         return true
+    end
+
+    -- The custom service is configured by fields, not by one key, so what has to be
+    -- checked is its own configuration - and a missing URL or response path is as fatal as
+    -- a missing key (nothing can be sent, or nothing can be read back).
+    if engines.api_provider(mod) == "custom" then
+        if not custom then
+            return true
+        end
+        local problem = custom.problem(custom.spec(mod))
+        if not problem then
+            return true
+        end
+        local spec = custom.spec(mod)
+        util.log(mod, "the custom service is not usable: %s", problem)
+        if problem == "custom_url_invalid" then
+            util.popup(mod, problem, tostring(spec.url))
+        else
+            util.popup(mod, problem)
+        end
+        return false
     end
 
     local key = mod:get("online_api_key")
@@ -370,6 +393,16 @@ function mod.reload_translations()
     end
 end
 
+-- Mod options: "Test the online engine".
+--
+-- One sample string through the configured service, with the request, the status and the
+-- reply in the chat. A custom endpoint has nine fields and every mistake in them looks the
+-- same from the outside ("translation failed"), so this is what makes it configurable at
+-- all.
+function mod.test_custom_api()
+    online.probe(mod, current_lang())
+end
+
 -- Mod options: "Clear local translations" (only the current target language)
 function mod.clear_cache()
     local oslib = (Mods and Mods.lua and Mods.lua.os) or os
@@ -501,7 +534,8 @@ mod.on_setting_changed = function(setting_id)
         end
     elseif setting_id == "target_language" or setting_id == "engine"
         or setting_id == "online_api_key" or setting_id == "proxy"
-        or setting_id == "retranslate_local" then
+        or setting_id == "retranslate_local"
+        or setting_id:sub(1, 7) == "custom_" or setting_id == "api_provider" then
         -- These all change what the queue should even contain, so stopping is not
         -- enough: the pipeline has to be rebuilt. (Previously this only stopped the
         -- queue and told the player to press "Reload", which looked like nothing

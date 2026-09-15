@@ -1329,6 +1329,58 @@ static int cmd_hash(int argc, char** argv)
     return 0;
 }
 
+// ---------------------------------------------------------------------------
+// jsonpath — read one string out of a JSON file at a "a.b.0.c" path
+//
+// The custom API engine's response shape is a setting, not a constant, so the extraction
+// has to be testable without a live endpoint: point this at a captured response and the
+// path you configured.
+//
+//   at_cli.exe jsonpath <file.json> <path>
+// ---------------------------------------------------------------------------
+static int cmd_jsonpath(int argc, char** argv)
+{
+    FILE* f;
+    long size;
+    char* body;
+    char out[8192] = { 0 };
+
+    if (argc < 4) {
+        fprintf(stderr, "usage: at_cli.exe jsonpath <file.json> <path like choices.0.message.content>\n");
+        return 1;
+    }
+    f = fopen(argv[2], "rb");
+    if (!f) {
+        fprintf(stderr, "cannot open %s\n", argv[2]);
+        return 3;
+    }
+    fseek(f, 0, SEEK_END);
+    size = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    body = (char*)malloc((size_t)size + 1);
+    if (!body) {
+        fclose(f);
+        return 3;
+    }
+    if (fread(body, 1, (size_t)size, f) != (size_t)size) {
+        fprintf(stderr, "short read on %s\n", argv[2]);
+        free(body);
+        fclose(f);
+        return 3;
+    }
+    body[size] = 0;
+    fclose(f);
+
+    if (!at_json_string_at(body, argv[3], out, (int)sizeof(out))) {
+        fprintf(stderr, "no value: %s\n", at_error());
+        free(body);
+        return 3;
+    }
+    printf("%s\n", out);
+    free(body);
+    return 0;
+}
+
 static int cmd_switch(int argc, char** argv)
 {
     char out[8192] = { 0 };
@@ -1581,6 +1633,8 @@ int main(int argc, char** argv)
         rc = cmd_fetch(argc, argv);
     } else if (_stricmp(argv[1], "hash") == 0) {
         rc = cmd_hash(argc, argv);
+    } else if (_stricmp(argv[1], "jsonpath") == 0) {
+        rc = cmd_jsonpath(argc, argv);
     } else {
         fprintf(stderr, "unknown command: %s\n", argv[1]);
         usage();

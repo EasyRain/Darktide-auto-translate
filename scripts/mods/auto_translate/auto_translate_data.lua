@@ -60,7 +60,7 @@ return {
                 default_value = "deepl",
                 options = {
                     { text = "api_deepl",  value = "deepl" },
-                    { text = "api_google", value = "google" },
+                    { text = "api_custom", value = "custom" },
                 },
             },
             {
@@ -68,6 +68,74 @@ return {
                 type = "text",
                 default_value = "",
                 max_length = 256,
+            },
+            -- The custom endpoint. Every field here exists because no two services agree on
+            -- anything: the URL, how the key is sent, whether the query goes in the body or
+            -- the query string, what the request looks like, and where the translation sits
+            -- in the reply. The tooltips carry the explanations (and one example each); the
+            -- labels stay short so the list is readable.
+            {
+                setting_id = "custom_url",
+                type = "text",
+                default_value = "",
+                max_length = 512,
+            },
+            {
+                setting_id = "custom_key",
+                type = "text",
+                default_value = "",
+                max_length = 256,
+            },
+            {
+                setting_id = "custom_auth",
+                type = "text",
+                default_value = "Authorization: Bearer {key}",
+                max_length = 256,
+            },
+            {
+                setting_id = "custom_method",
+                type = "dropdown",
+                default_value = "post",
+                options = {
+                    { text = "method_post_json", value = "post" },
+                    { text = "method_get_query", value = "get" },
+                },
+            },
+            {
+                setting_id = "custom_content_type",
+                type = "text",
+                default_value = "application/json",
+                max_length = 128,
+            },
+            {
+                setting_id = "custom_body",
+                type = "text",
+                default_value = "",
+                max_length = 1024,
+            },
+            {
+                setting_id = "custom_prompt",
+                type = "text",
+                default_value = "",
+                max_length = 1024,
+            },
+            {
+                setting_id = "custom_headers",
+                type = "text",
+                default_value = "",
+                max_length = 512,
+            },
+            {
+                setting_id = "custom_path",
+                type = "text",
+                default_value = "",
+                max_length = 128,
+            },
+            {
+                setting_id = "test_custom_api",
+                type = "button",
+                button_text = "test_custom_api",
+                function_name = "test_custom_api",
             },
             {
                 setting_id = "proxy",

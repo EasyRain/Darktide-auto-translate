@@ -126,24 +126,163 @@
         ["zh-cn"] = "翻译引擎",
     },
     no_engine_available = {
-        en = "Auto Translate: no translation engine is available yet. Either turn on 'Download small model' (offline, ~600 MB) or fill in an API key in the options. Translation stays paused until one of them is set up.",
-        ["zh-cn"] = "Auto Translate：目前没有可用的翻译引擎。请打开「下载小模型」（离线，约 600 MB），或在设置里填写 API 密钥。在配置好其中之一之前不会进行翻译。",
+        en = "Auto Translate: no translation engine is available yet. Either turn on 'Download the offline model' (~1.4 GB) or fill in an API key in the options. Translation stays paused until one of them is set up.",
+        ["zh-cn"] = "Auto Translate：目前没有可用的翻译引擎。请打开「下载离线模型」（约 1.4 GB），或在设置里填写 API 密钥。在配置好其中之一之前不会进行翻译。",
     },
     api_provider = {
         en = "API service",
         ["zh-cn"] = "API 服务商",
     },
     api_provider_description = {
-        en = "Which official translation API the key belongs to. DeepL has a free tier (500,000 characters per month) and is reachable from mainland China; Google Cloud is blocked there.",
-        ["zh-cn"] = "密钥属于哪家正式翻译 API。DeepL 有免费额度（每月 50 万字符）且国内可直连；Google Cloud 在国内被墙。",
+        en = "Which service the 'Online API' engine talks to. DeepL has a free tier (500,000 characters per month) and is reachable from mainland China. Custom is any HTTP endpoint you describe yourself (an LLM API, a self-hosted service): URL, key, request template and where the reply keeps the translation are all settings.",
+        ["zh-cn"] = "「在线（正式 API）」引擎要连哪家服务。DeepL 有免费额度（每月 50 万字符）且国内可直连。自定义＝你自己描述的任意 HTTP 接口（大模型 API、自建服务都可以）：网址、密钥、请求模板、响应里译文的位置都由你填写。",
     },
     api_deepl = {
         en = "DeepL (recommended)",
         ["zh-cn"] = "DeepL（推荐）",
     },
-    api_google = {
-        en = "Google Cloud Translation",
-        ["zh-cn"] = "Google Cloud 翻译",
+    -- ---------------------------------------------------------------------------
+    -- The custom endpoint. Short labels, explanations in the tooltips (the labels sit in a
+    -- narrow dropdown list; the field explanations do not fit there).
+    -- ---------------------------------------------------------------------------
+    custom_url = {
+        en = "Custom: URL",
+        ["zh-cn"] = "自定义：接口网址",
+    },
+    custom_url_description = {
+        en = "The full URL of your endpoint, e.g. https://api.deepseek.com/chat/completions (an OpenAI-compatible chat API), https://api-free.deepl.com/v2/translate, or your own server. Used only by the 'Custom' service.",
+        ["zh-cn"] = "接口的完整网址，例如 https://api.deepseek.com/chat/completions（OpenAI 兼容的对话接口）、https://api-free.deepl.com/v2/translate，或你自己的服务地址。仅在「自定义」服务下使用。",
+    },
+    custom_key = {
+        en = "Custom: key",
+        ["zh-cn"] = "自定义：密钥",
+    },
+    custom_key_description = {
+        en = "The API key for your endpoint. May be left empty for a local service that needs none. Substituted where {key} appears in the auth header, the body template or the query template.",
+        ["zh-cn"] = "你的接口密钥。本地服务不需要密钥时可以留空。它会被填到鉴权头、请求体模板或查询模板里的 {key} 处。",
+    },
+    custom_auth = {
+        en = "Custom: auth header",
+        ["zh-cn"] = "自定义：鉴权头",
+    },
+    custom_auth_description = {
+        en = "The header that carries the key, e.g. 'Authorization: Bearer {key}', 'x-api-key: {key}', or empty for an endpoint that needs none.",
+        ["zh-cn"] = "携带密钥的请求头，例如 'Authorization: Bearer {key}'、'x-api-key: {key}'；接口不需要鉴权就留空。",
+    },
+    custom_method = {
+        en = "Custom: request method",
+        ["zh-cn"] = "自定义：请求方式",
+    },
+    method_post_json = {
+        en = "POST (body template)",
+        ["zh-cn"] = "POST（请求体模板）",
+    },
+    method_get_query = {
+        en = "GET (query template)",
+        ["zh-cn"] = "GET（查询模板）",
+    },
+    method_post_json_description = {
+        en = "POST with the body template below. This is what an LLM API or any JSON service wants.",
+        ["zh-cn"] = "POST，请求体由下面的模板生成。大模型 API 和大多数 JSON 服务用这种。",
+    },
+    method_get_query_description = {
+        en = "GET: the template becomes the query string, appended to the URL (e.g. 'q={text}&source={source}&target={target}'). Text and keys are percent-encoded.",
+        ["zh-cn"] = "GET：模板会作为查询串拼到网址后面（例如 'q={text}&source={source}&target={target}'）。文本与密钥会做百分号编码。",
+    },
+    custom_content_type = {
+        en = "Custom: content type",
+        ["zh-cn"] = "自定义：Content-Type",
+    },
+    custom_content_type_description = {
+        en = "The Content-Type of a POST body: application/json for most endpoints, application/x-www-form-urlencoded for a DeepL-style form body.",
+        ["zh-cn"] = "POST 请求体的 Content-Type：多数接口是 application/json；DeepL 那种表单式的用 application/x-www-form-urlencoded。",
+    },
+    custom_body = {
+        en = "Custom: body template",
+        ["zh-cn"] = "自定义：请求体模板",
+    },
+    custom_body_description = {
+        en = "The request body, with {text} {source} {target} {key} {system} replaced (values are JSON-escaped). Empty = a ready-made OpenAI-compatible chat template. Example for a form-style service: text={text}&target_lang={target}&auth_key={key}",
+        ["zh-cn"] = "请求体模板，其中 {text} {source} {target} {key} {system} 会被替换（值为 JSON 转义）。留空＝内置的 OpenAI 兼容对话模板。表单式接口示例：text={text}&target_lang={target}&auth_key={key}",
+    },
+    custom_prompt = {
+        en = "Custom: system prompt",
+        ["zh-cn"] = "自定义：系统提示词",
+    },
+    custom_prompt_description = {
+        en = "Filled into {system}. Defaults to a Darktide translator prompt that asks the model to keep terminology, placeholders and formatting, and to reply with the translation only. Tune it for your model - this is the one place where a bigger model is told what the mod expects.",
+        ["zh-cn"] = "填入 {system}。默认是一段 Darktide 翻译提示：要求保留术语、占位符与格式，并且只回复译文。可按你的模型调整——这是告诉大模型本 mod 期望什么的地方。",
+    },
+    custom_headers = {
+        en = "Custom: extra headers",
+        ["zh-cn"] = "自定义：额外请求头",
+    },
+    custom_headers_description = {
+        en = "Any further headers, separated by ';;' or by a literal \n - the box is single line. Example: 'anthropic-version: 2023-06-01;; x-custom: 1'",
+        ["zh-cn"] = "更多请求头，用 ';;' 或字面量 \n 分隔（输入框只有一行）。示例：'anthropic-version: 2023-06-01;; x-custom: 1'",
+    },
+    custom_path = {
+        en = "Custom: response path",
+        ["zh-cn"] = "自定义：响应取值路径",
+    },
+    custom_path_description = {
+        en = "Where the translation is in the reply, as a path with dots and array indices. Examples: choices.0.message.content (OpenAI-compatible), data.translations.0.translatedText (DeepL), translatedText, responseData.translatedText. Numeric steps index arrays.",
+        ["zh-cn"] = "译文在响应里的位置，用点号和数组下标表示。示例：choices.0.message.content（OpenAI 兼容）、data.translations.0.translatedText（DeepL）、translatedText、responseData.translatedText。数字表示数组下标。",
+    },
+    test_custom_api = {
+        en = "Test the online engine",
+        ["zh-cn"] = "测试在线引擎",
+    },
+    test_custom_api_description = {
+        en = "Sends one sample string ('Reload Speed') through the configured service and shows the request, the HTTP status and the reply in the chat. This is the only way to tell a wrong URL from a wrong response path - the fields are many and the failures all look like 'translation failed' otherwise.",
+        ["zh-cn"] = "用当前配置的服务发送一条样例文本（'Reload Speed'），把请求、HTTP 状态和回复显示到聊天框。这是区分「网址错」和「取值路径错」的唯一办法——字段多，否则所有失败看起来都只是「翻译失败」。",
+    },
+    custom_url_missing = {
+        en = "Auto Translate: the 'Custom' service is selected but no URL is set (Mod Options -> Custom: URL). Translation is paused.",
+        ["zh-cn"] = "Auto Translate：已选择「自定义」服务，但没有填写网址（模组设置 → 自定义：接口网址）。翻译已暂停。",
+    },
+    custom_url_invalid = {
+        en = "Auto Translate: the custom URL '%s' cannot be used - it needs a scheme and a host, e.g. https://api.example.com/v1/translate. Translation is paused.",
+        ["zh-cn"] = "Auto Translate：自定义网址「%s」无法使用——需要包含协议与主机名，例如 https://api.example.com/v1/translate。翻译已暂停。",
+    },
+    custom_path_missing = {
+        en = "Auto Translate: the 'Custom' service has no response path set (Mod Options -> Custom: response path), so the reply cannot be read. Translation is paused.",
+        ["zh-cn"] = "Auto Translate：「自定义」服务没有填写响应取值路径（模组设置 → 自定义：响应取值路径），无法从回复里取出译文。翻译已暂停。",
+    },
+    custom_body_missing = {
+        en = "Auto Translate: the 'Custom' service is a POST but has an empty body template. Translation is paused.",
+        ["zh-cn"] = "Auto Translate：「自定义」服务使用 POST，但请求体模板为空。翻译已暂停。",
+    },
+    custom_auth_failed = {
+        en = "Auto Translate: the custom endpoint rejected the request (HTTP %s). Check the key and the auth header template.",
+        ["zh-cn"] = "Auto Translate：自定义接口拒绝了请求（HTTP %s）。请检查密钥与鉴权头模板。",
+    },
+    custom_not_found = {
+        en = "Auto Translate: the custom endpoint answered 404 - the URL path is probably wrong (the host is used as given, the path is sent as written).",
+        ["zh-cn"] = "Auto Translate：自定义接口返回 404——网址路径可能不对（主机名按你填的用，路径也原样发送）。",
+    },
+    custom_rate_limited = {
+        en = "Auto Translate: the custom endpoint is rate limiting (HTTP %s); translation pauses for a while.",
+        ["zh-cn"] = "Auto Translate：自定义接口限流（HTTP %s），稍后会自动继续。",
+    },
+    custom_server_error = {
+        en = "Auto Translate: the custom endpoint answered HTTP %s (server error).",
+        ["zh-cn"] = "Auto Translate：自定义接口返回 HTTP %s（服务端错误）。",
+    },
+    custom_unreadable = {
+        en = "Auto Translate: the reply from the custom endpoint has no string at the configured response path: %s (Mod Options -> Custom: response path).",
+        ["zh-cn"] = "Auto Translate：自定义接口的响应里，在配置的取值路径处没有字符串：%s（模组设置 → 自定义：响应取值路径）。",
+    },
+    custom_test_ok = {
+        en = "Auto Translate [test]: %s -> %s",
+        ["zh-cn"] = "Auto Translate【测试】：%s → %s",
+    },
+    custom_test_failed = {
+        en = "Auto Translate [test]: failed - %s",
+        ["zh-cn"] = "Auto Translate【测试】：失败——%s",
+    },    api_custom = {
+        en = "Custom (any HTTP API)",
+        ["zh-cn"] = "自定义（任意 HTTP 接口）",
     },
     engine_auto_description = {
         en = "Automatic: the API when a key is set, otherwise the largest downloaded offline model.",
@@ -168,8 +307,8 @@
     -- where the explanations belong - in the dropdown itself they made every entry too
     -- long to read.
     engine_description = {
-        en = "Which engine is used for new translations.\nAutomatic: the API when a key is set, otherwise the largest downloaded model.\nOnline API: best quality, needs a key.\nLocal model (large, ~1.3 GB): offline fallback.\nLocal model (small, ~600 MB): NOT RECOMMENDED - too few parameters, it invents text for short labels and drops parts of longer sentences.",
-        ["zh-cn"] = "选择用于翻译新文本的引擎。\n自动：填了密钥就用正式 API，否则用已下载的最大离线模型。\n在线（正式 API）：质量最好，需要密钥。\n本地模型（大，约 1.3 GB）：离线兜底。\n本地模型（小，约 600 MB）：不推荐——参数太少，短标签容易产生幻觉，长句还会丢内容。",
+        en = "Which engine is used for new translations.\nAutomatic: the API when a key is set, otherwise the offline model.\nOnline API: best quality; needs a key (or a custom endpoint).\nLocal model 1.3B: the offline fallback, ~1.4 GB, used when no API key is set.",
+        ["zh-cn"] = "选择用于翻译新文本的引擎。\n自动：填了密钥就用正式 API，否则用离线模型。\n在线（正式 API）：质量最好，需要密钥（或配置自定义接口）。\n本地模型 1.3B：离线保底，约 1.4 GB，没有密钥时使用。",
     },
     engine_auto = {
         en = "Automatic (recommended)",

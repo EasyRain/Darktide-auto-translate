@@ -489,7 +489,51 @@ carry each form, which is what to check before trusting a claim about line break
 | service | reachable from mainland China | note |
 | --- | --- | --- |
 | **DeepL** | yes | 1,000,000 characters/month on the free tier; keys ending in `:fx` use `api-free.deepl.com` automatically. |
-| Google Cloud Translation | **no** | `translation.googleapis.com` is reset during the TLS handshake, exactly like `translate.googleapis.com`. Works only behind a proxy. |
+| **Custom** | whatever you point it at | Any HTTP endpoint: an OpenAI-compatible chat API, a self-hosted service, or a DeepL-style form endpoint. See below. |
+| Google Cloud Translation | **no** | `translation.googleapis.com` is reset during the TLS handshake, exactly like `translate.googleapis.com`. Works only behind a proxy. The code is still in `at_online.c` and still passes its offline tests, but it is no longer offered: sign-up is the most involved of the three and it needs a proxy to work at all. A settings file that still says `api_provider = "google"` maps to DeepL. |
+
+### Custom endpoints
+
+Nothing about a custom endpoint is known in advance, so everything is a setting: URL, key,
+auth header, method, content type, request template, system prompt, extra headers and where
+the translation sits in the reply. `modules/custom.lua` builds the request (the core only
+knows the services it ships) and the core does the two things Lua cannot: the HTTP call and
+reading one string out of the JSON reply.
+
+| field | example |
+| --- | --- |
+| URL | `https://api.deepseek.com/chat/completions` |
+| auth header | `Authorization: Bearer {key}` |
+| method | POST (body template) or GET (query template) |
+| content type | `application/json`, or `application/x-www-form-urlencoded` for a form body |
+| body template | `{"model":"…","messages":[{"role":"system","content":"{system}"},{"role":"user","content":"{text}"}]}` |
+| system prompt | filled into `{system}`; defaults to a Darktide translator prompt |
+| extra headers | separated by `;;` or a literal `\n` (the box is one line) |
+| response path | `choices.0.message.content`, `data.translations.0.translatedText`, `translatedText` |
+
+Placeholders are `{text}` `{source}` `{target}` `{key}` `{system}`; values are JSON-escaped
+in a POST body and percent-encoded in a GET query. Whatever is *not* configurable is the
+safety around it: glossary masking (a custom endpoint never gets rich-text markup
+unmasked), the placeholder count, the format-specifier and truncation guards and the
+"unchanged" tagging all run exactly as they do for DeepL — a user-supplied endpoint is the
+one most likely to answer with something unexpected.
+
+Mistakes are named instead of looking alike: a missing URL or response path pauses the run
+with a notice naming the field, and HTTP 401/403, 404, 429 and 5xx each have their own
+message (once per session, because the failure is per response, not per string).
+
+**Test the online engine** sends one sample string through whatever is configured and shows
+the request, the status and the reply in the chat — the only way to tell a wrong URL from a
+wrong response path.
+
+`tools/custom_api_stub.py` is a local stand-in for such an endpoint (it parses the body it
+receives, so it also proves the template produced valid JSON); the extraction half is
+testable offline against `tests/fixtures/custom_*.json`:
+
+```
+python tools\custom_api_stub.py 8791
+bin\at_cli.exe jsonpath tests\fixtures\custom_openai.json choices.0.message.content
+```
 
 Both are asked for `ZH-HANS` / `ZH-HANT` style codes, so Simplified and Traditional
 Chinese are never confused, and both leave our `⟦n⟧` placeholders and `%s` / `%.0f`
