@@ -280,19 +280,6 @@ local function is_key_label(text)
     return text:match("^%[.-%]$") ~= nil
 end
 
-local function translatable(text, lang)
-    if not has_letters(text) then
-        return false
-    end
-    if is_key_label(text) then
-        return false
-    end
-    if CJK_TARGETS[lang] and contains_cjk(text) then
-        return false
-    end
-    return true
-end
-
 -- Colour-picker entries: the whole string is one {#color(r,g,b)}...#reset() run.
 --
 -- Several mods surface the game's entire colour palette as swatch names, and on a
@@ -319,9 +306,18 @@ end
 -- means translating Chinese into Chinese. (Design note 3 in
 -- i18n/AUTO_TRANSLATE_DESIGN.md.)
 --
+-- Scripts we refuse to translate *into* when the text is already written in them.
+--
+-- The rule exists for "Chinese into Chinese": sending a Chinese string to a Chinese
+-- target makes the model answer with an invented sentence. It is deliberately limited
+-- to the Chinese targets. A Japanese or Korean target with Chinese source text is a
+-- legitimate translation - a Chinese mod read by a Japanese player - and a Japanese
+-- string sent to a Japanese target simply comes back unchanged, which the queue
+-- already tags as such.
+--
 -- Detected by script: one leading byte in E3..ED means a three-byte UTF-8 sequence
 -- in U+3000..U+DFFF, which covers CJK ideographs, kana and Hangul.
-local CJK_TARGETS = { ["zh-cn"] = true, ["zh-tw"] = true, ja = true, ko = true }
+local CJK_SAME_LANGUAGE = { ["zh-cn"] = true, ["zh-tw"] = true }
 
 local function contains_cjk(text)
     for i = 1, #text do
@@ -331,6 +327,31 @@ local function contains_cjk(text)
         end
     end
     return false
+end
+
+-- Is there anything in this string worth translating?
+--
+-- NOTE: this has to stay below CJK_SAME_LANGUAGE and contains_cjk. It was moved up
+-- once, and because Lua resolves locals lexically at compile time that reference
+-- became a global - nil at runtime - so the mod died with "attempt to index global
+-- 'CJK_TARGETS'" the moment the queue started. A syntax check cannot see that;
+-- tools/smoke_online.lua catches it because it actually calls this function.
+local function translatable(text, lang)
+    if not has_letters(text) then
+        return false
+    end
+    if is_key_label(text) then
+        return false
+    end
+    if CJK_SAME_LANGUAGE[lang] and contains_cjk(text) then
+        return false
+    end
+    return true
+end
+
+-- Exposed so tools/smoke_online.lua can exercise the guards outside the game.
+M.is_translatable = function(text, lang)
+    return translatable(text, lang)
 end
 
 -- ---------------------------------------------------------------------------
