@@ -14,12 +14,14 @@ local util
 local store
 local glossary
 local engines
+local injector
 
-function M.init(u, s, g, e)
+function M.init(u, s, g, e, i)
     util = u
     store = s
     glossary = g
     engines = e
+    injector = i
 end
 
 -- ---------------------------------------------------------------------------
@@ -390,6 +392,7 @@ M.state = {
     failed = 0,
     refused = 0,
     skipped = 0,
+    live = 0,
     last_error = nil,
 }
 
@@ -508,6 +511,7 @@ function M.start(mod, report, lang)
     M.state.failed = 0
     M.state.refused = 0
     M.state.skipped = skipped
+    M.state.live = 0
     M.state.last_error = nil
 
     util.info(mod, "online translation queued: %d key(s) into '%s' via %s [%s]%s",
@@ -545,6 +549,12 @@ local function store_translation(mod, item, text, src)
     local data = data_for(item.mod_id, M.state.lang)
     store.set_entry(data, item.key, item.en, item.hash, text, src)
     mark_dirty(item.mod_id, M.state.lang)
+
+    -- Make it visible right away instead of waiting for the run to finish: the
+    -- first pass over ~2500 keys takes tens of minutes.
+    if injector and injector.set_live(item.mod_id, item.key, M.state.lang, text) then
+        M.state.live = (M.state.live or 0) + 1
+    end
 end
 
 -- Starts a request for one queued item. Returns false when nothing was started.
@@ -652,8 +662,8 @@ local function handle_response(mod, req, body)
     if M.state.done % LOG_EVERY == 0 then
         -- persist as we go: a crash or a quit mid-run must not lose the work
         local written = M.flush(mod)
-        util.info(mod, "progress: %d translated, %d failed, %d refused, %d left (%d file(s) saved)",
-            M.state.done, M.state.failed, M.state.refused, q_count(), written)
+        util.info(mod, "progress: %d translated (%d live), %d failed, %d refused, %d left (%d file(s) saved)",
+            M.state.done, M.state.live, M.state.failed, M.state.refused, q_count(), written)
     end
     return true
 end
@@ -805,6 +815,7 @@ function M.status()
         failed = M.state.failed,
         refused = M.state.refused,
         skipped = M.state.skipped,
+        live = M.state.live or 0,
         cooldown = math.max(0, math.floor(cooldown_until - elapsed)),
         last_error = M.state.last_error,
         disabled_providers = table.concat(disabled, ", "),

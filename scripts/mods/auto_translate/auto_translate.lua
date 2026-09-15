@@ -26,7 +26,7 @@ local glossary = mod:io_dofile(BASE .. "glossary")
 glossary.init(util)
 
 local online = mod:io_dofile(BASE .. "online")
-online.init(util, store, glossary, engines)
+online.init(util, store, glossary, engines, injector)
 
 local exporter = mod:io_dofile(BASE .. "exporter")
 exporter.init(util)
@@ -304,8 +304,8 @@ function mod.show_status()
 
     util.info(mod, "status: running=%s finished=%s engine=%s provider=%s target=%s",
         tostring(s.running), tostring(s.finished), tostring(s.engine), tostring(s.provider), tostring(s.lang))
-    util.info(mod, "queue: %d queued, %d left, %d translated, %d failed, %d refused, %d skipped",
-        s.queued, s.left, s.done, s.failed, s.refused, s.skipped)
+    util.info(mod, "queue: %d queued, %d left, %d translated (%d applied live), %d failed, %d refused, %d skipped",
+        s.queued, s.left, s.done, s.live, s.failed, s.refused, s.skipped)
     if s.cooldown > 0 then
         util.info(mod, "rate limited: resuming in %d s", s.cooldown)
     end

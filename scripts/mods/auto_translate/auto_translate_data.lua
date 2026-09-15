@@ -41,7 +41,12 @@ return {
             {
                 setting_id = "engine",
                 type = "dropdown",
-                default_value = "local_small",
+                -- "auto" resolves to: large model -> small model -> keyed API ->
+                -- free online. A fresh install has no model, so this works out of
+                -- the box while still preferring the offline model once it exists.
+                -- (Selecting a local engine explicitly still pauses with a notice
+                -- when its model has not been downloaded.)
+                default_value = "auto",
                 options = {
                     { text = "engine_auto",       value = "auto" },
                     { text = "engine_online_free", value = "online_free" },

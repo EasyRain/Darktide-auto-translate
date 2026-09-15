@@ -14,6 +14,28 @@ end
 -- store tables that gained bookkeeping fields (en/hash) and should be saved back
 local dirty = {}
 
+-- The localization table each mod is actually being served from, keyed by mod id.
+-- DMF stores the very table we merged into, and mod scripts read it on every
+-- lookup, so writing into it later makes a new translation visible immediately —
+-- no restart, and no full re-scan of every mod.
+M.tables = {}
+
+-- Puts one freshly translated key straight into the live table.
+-- Returns true when it landed (false means the mod's table is not registered, e.g.
+-- the mod loaded before us or has no localization).
+function M.set_live(mod_id, key, lang, text)
+    local tbl = M.tables[mod_id]
+    if type(tbl) ~= "table" then
+        return false
+    end
+    local bucket = tbl[key]
+    if type(bucket) ~= "table" then
+        return false
+    end
+    bucket[lang] = text
+    return true
+end
+
 -- Merge our translations into a localization table that DMF is about to register.
 --
 -- This is the important one: DMF loads each mod's resources in the order
@@ -28,6 +50,11 @@ function M.merge(mod, name, loc_table, lang)
     if type(loc_table) ~= "table" then
         return 0
     end
+
+    -- Remember it before any early return: on a first run most mods have no
+    -- translation file at all, and those are exactly the ones that need live
+    -- updates as the engine produces text for them.
+    M.tables[name] = loc_table
 
     local data = store.load(name, lang)
     if not data then
