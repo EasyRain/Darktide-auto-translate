@@ -444,6 +444,10 @@ M.state = {
     last_error = nil,
 }
 
+-- The "Windows has a proxy but it is switched off" note from the core. Logged when
+-- the queue starts and attached to a connection failure when one happens.
+M.proxy_hint = ""
+
 local function provider_needs_key(name)
     return name == "google_api" or name == "deepl"
 end
@@ -525,9 +529,13 @@ function M.start(mod, report, lang)
     end
     core.at_set_proxy(proxy)
     util.info(mod, "proxy: %s", tostring(cstr(core.at_proxy_in_use())))
-    local hint = cstr(core.at_proxy_hint())
-    if hint and hint ~= "" then
-        util.warn(mod, "%s", hint)
+    -- Log only. DMF shows warnings as on-screen notifications, and "Windows has a
+    -- proxy configured but switched off" is not something to interrupt the player
+    -- with on every launch - it is only worth raising when a request actually
+    -- fails to connect (see fail_item).
+    M.proxy_hint = cstr(core.at_proxy_hint()) or ""
+    if M.proxy_hint ~= "" then
+        util.info(mod, "proxy note: %s", M.proxy_hint)
     end
 
     -- drop providers this session already found to be unreachable
@@ -857,8 +865,12 @@ function M.update(mod, dt)
             else
                 local win = win_buf[0]
                 local text = win ~= 0 and cstr(core.at_win_error_text(win)) or nil
-                fail_item(mod, req,
-                    string.format("network error %d (%s)", result, text or "no detail"), 0, true)
+                local reason = string.format("network error %d (%s)", result, text or "no detail")
+                -- This is the moment the proxy note is actually worth showing.
+                if (win == 12029 or win == 12007 or win == 12185) and M.proxy_hint ~= "" then
+                    reason = reason .. " - " .. M.proxy_hint
+                end
+                fail_item(mod, req, reason, 0, true)
             end
         elseif rc < 0 then
             local req = inflight

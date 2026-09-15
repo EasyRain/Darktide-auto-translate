@@ -119,13 +119,28 @@ end
 
 -- Injects everything that is ready for this mod. Returns the number injected.
 local function inject_mod(mod, dmf, entry, lang)
-    if not entry.tbl or #entry.ready == 0 then
+    if #entry.ready == 0 then
+        return 0
+    end
+
+    -- Write into the table DMF is actually serving, when we have it.
+    --
+    -- M.tables[name] is the table our load hook merged into, and DMF keeps that
+    -- reference rather than a copy, so writing into it takes effect immediately.
+    -- entry.tbl is a SEPARATE table: the scanner loaded the file from disk again.
+    -- Handing that one to DMF replaces the registered table, which (a) makes DMF
+    -- log "(localization): overwritting already loaded localization file" as a
+    -- warning popup and (b) silently breaks set_live() afterwards, because live
+    -- updates write into the table DMF no longer uses.
+    local live = M.tables[entry.name]
+    local tbl = live or entry.tbl
+    if type(tbl) ~= "table" then
         return 0
     end
 
     local injected = 0
     for _, item in ipairs(entry.ready) do
-        local bucket = entry.tbl[item.key]
+        local bucket = tbl[item.key]
         if type(bucket) == "table" then
             bucket[lang] = item.text
             injected = injected + 1
@@ -136,6 +151,13 @@ local function inject_mod(mod, dmf, entry, lang)
         return 0
     end
 
+    if live then
+        -- Already registered during load; nothing to hand over.
+        return injected
+    end
+
+    -- No table of ours (the mod loaded before us, or has no localization we saw),
+    -- so this copy does need registering.
     local target = (dmf.mods and dmf.mods[entry.name]) or get_mod(entry.name)
     if not target then
         return 0
@@ -148,6 +170,9 @@ local function inject_mod(mod, dmf, entry, lang)
         util.warn(mod, "inject failed for %s: %s", entry.name, tostring(err))
         return 0
     end
+
+    -- Remember it, so later live updates write into the table DMF now holds.
+    M.tables[entry.name] = entry.tbl
 
     return injected
 end
