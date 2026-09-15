@@ -6,9 +6,6 @@ local MOD_DIR = "../mods/auto_translate"
 M.MOD_DIR = MOD_DIR
 M.TRANSLATIONS_DIR = MOD_DIR .. "/translations"
 
--- Every language this mod can translate into. `en` is included because it is the
--- source language (a target of "en" means "nothing to do").
-M.LANGUAGES = { "en", "zh-cn", "zh-tw", "ja", "ko", "ru", "de", "fr", "es", "it", "pl", "pt-br", "uk" }
 
 local bitlib = rawget(_G, "bit")
 

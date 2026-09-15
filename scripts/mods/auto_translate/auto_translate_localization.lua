@@ -87,14 +87,6 @@ return {
         en = "Test glossary",
         ["zh-cn"] = "术语表自检",
     },
-    test_engines = {
-        en = "Test engine routing",
-        ["zh-cn"] = "自检引擎路由",
-    },
-    test_engines_description = {
-        en = "Logs, for every target language, which engine and which online providers would be used. Shows why a language cannot be translated by the free service.",
-        ["zh-cn"] = "在日志中列出每种目标语言会用到哪个引擎、哪些在线服务商，并说明免费服务为何无法翻译某些语言。",
-    },
     show_status = {
         en = "Translation status",
         ["zh-cn"] = "翻译进度",

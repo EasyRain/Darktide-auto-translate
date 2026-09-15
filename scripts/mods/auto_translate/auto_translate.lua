@@ -388,6 +388,36 @@ function mod.show_status()
     end
     util.info(mod, "native core: %s (%s)", core_state, tostring(core_reason or "-"))
 
+    -- What would be used, and whether it can actually produce the target language.
+    -- This is what the old "test engine routing" button was for; with one engine
+    -- and one provider the per-language table it printed had become the same row
+    -- thirteen times, so only the check that can still fail is kept.
+    local lang = current_lang()
+    util.info(mod, "engine setting: %s -> %s", tostring(mod:get("engine")), tostring(s.engine or "(nothing available)"))
+
+    if mod:get("engine") == "online_api" or s.engine == "online_api" then
+        local key = mod:get("online_api_key")
+        local has_key = type(key) == "string" and key ~= ""
+        util.info(mod, "api service: %s, key: %s", tostring(mod:get("api_provider")), has_key and "set" or "MISSING")
+
+        -- The language codes differ per provider (DeepL wants ZH-HANS where Google
+        -- wants zh-CN), and an unsupported pair fails at request time - worth
+        -- catching here instead.
+        local ffi = Mods and Mods.lua and Mods.lua.ffi
+        local handle = online.load_core(mod)
+        if handle and ffi and ffi.new then
+            local buffer = ffi.new("char[?]", 16)
+            local ok, supported = pcall(function()
+                return handle.at_online_lang_code_for(engines.api_provider(mod), lang, buffer, 16)
+            end)
+            if ok then
+                util.info(mod, "provider language code for '%s': %s", lang,
+                    supported == 1 and ("supported (" .. tostring(ffi.string(buffer)) .. ")")
+                        or "NOT SUPPORTED - pick another target language or API service")
+            end
+        end
+    end
+
     local message = string.format("Auto Translate: %d/%d translated, %d left", s.done, s.queued, s.left)
     if mod.echo then
         pcall(mod.echo, mod, message)
@@ -407,39 +437,6 @@ function mod.test_glossary()
     util.info(mod, "  restored: %s  (missing placeholders: %d)", restored, missing)
     if mod.echo then
         pcall(mod.echo, mod, string.format("[%s] %s", lang, restored))
-    end
-end
-
--- Mod options: "Test engine routing" — shows, per target language, which engine
--- and which online providers would actually be used. Makes the "MyMemory only
--- returns Traditional" rule visible without reading the code or starting a
--- translation run.
-function mod.test_engines()
-    local selected = mod:get("engine") or "auto"
-    local has_key = type(mod:get("online_api_key")) == "string" and mod:get("online_api_key") ~= ""
-
-    util.info(mod, "engine routing test (setting: %s, api key: %s):", selected, has_key and "set" or "none")
-    for _, lang in ipairs(util.LANGUAGES) do
-        local engine = engines.resolve(mod, lang)
-        if engine == nil then
-            util.info(mod, "  %-6s -> (nothing available: no model, no API key)", lang)
-        else
-            local providers = engines.providers_for(engine, lang)
-            local gap = engines.gap(engine, lang)
-
-            if gap then
-                util.info(mod, "  %-6s -> %s  [NO PROVIDER: would return '%s']", lang, engine, tostring(gap.actual))
-            elseif #providers > 0 then
-                util.info(mod, "  %-6s -> %s  [%s]", lang, engine, table.concat(providers, ", "))
-            else
-                util.info(mod, "  %-6s -> %s", lang, engine)
-            end
-        end
-    end
-
-    if mod.echo then
-        pcall(mod.echo, mod, string.format("engine: %s (see log for the per-language table)",
-            tostring(engines.resolve(mod, current_lang()))))
     end
 end
 
