@@ -122,8 +122,8 @@ return {
     },
     -- Placeholder order is always %d first, then %s.
     translation_done = {
-        en = "Auto Translate: translated %d text(s) into '%s'. Mod names and settings text only appear after restarting the game.",
-        ["zh-cn"] = "Auto Translate：已翻译 %d 条文本（%s）。模组名称与设置项文字需要重启游戏后才会显示。",
+        en = "Auto Translate: translated %d text(s) into '%s'. If a mod name or a settings label was among them, close and reopen this screen to see it.",
+        ["zh-cn"] = "Auto Translate：已翻译 %d 条文本（%s）。若其中有模组名称或设置项文字，关闭再打开本界面即可看到。",
     },
     test_glossary_description = {
         en = "Shows in the log how known terms are masked before translation and restored afterwards.",
