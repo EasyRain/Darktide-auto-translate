@@ -983,15 +983,8 @@ function M.note_model_switch(mod, wanted)
         return
     end
 
-    util.warn(mod, "the model in memory is %s, not %s: restart the game to switch models (only one fits in the process)",
-        loaded, tostring(wanted))
-    local message = mod:localize("model_restart_needed", loaded)
-    if type(mod.notify) == "function" then
-        pcall(mod.notify, mod, message)
-    end
-    if type(mod.echo) == "function" then
-        pcall(mod.echo, mod, message)
-    end
+    util.log(mod, "the model in memory is %s, not %s (only one fits in the process)", loaded, tostring(wanted))
+    util.popup(mod, "model_restart_needed", loaded)
 end
 
 -- The "Windows has a proxy but it is switched off" note from the core. Logged when
@@ -1034,9 +1027,7 @@ function M.start(mod, report, lang)
     if engine == nil then
         util.warn(mod, "no translation engine is available (no downloaded model and no API key)")
         M.state.finished = true
-        if type(mod.notify) == "function" then
-            pcall(mod.notify, mod, mod:localize("no_engine_available"))
-        end
+        util.popup(mod, "no_engine_available")
         return false
     end
 
@@ -1246,9 +1237,8 @@ local function finish(mod, reason)
     -- One message per run, and it says what the player has to do: mod option texts
     -- are localised (and cached as plain strings) while DMF initialises `data`, so
     -- a translation produced afterwards is only picked up on the next launch.
-    if type(mod.notify) == "function" and M.state.done > 0 then
-        local message = mod:localize("translation_done", M.state.done, tostring(M.state.lang))
-        pcall(mod.notify, mod, message)
+    if M.state.done > 0 then
+        util.popup(mod, "translation_done", M.state.done, tostring(M.state.lang))
     end
 end
 

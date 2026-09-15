@@ -1,4 +1,4 @@
--- exporter.lua — collects official terminology for the current game language.
+﻿-- exporter.lua — collects official terminology for the current game language.
 --
 -- Why: the game can only be switched to another language through Steam + a
 -- restart, so instead of asking for that repeatedly, every launch writes out the
@@ -48,17 +48,10 @@ local function existing_count(lang)
     return n
 end
 
+-- One visible notice per event (see util.popup): this used to send the same sentence to
+-- both the toast and the chat box.
 local function notify(mod, key, ...)
-    local ok, message = pcall(mod.localize, mod, key, ...)
-    if not ok or type(message) ~= "string" or message == "" then
-        return
-    end
-    if type(mod.notify) == "function" then
-        pcall(mod.notify, mod, message)
-    end
-    if type(mod.echo) == "function" then
-        pcall(mod.echo, mod, message)
-    end
+    util.popup(mod, key, ...)
 end
 
 local function load_key_list()

@@ -84,19 +84,10 @@ local function cstr(ptr)
     return text ~= "" and text or nil
 end
 
--- DMF shows a notification and (separately) writes to the chat box; both are optional in
--- tests and in a stripped build, so every call goes through here.
+-- Every notice this module raises goes through util.popup(): one visible message per
+-- event. Doing notify() *and* echo() here printed each of them twice.
 local function notify(key, ...)
-    if not (mod and type(mod.localize) == "function") then
-        return
-    end
-    local message = mod:localize(key, ...)
-    if type(mod.notify) == "function" then
-        pcall(mod.notify, mod, message)
-    end
-    if type(mod.echo) == "function" then
-        pcall(mod.echo, mod, message)
-    end
+    util.popup(mod, key, ...)
 end
 
 -- "hf-mirror.com, direct" / "huggingface.co via 127.0.0.1:7890": the route is part of the
@@ -179,9 +170,11 @@ local function next_file(core)
                 local url = host_base() .. file.name
                 if core.at_download_start(url, path, file.sha256) == 1 then
                     M.state.active = true
-                    -- Say which route this is: the mirror is fetched *direct* (it only
-                    -- serves a Chinese IP, so a VPN exit abroad breaks it) while
-                    -- huggingface.co goes through the configured proxy if there is one.
+                    -- One visible line per event, and this is the one for "it started":
+                    -- it names the file and the route (the mirror direct - it only serves a
+                    -- Chinese IP, so a VPN exit abroad breaks it - or huggingface.co through
+                    -- the proxy). The outcome gets a notification of its own; no message is
+                    -- sent to two channels, which is what made DMF print everything twice.
                     util.info(mod, "downloading %s (%d of %d, %.0f MB)%s from %s", file.name, i, #FILES,
                         file.size / (1024 * 1024),
                         M.state.received > 0
@@ -204,7 +197,7 @@ end
 function M.start(mod)
     local core, why = native()
     if not core then
-        util.warn(mod, "the model downloader needs the native core: %s", tostring(why))
+        util.log(mod, "the model downloader needs the native core: %s", tostring(why))
         notify("model_download_failed", "native core", tostring(why))
         return false
     end
@@ -228,12 +221,11 @@ function M.start(mod)
             return false
         end
         M.state.done = true
-        util.info(mod, "the model is already complete")
+        util.log(mod, "the model is already complete")
         notify("model_download_done")
         return false
     end
 
-    notify("model_download_started", tostring(M.state.name))
     return true
 end
 
@@ -249,8 +241,7 @@ function M.cancel(mod)
     M.state.active = false
     M.state.cancelled = true
     local kept = tonumber(core.at_download_received()) or 0
-    util.info(mod, "the model download was cancelled; %.1f MB are kept for the next attempt",
-        kept / (1024 * 1024))
+    util.log(mod, "download cancelled with %.1f MB kept", kept / (1024 * 1024))
     notify("model_download_cancelled", string.format("%.1f", kept / (1024 * 1024)))
     return true
 end
@@ -279,14 +270,14 @@ function M.update(mod)
     end
 
     if status == 2 then
-        util.info(mod, "finished %s", tostring(M.state.name))
+        util.log(mod, "finished %s", tostring(M.state.name))
         if next_file(core) then
             return
         end
         M.state.active = false
         M.state.done = true
         M.state.name = nil
-        util.info(mod, "the offline model is complete; the local engine can be selected now")
+        util.log(mod, "the offline model is complete")
         notify("model_download_done")
         return
     end
@@ -298,7 +289,7 @@ function M.update(mod)
 
     local why = cstr(core.at_download_error()) or "unknown error"
     stop(why)
-    util.warn(mod, "downloading %s failed: %s", tostring(M.state.name), tostring(why))
+    util.log(mod, "downloading %s failed: %s", tostring(M.state.name), tostring(why))
     notify("model_download_failed", tostring(M.state.name), tostring(why))
 end
 
@@ -307,7 +298,7 @@ end
 function M.delete(mod)
     local core, why = native()
     if not core then
-        util.warn(mod, "deleting the model needs the native core: %s", tostring(why))
+        util.log(mod, "deleting the model needs the native core: %s", tostring(why))
         return 0
     end
     local dir = model_dir()
@@ -325,7 +316,7 @@ function M.delete(mod)
         core.at_delete_file(path .. ".bad")
     end
 
-    util.info(mod, "deleted %d model file(s)%s", removed,
+    util.log(mod, "deleted %d model file(s)%s", removed,
         kept > 0 and (" (" .. kept .. " could not be removed)") or "")
     notify("model_deleted", removed)
     return removed

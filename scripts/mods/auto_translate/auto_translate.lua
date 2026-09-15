@@ -1,4 +1,4 @@
--- auto_translate.lua — main entry point.
+﻿-- auto_translate.lua — main entry point.
 --
 -- Pipeline on startup (and on demand):
 --   1. scan every loaded mod's localization table (DMF's registry) for the target language
@@ -138,29 +138,17 @@ local function check_engine_settings(lang)
 
     -- Nothing configured at all: no downloaded model and no API key.
     if engine == nil then
-        util.warn(mod, "no translation engine is available (no model downloaded, no API key set)")
-        local message = mod:localize("no_engine_available")
-        if type(mod.notify) == "function" then
-            pcall(mod.notify, mod, message)
-        end
-        if type(mod.echo) == "function" then
-            pcall(mod.echo, mod, message)
-        end
+        util.log(mod, "no translation engine is available (no model downloaded, no API key set)")
+        util.popup(mod, "no_engine_available")
         return false
     end
 
     -- local model selected but its files are not downloaded yet
     if engines.is_local_engine(engine) and not engines.model_available(engine) then
-        util.warn(mod, "engine '%s' is selected but its model is not downloaded", engine)
+        util.log(mod, "engine '%s' is selected but its model is not downloaded", engine)
         -- The path is part of the message: with no automatic download yet, copying the
         -- files there is the only thing the player can do.
-        local message = mod:localize("model_missing", tostring(engines.model_dir_in_use(engine)))
-        if type(mod.notify) == "function" then
-            pcall(mod.notify, mod, message)
-        end
-        if type(mod.echo) == "function" then
-            pcall(mod.echo, mod, message)
-        end
+        util.popup(mod, "model_missing", tostring(engines.model_dir_in_use(engine)))
         return false
     end
 
@@ -168,14 +156,8 @@ local function check_engine_settings(lang)
     -- wrong script would be worse than storing nothing, so refuse and say why.
     local gap = engines.gap(engine, lang)
     if gap then
-        util.warn(mod, "engine '%s' cannot produce '%s' (would return '%s'); nothing will be saved", engine, tostring(lang), tostring(gap.actual))
-        local message = mod:localize("engine_language_gap", engine, tostring(gap.actual), tostring(lang), tostring(gap.actual))
-        if type(mod.notify) == "function" then
-            pcall(mod.notify, mod, message)
-        end
-        if type(mod.echo) == "function" then
-            pcall(mod.echo, mod, message)
-        end
+        util.log(mod, "engine '%s' cannot produce '%s' (would return '%s')", engine, tostring(lang), tostring(gap.actual))
+        util.popup(mod, "engine_language_gap", engine, tostring(gap.actual), tostring(lang), tostring(gap.actual))
         return false
     end
 
@@ -188,14 +170,8 @@ local function check_engine_settings(lang)
         return true
     end
 
-    local message = mod:localize("api_key_missing")
-    util.warn(mod, "engine 'online_api' is selected but no API key is set")
-    if type(mod.notify) == "function" then
-        pcall(mod.notify, mod, message)
-    end
-    if type(mod.echo) == "function" then
-        pcall(mod.echo, mod, message)
-    end
+    util.log(mod, "engine 'online_api' is selected but no API key is set")
+    util.popup(mod, "api_key_missing")
     return false
 end
 
@@ -520,14 +496,8 @@ mod.on_setting_changed = function(setting_id)
         -- is the difference between "the setting did nothing" and "the setting is right,
         -- it needs a restart".
         if online.model_in_memory() then
-            local message = mod:localize("model_restart_needed", tostring(mod:get("model_threads")))
             util.info(mod, "the core count applies after a restart (models keep their thread pool)")
-            if type(mod.notify) == "function" then
-                pcall(mod.notify, mod, message)
-            end
-            if type(mod.echo) == "function" then
-                pcall(mod.echo, mod, message)
-            end
+            util.popup(mod, "model_restart_needed", tostring(mod:get("model_threads")))
         end
     elseif setting_id == "target_language" or setting_id == "engine"
         or setting_id == "online_api_key" or setting_id == "proxy"

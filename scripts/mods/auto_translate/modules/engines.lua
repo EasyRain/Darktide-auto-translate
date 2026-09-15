@@ -1,4 +1,4 @@
--- engines.lua — translation engines.
+﻿-- engines.lua — translation engines.
 --
 -- This framework build only ships the "library" path: translations that already
 -- exist in the local files are injected by the injector. The actual machine
@@ -255,14 +255,8 @@ function M.note_failure(mod, reason)
 
     if breaker.failures >= M.MAX_FAILURES then
         breaker.paused = true
-        local message = mod:localize("engine_paused_failures")
         util.warn(mod, "engine paused after %d consecutive failures (last: %s)", breaker.failures, tostring(reason))
-        if type(mod.notify) == "function" then
-            pcall(mod.notify, mod, message)
-        end
-        if type(mod.echo) == "function" then
-            pcall(mod.echo, mod, message)
-        end
+        util.popup(mod, "engine_paused_failures")
         return true
     end
 

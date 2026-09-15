@@ -378,6 +378,29 @@ check_logging("util.log with a percent", function()
     util.log(dmf_like, "engine '%s' cannot produce '%s'", "deepl", "zh-tw")
 end)
 
+-- util.popup sends each notice exactly once. Sending it to mod.notify() *and* mod.echo()
+-- is what made the player see every message twice ("including the delete one").
+do
+    local seen = {}
+    local stub = {
+        localize = function(_, key) return key end,
+        notify = function(_, msg) seen[#seen + 1] = "notify:" .. msg end,
+        echo = function(_, msg) seen[#seen + 1] = "echo:" .. msg end,
+    }
+    util.popup(stub, "model_download_done")
+    check("popup: one visible message", #seen, 1)
+    check("popup: and it is the toast", seen[1], "notify:model_download_done")
+
+    seen = {}
+    stub.notify = nil
+    util.popup(stub, "model_download_done")
+    check("popup: falls back to chat without a toast", seen[1], "echo:model_download_done")
+
+    seen = {}
+    util.popup({ notify = stub.echo }, "x")   -- no localize(): must not raise
+    check("popup: a mod without localize is ignored", #seen, 0)
+end
+
 -- ---------------------------------------------------------------------------
 -- engine priority (modules/engines.lua)
 --
@@ -504,11 +527,15 @@ local fake_mod = {
     notify = function() end,
     echo = function() end,
 }
+local popups = {}
 local fake_util = {
     ensure_dir = function() end,
     info = function() end,
     warn = function() end,
     log = function() end,
+    -- The real util.popup sends exactly one visible message; the key it was called with is
+    -- what the tests below assert on.
+    popup = function(_, key) popups[#popups + 1] = key end,
 }
 
 dl.init(fake_mod, fake_util, fake_online, fake_engines)
@@ -602,6 +629,17 @@ do
     state.active, state.index, state.done = false, 0, false
 end
 fake_util.info = function() end
+
+-- Cancelling says so exactly once (through util.popup, the single visible channel).
+do
+    local state = dl.state_for_tests()
+    state.active = true          -- cancel only does something while a transfer is running
+    popups = {}
+    dl.cancel(fake_mod)
+    check("download: cancelling raises one notice", #popups, 1)
+    check("download: and it is the cancelled one", popups[1], "model_download_cancelled")
+    state.active, state.index, state.done = false, 0, false
+end
 
 -- And when the native core is not available at all, the downloader has to *say* so
 -- instead of indexing a nil handle (that was the crash the screenshots showed).

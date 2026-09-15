@@ -1,4 +1,4 @@
--- util.lua — shared helpers: paths, hashing, file IO, logging.
+﻿-- util.lua — shared helpers: paths, hashing, file IO, logging.
 -- No dependencies; every other module receives this table via init().
 local M = {}
 
@@ -246,6 +246,29 @@ end
 function M.log(mod, f, ...)
     if mod:get("debug_logging") then
         mod:info("%s", "[AT][dbg] " .. fmt(f, ...))
+    end
+end
+
+-- One visible notice per event.
+--
+-- DMF has two channels and both end up in the *same chat window* (modules/core/logging.lua:
+-- notify() goes through the game's chat notification event, echo() adds a plain chat line).
+-- Calling both - which this mod did in every one of its notices - therefore printed the same
+-- sentence twice, which a player reported as exactly that: "these prompts all show up twice,
+-- including the delete one".
+--
+-- notify() is the one kept: it is the notification channel, meant for something the player
+-- should notice. echo() is only a fallback for a build without it. Anything that is pure
+-- diagnostics belongs in M.log() (debug_logging), so an event never owns two visible lines.
+function M.popup(mod, key, ...)
+    if type(mod) ~= "table" or type(mod.localize) ~= "function" then
+        return
+    end
+    local message = mod:localize(key, ...)
+    if type(mod.notify) == "function" then
+        pcall(mod.notify, mod, message)
+    elseif type(mod.echo) == "function" then
+        pcall(mod.echo, mod, message)
     end
 end
 
