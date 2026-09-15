@@ -433,6 +433,157 @@ local function q_clear()
     queue, qhead, qtail = {}, 1, 0
 end
 
+-- ---------------------------------------------------------------------------
+-- Batching short strings for the offline model
+--
+-- A label on its own has no context, and that is exactly what the model gets wrong:
+-- measured on the real conversion, "Right" came back as "這樣的情況" and "Top" as
+-- "排在第一位", while a batch of numbered items came back right:
+--   "[1] Left [2] Center [3] Right [4] Top [5] Bottom"
+--   -> "左側 [2] 中部 [3] 右側 [4] 上方 [5] 下方"
+-- Numbered markers survive; "Left | Center | ..." collapsed into one sentence, so the
+-- markers are what this uses. It also cuts the per-call overhead: one inference for up
+-- to LOCAL_BATCH_MAX_ITEMS strings.
+--
+-- Only short strings are batched, and the batch is balanced by *length* rather than by
+-- count, so a handful of longer phrases is not pushed into one request while a pile of
+-- two-word labels can share more room. Anything that already carries its own context
+-- (a sentence, or text with a line break) is translated on its own as before.
+-- ---------------------------------------------------------------------------
+local LOCAL_BATCH_MAX_ITEMS = 8
+local LOCAL_BATCH_MAX_CHARS = 160     -- total source characters per batch
+local LOCAL_BATCH_ITEM_CHARS = 24     -- longer than this is a sentence, not a label
+
+local function batchable(item)
+    if item.no_batch then
+        return false                    -- a batch it was in came back unusable
+    end
+    local text = item.en
+    return type(text) == "string" and char_count(text) <= LOCAL_BATCH_ITEM_CHARS
+        and not text:find("\n", 1, true)
+end
+
+local function q_peek()
+    if qhead > qtail then
+        return nil
+    end
+    return queue[qhead]
+end
+
+-- Takes the items that will travel together. `item` has already been popped; more are
+-- popped only while they qualify, so nothing has to be pushed back into place.
+local function take_batch(item)
+    local batch = { item }
+    if not batchable(item) then
+        return batch
+    end
+
+    local chars = char_count(item.en)
+    while #batch < LOCAL_BATCH_MAX_ITEMS do
+        local nxt = q_peek()
+        if not nxt or not batchable(nxt) then
+            break
+        end
+        local size = char_count(nxt.en)
+        if chars + size > LOCAL_BATCH_MAX_CHARS then
+            break
+        end
+        q_pop()
+        batch[#batch + 1] = nxt
+        chars = chars + size
+    end
+    return batch
+end
+
+-- Splits a translated batch back into one string per input.
+--
+-- Returns nil when the result cannot be trusted - a marker missing, a part empty - and
+-- the caller then translates those items one by one. The leading marker is allowed to
+-- be missing, because the model does sometimes swallow it: item 1 is then whatever
+-- comes before "[2]".
+--
+-- Markers are single digit: the batch cap is 8 items, so "[1]" can never be a prefix of
+-- a longer marker ("[10]") and matching them textually is safe.
+local function split_batch(text, count)
+    if type(text) ~= "string" or count < 1 then
+        return nil
+    end
+
+    if count == 1 then
+        local only = text:gsub("^%s+", ""):gsub("%s+$", "")
+        return only ~= "" and { only } or nil
+    end
+
+    local parts = {}
+    for i = 1, count do
+        local marker = "[" .. i .. "]"
+        local from = text:find(marker, 1, true)
+
+        if not from then
+            if i > 1 then
+                return nil
+            end
+            local second = text:find("[2]", 1, true)
+            if not second then
+                return nil
+            end
+            parts[1] = text:sub(1, second - 1)
+        else
+            local following = (i < count) and text:find("[" .. (i + 1) .. "]", from + #marker, true) or nil
+            parts[i] = text:sub(from + #marker, following and (following - 1) or #text)
+        end
+    end
+
+    for i = 1, count do
+        local part = parts[i]
+        if not part then
+            return nil
+        end
+        part = part:gsub("^%s+", ""):gsub("%s+$", "")
+        if part == "" then
+            return nil
+        end
+        parts[i] = part
+    end
+    return parts
+end
+
+-- Exposed for tools/smoke_online.lua. It loads the real queue and drives the real
+-- take_batch(), so the test cannot drift from what dispatch() actually does - a test
+-- with its own copy of the grouping rule would keep passing while the loaded one broke.
+M.plan_batch_for_tests = function(items)
+    q_clear()
+    for i = #items, 1, -1 do
+        q_unshift(items[i])
+    end
+
+    local groups = {}
+    while true do
+        local first = q_pop()
+        if not first then
+            break
+        end
+        groups[#groups + 1] = take_batch(first)
+    end
+    return groups
+end
+M.split_batch_for_tests = split_batch
+M.batch_limits = { items = LOCAL_BATCH_MAX_ITEMS, chars = LOCAL_BATCH_MAX_CHARS, item_chars = LOCAL_BATCH_ITEM_CHARS }
+
+-- Exposed for tools/verify_batch.lua: the caps were chosen by measuring the real model
+-- (a batch of short labels is where its word-sense errors go away, and a long one loses
+-- markers), so the tool has to be able to vary them and the smoke test has to be able to
+-- read them back.
+function M.set_batch_limits_for_tests(items, chars, item_chars)
+    LOCAL_BATCH_MAX_ITEMS = items or LOCAL_BATCH_MAX_ITEMS
+    LOCAL_BATCH_MAX_CHARS = chars or LOCAL_BATCH_MAX_CHARS
+    LOCAL_BATCH_ITEM_CHARS = item_chars or LOCAL_BATCH_ITEM_CHARS
+    M.batch_limits.items = LOCAL_BATCH_MAX_ITEMS
+    M.batch_limits.chars = LOCAL_BATCH_MAX_CHARS
+    M.batch_limits.item_chars = LOCAL_BATCH_ITEM_CHARS
+    return M.batch_limits
+end
+
 -- Loaded translation files, keyed by mod+language. Cached on purpose: re-reading
 -- the file for every key would throw away the entries stored moments ago.
 local data_cache = {}
@@ -913,10 +1064,30 @@ local function dispatch(mod)
             return false
         end
 
-        local masked, tokens = glossary.mask(item.en, M.state.lang, true)
-        local accepted = core.at_submit(masked, M.state.lang)
+        local batch = take_batch(item)
+        local parts, tokens = {}, {}
+        local joined = {}
+
+        for i, one in ipairs(batch) do
+            -- Each item is masked on its own, so its placeholder indices match its own
+            -- token list and every part can be restored independently. The model only
+            -- has to copy the markers it is given.
+            local masked, item_tokens = glossary.mask(one.en, M.state.lang, true)
+            parts[i] = masked
+            tokens[i] = item_tokens
+            joined[i] = string.format("[%d] %s", i, masked)
+        end
+
+        local text = table.concat(joined, " ")
+        local accepted = core.at_submit(text, M.state.lang)
         if accepted == 0 then
             -- The core is still busy with the previous string; try again next frame.
+            if #batch > 1 then
+                -- the extra items were popped for this attempt, so put them back in order
+                for i = #batch, 2, -1 do
+                    q_unshift(batch[i])
+                end
+            end
             q_unshift(item)
             return false
         end
@@ -926,16 +1097,27 @@ local function dispatch(mod)
             -- warning each time, so it is retired as a content problem - the local
             -- counterpart of "this provider will not translate this string".
             local why = cstr(core.at_model_error()) or "the offline engine refused the text"
-            fail_item(mod, { kind = "local", item = item }, why, 0, false)
+            for i = #batch, 1, -1 do
+                fail_item(mod, { kind = "local", item = batch[i] }, why, 0, false)
+            end
             return true
         end
 
-        inflight = {
-            kind = "local",
-            item = item,
-            masked = masked,
-            tokens = tokens,
-        }
+        if #batch > 1 then
+            inflight = {
+                kind = "local_batch",
+                items = batch,
+                parts = parts,
+                tokens = tokens,
+            }
+        else
+            inflight = {
+                kind = "local",
+                item = item,
+                masked = parts[1],
+                tokens = tokens[1],
+            }
+        end
         -- The local model is CPU-bound rather than rate limited: no pacing delay
         -- beyond the frame, which is what keeps a 2500-key pass at ~180 ms apiece.
         next_slot = elapsed
@@ -1178,6 +1360,106 @@ local function fail_item(mod, req, reason, http_status, transport)
     end
 end
 
+-- Puts items back at the head of the queue, marked so that take_batch() leaves them
+-- alone. Used when a batch answer cannot be attributed to individual items: the same
+-- items must not be grouped again, or the retry would fail the same way forever.
+local function requeue_no_batch(items)
+    for i = #items, 1, -1 do
+        local one = items[i]
+        one.no_batch = true
+        q_unshift(one)
+    end
+end
+
+-- Why a part of a batch answer cannot be used as it stands, or nil when it can.
+--
+-- Two reasons, both measured against the real model:
+--   * the placeholders are gone, so the part cannot be restored safely;
+--   * the model handed the label back unchanged. Inside a numbered list that is how it
+--     says "nothing to translate here", and it is not to be trusted: the very same
+--     strings, translated on their own, came back as "退出" for "EXIT" and "購買" for
+--     "BUY", while the batch left both in English. A batch is only allowed to be
+--     *better* than a solo request, never worse, so an unchanged part is refused here
+--     and the item is retried on its own.
+local function batch_part_refusal(item, masked, part, tokens)
+    local restored, missing = glossary.unmask(part, tokens)
+    if missing and missing > 0 then
+        return string.format("%d glossary term(s) were dropped", missing)
+    end
+    if restored == masked then
+        return "the batch left it unchanged"
+    end
+    local safe, why = M.text_is_safe(item.en, restored)
+    if not safe then
+        return why
+    end
+    return nil
+end
+
+-- Exposed for tools/smoke_online.lua: this is a rule, not plumbing, and it is the rule
+-- that decides whether a batch is allowed to replace a solo answer.
+M.batch_part_refusal_for_tests = batch_part_refusal
+
+-- Stores the answer to a batched local request.
+--
+-- Each part is restored and checked on its own, exactly like a solo answer, and the
+-- parts that come back clean are stored. A part that does not is retried on its own -
+-- never dropped - because a batch that half-failed is still a batch whose answer
+-- covers several strings, and guessing which text belongs to which key is the one
+-- failure this module must not make. The retried item carries no_batch, so a second
+-- failure ends in the usual refusal instead of an endless regroup.
+local function handle_local_batch(mod, req, raw)
+    local parts = split_batch(raw, #req.items)
+
+    if not parts then
+        util.info(mod, "the offline model did not keep the batch markers; %d item(s) go through one at a time",
+            #req.items)
+        requeue_no_batch(req.items)
+        return
+    end
+
+    local stored, retry = 0, {}
+    for i, item in ipairs(req.items) do
+        local why = batch_part_refusal(item, req.parts[i], parts[i], req.tokens[i])
+
+        if not why then
+            -- accept_translation() repeats the same checks and stores; it cannot fail
+            -- here, but a false answer is still treated as a reason to retry rather
+            -- than to drop the item.
+            local ok, failed = accept_translation(mod, {
+                kind = "local",
+                item = item,
+                masked = req.parts[i],
+                tokens = req.tokens[i],
+            }, parts[i], M.state.engine)
+            if ok then
+                stored = stored + 1
+            else
+                why = failed
+            end
+        end
+
+        if why then
+            retry[#retry + 1] = item
+            util.log(mod, "%s:%s came back unusable from a batch (%s); retrying it on its own",
+                item.mod_id, item.key, tostring(why))
+        end
+    end
+
+    if stored > 0 then
+        engines.note_success()
+    end
+    if #retry > 0 then
+        requeue_no_batch(retry)
+    end
+end
+
+-- The offline engine has two inflight shapes: "local" for one string and "local_batch"
+-- for several. Both are collected from the core's single result slot.
+local function is_local_request(kind)
+    return kind == "local" or kind == "local_batch"
+end
+
 -- ---------------------------------------------------------------------------
 -- Per-frame driver
 -- ---------------------------------------------------------------------------
@@ -1194,28 +1476,36 @@ function M.update(mod, dt)
     elapsed = elapsed + (dt or 0)
 
     -- 1. collect a finished response
-    if inflight and inflight.kind == "local" then
+    if inflight and is_local_request(inflight.kind) then
         local n = core.at_poll(out_buf, SMALL_CAP)
 
         if n == 0 then
-            -- still working; one string at a time
+            -- still working; one request at a time
             return
         end
 
         local req = inflight
         inflight = nil
 
-        if n > 0 then
-            local text = ffi.string(out_buf, n)
-            local ok, why, transport = accept_translation(mod, req, text, M.state.engine)
+        if n < 0 then
+            local why = cstr(core.at_model_error()) or "the offline model failed"
+            local reason = "offline model: " .. tostring(why)
+            if req.kind == "local_batch" then
+                for i = #req.items, 1, -1 do
+                    fail_item(mod, { kind = "local", item = req.items[i] }, reason, 0, false)
+                end
+            else
+                fail_item(mod, req, reason, 0, false)
+            end
+        elseif req.kind == "local_batch" then
+            handle_local_batch(mod, req, ffi.string(out_buf, n))
+        else
+            local ok, why, transport = accept_translation(mod, req, ffi.string(out_buf, n), M.state.engine)
             if ok then
                 engines.note_success()
             else
                 fail_item(mod, req, why, 0, transport)
             end
-        else
-            local why = cstr(core.at_model_error()) or "the offline model failed"
-            fail_item(mod, req, "offline model: " .. tostring(why), 0, false)
         end
     elseif inflight then
         local rc = core.at_http_poll(id_buf, result_buf, code_buf, body_buf, BODY_CAP, len_buf, win_buf)

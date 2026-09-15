@@ -3,6 +3,9 @@
 *.bak
 models/
 
+# measurement output (tools/batch_probe.ps1 writes here)
+tools/out/
+
 # native build output (build.bat regenerates it)
 bin/
 *.obj

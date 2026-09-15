@@ -38,6 +38,27 @@ local function check(label, actual, expected)
         pass and "ok" or "FAIL", label, tostring(actual), tostring(expected)))
 end
 
+-- The module takes its collaborators through init(); the batch rule below needs a
+-- glossary that can unmask, and text_is_safe() is the module's own.
+local fake_glossary = {
+    unmask = function(text, tokens)
+        -- mirrors modules/glossary.lua: a token whose placeholder is absent is "missing"
+        local missing = 0
+        for i = 1, #(tokens or {}) do
+            local placeholder = "\226\159\166" .. (i - 1) .. "\226\159\167"
+            if not text:find(placeholder, 1, true) then
+                missing = missing + 1
+            end
+        end
+        local restored = text:gsub("\226\159\166(%d+)\226\159\167", function(index)
+            local token = (tokens or {})[tonumber(index) + 1]
+            return token and token.term or ""
+        end)
+        return restored, missing
+    end,
+}
+online.init(nil, nil, fake_glossary, nil, nil)
+
 -- The guards the offline model needed: key labels and letter-free strings are not
 -- sent to it, because it answers them with an invented sentence rather than the
 -- original.
@@ -78,6 +99,104 @@ check("text_is_safe(short but complete)",
                         "顯示連接數值上方的細彩色線條。"), true)
 check("text_is_safe(label unaffected)",
     online.text_is_safe("Ammo", "彈"), true)
+
+-- ---------------------------------------------------------------------------
+-- Batching short strings (the offline engine's answer to "a lone label has no
+-- context": measured, "Right" alone came back as "這樣的情況", while the same word
+-- inside a numbered batch came back right).
+--
+-- Both halves are pure functions, and both are load-bearing: if the planner puts a
+-- sentence into a batch the model truncates it, and if the splitter mis-attributes a
+-- part the wrong text lands in the wrong key - the one failure this module exists to
+-- prevent. So they are pinned down here.
+-- ---------------------------------------------------------------------------
+local lim = online.batch_limits
+check("batch limit: items", lim.items, 8)
+check("batch limit: chars", lim.chars, 160)
+check("batch limit: item chars", lim.item_chars, 24)
+check("batch markers stay single digit", lim.items < 10, true)
+
+local function item(text) return { mod_id = "m", key = text, en = text } end
+local function plan(texts)
+    local items = {}
+    for i, t in ipairs(texts) do items[i] = item(t) end
+    local groups = online.plan_batch_for_tests(items)
+    local shapes = {}
+    for i, g in ipairs(groups) do
+        local names = {}
+        for j, one in ipairs(g) do names[j] = one.en end
+        shapes[i] = table.concat(names, "|")
+    end
+    return table.concat(shapes, " / ")
+end
+
+-- a run of short labels is grouped up to the item cap, not beyond it
+check("plan: 10 short labels",
+    plan({ "Ammo", "Health", "Toughness", "Stamina", "Wounds", "Damage", "Speed", "Reload", "Dodge", "Block" }),
+    "Ammo|Health|Toughness|Stamina|Wounds|Damage|Speed|Reload / Dodge|Block")
+-- ... and balanced by length as well: 24-character labels fill the 160-character
+-- budget after six, so the seventh starts a new batch instead of being squeezed in
+check("plan: length budget",
+    plan({ string.rep("a", 24), string.rep("b", 24), string.rep("c", 24),
+           string.rep("d", 24), string.rep("e", 24), string.rep("f", 24),
+           string.rep("g", 24) }),
+    string.rep("a", 24) .. "|" .. string.rep("b", 24) .. "|" .. string.rep("c", 24) .. "|" ..
+    string.rep("d", 24) .. "|" .. string.rep("e", 24) .. "|" .. string.rep("f", 24) ..
+    " / " .. string.rep("g", 24))
+-- a sentence is long enough to carry its own context: never batched, and it also
+-- breaks the run so the labels after it are not joined across it
+check("plan: sentence is alone",
+    plan({ "Ammo", string.rep("word ", 8) .. "end", "Block" }),
+    "Ammo / " .. string.rep("word ", 8) .. "end / Block")
+check("plan: multi-line text is alone",
+    plan({ "Ammo\nDetail", "Block" }), "Ammo\nDetail / Block")
+
+local no_batch = item("Right")
+no_batch.no_batch = true
+check("plan: no_batch item is alone",
+    table.concat((function()
+        local g = online.plan_batch_for_tests({ no_batch, item("Left") })
+        local out = {}
+        for i, group in ipairs(g) do
+            local names = {}
+            for j, one in ipairs(group) do names[j] = one.en end
+            out[i] = table.concat(names, "|")
+        end
+        return out
+    end)(), " / "), "Right / Left")
+
+-- The splitter: markers the model kept, and the leading one it sometimes swallows.
+local function split(text, count)
+    local parts = online.split_batch_for_tests(text, count)
+    if not parts then return "nil" end
+    return table.concat(parts, "|")
+end
+check("split: markers kept", split("[1] 左側 [2] 中部 [3] 右側", 3), "左側|中部|右側")
+check("split: leading marker swallowed", split("左側 [2] 中部 [3] 右側", 3), "左側|中部|右側")
+check("split: extra spaces", split("[1]   Ammo  [2] Health ", 2), "Ammo|Health")
+check("split: a middle marker lost", split("[1] 左側 中部 [3] 右側", 3), "nil")
+check("split: the last marker lost", split("[1] 左側 [2] 中部", 3), "nil")
+check("split: an empty part", split("[1] Ammo [2]  [3] Block", 3), "nil")
+check("split: no markers at all", split("左側 中部", 2), "nil")
+check("split: single part needs no marker", split("彈藥", 1), "彈藥")
+check("split: single empty part", split("   ", 1), "nil")
+check("split: no text", split("", 2), "nil")
+
+-- The rule that keeps a batch from ever being worse than a solo request. Measured: the
+-- batch left "EXIT" and "BUY" in English while the same strings, alone, came back as
+-- "退出" and "購買" - so an unchanged part has to be refused, not stored as "unchanged".
+local refusal = online.batch_part_refusal_for_tests
+check("batch part: translated -> usable",
+    refusal({ en = "EXIT" }, "EXIT", "退出", {}) == nil, true)
+check("batch part: unchanged -> refused",
+    refusal({ en = "EXIT" }, "EXIT", "EXIT", {}) ~= nil, true)
+check("batch part: dropped placeholder -> refused",
+    refusal({ en = "Health" }, "\226\159\1660\226\159\167", "生命力", { { term = "生命" } }) ~= nil, true)
+check("batch part: placeholder kept -> usable",
+    refusal({ en = "Health" }, "\226\159\1660\226\159\167", "\226\159\1660\226\159\167",
+        { { term = "生命" } }) == nil, true)
+check("batch part: format specifier lost -> refused",
+    refusal({ en = "Mastery %s" }, "Mastery %s", "掌握", {}) ~= nil, true)
 
 print(string.format("%d failure(s)", failures))
 

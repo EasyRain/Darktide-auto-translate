@@ -246,6 +246,58 @@ tokens. The CLI now reads the wide command line and converts it to UTF-8 itself
 (`use_utf8_argv` in `at_cli.c`). The mod was never affected — Lua passes UTF-8
 strings to the core directly.
 
+### Batching short strings
+
+A label on its own has no context, and that is exactly what a 600M model gets wrong.
+Measured on real store entries: `AUTO` alone came back as `汽車` (a car), `(auto)` as
+`沒有任何問題` ("no problem at all"), `INVENTORY MODE` as `發明方式` ("method of
+invention"). Given a numbered list, the same strings come back right — so short strings
+are translated **in groups**, submitted as one request:
+
+```
+[1] Amount: [2] AUTO [3] Auto Max Mastery [4] Auto Sacrifice Weapons [5] (auto)
+```
+
+The rules (`modules/online.lua`):
+
+* only strings of at most 24 characters without a line break take part; a sentence is
+  long enough to carry its own context and goes alone, as before;
+* a group holds at most 8 strings **and** at most 160 source characters, so a handful of
+  longer phrases is not pushed into one request while a pile of two-word labels can share
+  one. The length budget is what "dynamic balancing" means here: the group is closed as
+  soon as the next string would not fit;
+* each string is masked with the glossary **separately**, so its placeholders can be
+  restored from its own token list, and the markers are what the answer is split on.
+  Identical placeholder numbers in different parts are therefore not a problem;
+* the split must find every marker (`[1]` may be missing — the model does swallow it — but
+  then the text before `[2]` is part one, and any later missing marker rejects the whole
+  batch);
+* each part then passes exactly the same checks as a solo answer. A part that fails —
+  a dropped placeholder, a lost format specifier, a truncated result — is retried on its
+  own with `no_batch` set, so an item is never stored from an answer that cannot be
+  attributed to it and never regroups into the batch that just failed.
+
+One rule exists only for batches: **an unchanged part is refused**, not stored as
+`unchanged`. Inside a numbered list the model treats "give the label back" as "nothing to
+translate here", and that is not the same answer a solo request gives — measured, a batch
+left `EXIT` and `BUY` in English while the same strings alone came back as `退出` and
+`購買`. Retrying those keeps a batch from ever being worse than the queue it replaced.
+
+Measured on 30 real short strings (`Weapon_XP_Farm`, zh-tw, 600M int8): 20 items took
+their answer from a batch (16 of them a real translation), 10 fell back to solo because
+the model lost the markers or merged two items in one of the six batches, 4 parts were
+refused and retried, and 7 answers were identical either way. The fallback is not
+theoretical — **about one batch in three loses its markers** — which is why the batch
+answer is only ever accepted per part. `tools/batch_probe.ps1` re-runs the whole
+measurement:
+
+```
+powershell -File tools\batch_probe.ps1 -Store <translations store> -ModelDir <models/small> [ -MaxItems 48 ] [ -ItemsPerBatch 5 ]
+```
+
+It drives the real planner, the real model and the real split/restore code and prints
+one line per key (solo answer next to the batched one) plus a summary.
+
 ## The online engine: API services
 
 **API service** — why DeepL is the default:
@@ -322,6 +374,20 @@ escape passes there and is rejected by the game.
 `selftest` is the useful one: it exercises the JSON reader, URL building, language code
 mapping, HTML entity decoding and every provider's response parsing — the same code the game
 runs — and exits non-zero on the first mismatch.
+
+A syntax check never runs a line, so the Lua queue has two more checks of its own:
+
+```
+luajit tools\smoke_online.lua                    # loads modules/online.lua with stubs, runs ~50 assertions
+powershell -File tools\batch_probe.ps1 -Store <store> -ModelDir <models/small>
+```
+
+`smoke_online.lua` is what catches a helper that was moved above the `local` it uses
+(the file still parses, the reference silently becomes a global) and pins down the rules
+that are easy to get wrong: what counts as translatable, the format-specifier and
+truncation guards, the batch planner, the marker splitter and the "an unchanged part of a
+batch is refused" rule. `batch_probe.ps1` is the measurement behind the batching design —
+see [Batching short strings](#batching-short-strings).
 
 `tests\run_fixtures.bat` goes one step further and parses **real responses captured from the live
 services** (`tests\fixtures\*.json`). That is what caught MyMemory reporting a refusal with HTTP
