@@ -1,4 +1,4 @@
--- online.lua — drives the machine translation queue, one request at a time.
+﻿-- online.lua — drives the machine translation queue, one request at a time.
 --
 -- The game thread must never block, so this is a poll loop rather than a function
 -- that runs to completion: mod.update() calls M.update(mod, dt) once per frame,
@@ -922,6 +922,36 @@ M.state = {
 -- found again (search the store for src = "unmasked") and reviewed.
 local UNMASKED_SRC = "unmasked"
 
+-- The "cores for the offline model" setting, in the form the core wants:
+--   0  = automatic (min(cores/2, 8)), which is the default
+--  -1  = every core, the CTranslate2 default: measurably the slowest and the one that
+--        takes the machine away from the game, so it is a deliberate choice, not the
+--        automatic one
+--  n  = exactly n cores
+local function threads_setting(mod)
+    local want = mod and mod:get("model_threads")
+    if type(want) == "number" then
+        return want >= 0 and math.floor(want) or -1
+    end
+    if want == "all" then
+        return -1
+    end
+    if type(want) == "string" and want ~= "" and want ~= "auto" then
+        local n = tonumber(want)
+        if n and n > 0 then
+            return math.floor(n)
+        end
+    end
+    return 0
+end
+
+-- Whether a model is in memory right now. Used by the settings handler: the offline
+-- model's thread pool is fixed at load time, so a change to the thread option cannot take
+-- effect until the process restarts.
+function M.model_in_memory()
+    return model_ready()
+end
+
 -- Says, once per session, that the model the mod asked for is not the one in memory.
 --
 -- Only one model fits in the game process - the core never releases one (1,663 MB for
@@ -1048,6 +1078,19 @@ function M.start(mod, report, lang)
             return false
         end
         M.state.model_files = files
+
+        -- How many cores the offline model may use. The core only accepts this before a
+        -- model is loaded, so a change mid-session cannot apply - and saying that is the
+        -- point of the check below (the setting's tooltip promises a restart).
+        local wanted_threads = threads_setting(mod)
+        if not core.at_set_model_threads(wanted_threads) then
+            local current = core.at_model_threads()
+            if wanted_threads ~= 0 and current ~= wanted_threads then
+                M.state.threads_pending = true
+                util.info(mod, "the thread cap (%d) applies after a restart; the loaded model uses %d",
+                    wanted_threads, current)
+            end
+        end
 
         -- Loading reads 1.4 GB; on the game thread that is a visible freeze, so it
         -- runs on a background thread of the core and the HUD shows it while it

@@ -202,8 +202,29 @@ inside the game is both the rudest and the *slowest* setting. One 102-character 
 | ms | ~1000 | ~400 | **340** | ~410 | 640 | 1200 |
 
 So the default is `min(cores/2, 8)` (8 here), and the game keeps the rest of the machine
-for the whole inference. `at_cli.exe model … --threads N` measures it; `0` asks for every
-core again.
+for the whole inference. **Cores for the offline model** in the options selects
+automatic / 8 / 6 / 4 / 2 / 1 / all cores; CTranslate2 takes the count when the model is
+loaded, so a change needs a restart and the mod says so instead of looking broken.
+`at_cli.exe model … --threads N` measures it (`0` = automatic, `-1` = every core).
+
+### The offline model is a fallback, not an engine of choice
+
+The models are small, they make more mistakes than DeepL, and the code around them is
+mostly there to *contain* that: batching so a lonely label has context, per-part
+validation so nothing is stored from an answer that cannot be attributed, the guards that
+refuse an unknown token or a truncated result, and the glossary for the terms we know
+exactly. That is a fallback, and the mod now treats it as one:
+
+* **Automatic** uses the API whenever a key is set — the models are only reached when
+  there is nothing better.
+* The engine labels say `offline fallback`, and the tooltip says why.
+* **Translate offline results again with the online engine** (off by default) scans the
+  entries a local model wrote (`src` starting with `local`, plus `unmasked`) as pending
+  again while an online engine is in use. Without it, adding an API key later would only
+  improve *new* strings and the ~2500 already translated by the model would stay that way
+  forever — a fallback that cannot be upgraded is a decision, not a fallback. Nothing is
+  deleted when it runs: the old text stays until a better one is stored, so a failing API
+  costs requests, never data. The count of entries it re-sends is logged before the run.
 
 
 

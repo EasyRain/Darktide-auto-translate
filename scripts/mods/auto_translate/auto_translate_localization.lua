@@ -180,12 +180,42 @@ return {
         ["zh-cn"] = "在线（正式 API）",
     },
     engine_local_base = {
-        en = "Local model 1.3B (offline)",
-        ["zh-cn"] = "本地模型 1.3B（离线）",
+        en = "Local model 1.3B (offline fallback)",
+        ["zh-cn"] = "本地模型 1.3B（离线保底）",
     },
     engine_local_large = {
-        en = "Local model 3.3B (offline, slow)",
-        ["zh-cn"] = "本地模型 3.3B（离线，较慢）",
+        en = "Local model 3.3B (offline fallback, slow)",
+        ["zh-cn"] = "本地模型 3.3B（离线保底，较慢）",
+    },
+    -- The local models are a fallback, and the engine list should say so: they are the
+    -- only option without a network, and measurably the weakest one.
+    engine_local_note = {
+        en = "The offline models are the fallback for when no API key is available: they are smaller than the online services and make more mistakes, so they are used only when nothing else can be.",
+        ["zh-cn"] = "本地模型是没有 API 密钥时的保底手段：它们比在线服务小、出错更多，因此只会在别无选择时使用。",
+    },
+    model_threads = {
+        en = "Cores for the offline model",
+        ["zh-cn"] = "本地模型使用核心数",
+    },
+    model_threads_description = {
+        en = "How many CPU cores one offline translation may use. Measured on a 32-thread machine, one 102-character string: 8 cores 340 ms, 16 cores ~400 ms, 4 cores ~410 ms, all cores ~1000 ms - using every core is the slowest choice and takes the machine away from the game. The default is half the cores, capped at 8. Changing this needs a restart (the thread count is fixed when the model is loaded).",
+        ["zh-cn"] = "一次离线翻译最多能用几个 CPU 核心。在 32 线程机器上实测一条 102 字符句子：8 核 340 ms、16 核约 400 ms、4 核约 410 ms、全部核心约 1000 ms——吃满所有核心是最慢的，而且会把整台机器从游戏手里拿走。默认取核心数的一半、上限 8。修改后需要重启游戏（线程数在模型加载时就固定了）。",
+    },
+    threads_auto = {
+        en = "Automatic (half the cores, max 8)",
+        ["zh-cn"] = "自动（核心数一半，上限 8）",
+    },
+    threads_all = {
+        en = "All cores (slowest, not recommended)",
+        ["zh-cn"] = "全部核心（最慢，不推荐）",
+    },
+    retranslate_local = {
+        en = "Translate offline results again with the online engine",
+        ["zh-cn"] = "用在线引擎重译离线结果",
+    },
+    retranslate_local_description = {
+        en = "Entries the offline model produced are scanned as pending again while an online engine is selected, so adding an API key later replaces them. Off by default: it re-sends everything the model translated (about 2500 strings per language, which counts against your API quota). Nothing is lost if the API fails - the old text stays until a better one is stored.",
+        ["zh-cn"] = "选中在线引擎时，把离线模型翻过的条目重新当作待翻译，这样以后加上密钥就能替换它们。默认关闭：它会把模型翻过的全部条目重发一遍（每种语言约 2500 条，会计入你的 API 额度）。API 失败不会丢东西——旧译文会一直留到有更好的结果为止。",
     },
     online_api_key = {
         en = "API key",

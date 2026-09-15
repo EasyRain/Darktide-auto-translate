@@ -75,10 +75,11 @@ AT_API int at_model_load_async(const char* dir_utf8);
 // 1 while a background load is in progress.
 AT_API int at_model_loading(void);
 
-// How many threads one translation may use. 0 = the default, half the cores, which is
-// what the mod uses: this runs inside the game, and CTranslate2 would otherwise take
-// every core for the whole inference. Only read at load time. Returns 1 on success, 0
-// when a model is already loaded (too late to change).
+// How many threads one translation may use: <0 = every core (CTranslate2's default, and
+// measured the slowest), 0 = automatic (min(cores/2, 8), the default), >0 = exactly that
+// many. This runs inside the game, so the automatic value deliberately leaves the rest of
+// the machine to the game. Only read at load time. Returns 1 on success, 0 when a model
+// is already loaded (too late to change).
 AT_API int at_model_set_threads(int threads);
 
 // The thread count the loaded model uses, or 0 when nothing is loaded.

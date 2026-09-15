@@ -267,6 +267,26 @@ check("unmasked retry: no reason given", retry({}, nil), false)
 print(string.format("%d failure(s)", failures))
 
 -- ---------------------------------------------------------------------------
+-- scanner.lua: which stored answers count as "came from an offline model"
+--
+-- The redo pass (scanner.M.scan with opts.redo_local) moves those entries back to
+-- pending so an online engine replaces them. Getting the predicate wrong either
+-- overwrites hand-written translations or re-translates the local model's own output
+-- forever, so it is pinned here.
+-- ---------------------------------------------------------------------------
+local scanner = assert(loadfile(here .. "/../scripts/mods/auto_translate/modules/scanner.lua"))()
+scanner.init(nil, nil)
+check("scanner: local_base is offline", scanner.is_local_source("local_base"), true)
+check("scanner: local_large is offline", scanner.is_local_source("local_large"), true)
+check("scanner: unmasked is offline", scanner.is_local_source("unmasked"), true)
+check("scanner: deepl is not", scanner.is_local_source("deepl"), false)
+check("scanner: manual is not", scanner.is_local_source("manual"), false)
+check("scanner: unchanged is not", scanner.is_local_source("unchanged"), false)
+check("scanner: nil is not", scanner.is_local_source(nil), false)
+
+print(string.format("%d failure(s) in total", failures))
+
+-- ---------------------------------------------------------------------------
 -- util.lua's logging wrapper
 --
 -- DMF formats every log message a second time (logging.lua: pcall(string.format,

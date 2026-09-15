@@ -1,4 +1,4 @@
--- auto_translate.lua — main entry point.
+﻿-- auto_translate.lua — main entry point.
 --
 -- Pipeline on startup (and on demand):
 --   1. scan every loaded mod's localization table (DMF's registry) for the target language
@@ -96,6 +96,24 @@ local function install_hook()
 end
 
 install_hook()
+
+-- Scan options. The only thing a scan can be told today is whether to treat entries the
+-- *offline* model produced as pending again.
+--
+-- Why it is decided here and not in the scanner: it only makes sense while a better
+-- engine is actually in use. Ticking the option with a local model selected would make
+-- the model re-translate its own output on every run, forever - so an online engine is
+-- part of the condition, not just the checkbox.
+local function scan_opts(lang)
+    if mod:get("retranslate_local") ~= true then
+        return nil
+    end
+    local engine = engines.resolve(mod, lang)
+    if engine == nil or engines.is_local_engine(engine) then
+        return nil
+    end
+    return { redo_local = true }
+end
 
 -- Pauses translation and tells the player when the selected engine is not usable
 -- yet: tripped circuit breaker, missing local model, or missing API key.
@@ -199,7 +217,7 @@ local function run_pipeline(reason)
 
     glossary_report(lang)
 
-    local report = scanner.scan(mod, lang)
+    local report = scanner.scan(mod, lang, scan_opts(lang))
     local st = report.stats
 
     if report.error then
@@ -212,6 +230,12 @@ local function run_pipeline(reason)
         "scan (%s) [%s]: mods=%d keys=%d already=%d ready=%d pending=%d stale=%d skipped=%d",
         reason, lang, st.mods_total, st.keys_total, st.already, st.ready, st.pending, st.stale, st.skipped
     )
+    if st.redo > 0 then
+        -- Say it out loud: these are requests against the API quota, and the number is
+        -- the whole reason the option exists.
+        util.info(mod, "%d key(s) translated by the offline model will be translated again by '%s'",
+            st.redo, tostring(engines.resolve(mod, lang)))
+    end
 
     -- The total alone does not say whether a run will take a minute or an hour, so
     -- name the mods the work actually sits in.
@@ -265,7 +289,9 @@ local injected_upto = 0
 
 local function reinject_finished()
     local lang = current_lang()
-    local report = scanner.scan(mod, lang)
+    -- The same options as the run that fills the queue, or an entry marked for a redo
+    -- would look "ready" here and never be injected while it is being translated.
+    local report = scanner.scan(mod, lang, scan_opts(lang))
     if report.error then
         return
     end
@@ -457,8 +483,25 @@ mod.on_setting_changed = function(setting_id)
         if type(mod.echo) == "function" then
             pcall(mod.echo, mod, mod:localize("model_download_missing", dir))
         end
+    elseif setting_id == "model_threads" then
+        -- The thread count is fixed when the model is loaded (CTranslate2 takes it in the
+        -- replica pool), so this one cannot be rebuilt into effect like the others: the
+        -- model has to be loaded again, which only happens on the next launch. Saying that
+        -- is the difference between "the setting did nothing" and "the setting is right,
+        -- it needs a restart".
+        if online.model_in_memory() then
+            local message = mod:localize("model_restart_needed", tostring(mod:get("model_threads")))
+            util.info(mod, "the core count applies after a restart (models keep their thread pool)")
+            if type(mod.notify) == "function" then
+                pcall(mod.notify, mod, message)
+            end
+            if type(mod.echo) == "function" then
+                pcall(mod.echo, mod, message)
+            end
+        end
     elseif setting_id == "target_language" or setting_id == "engine"
-        or setting_id == "online_api_key" or setting_id == "proxy" then
+        or setting_id == "online_api_key" or setting_id == "proxy"
+        or setting_id == "retranslate_local" then
         -- These all change what the queue should even contain, so stopping is not
         -- enough: the pipeline has to be rebuilt. (Previously this only stopped the
         -- queue and told the player to press "Reload", which looked like nothing

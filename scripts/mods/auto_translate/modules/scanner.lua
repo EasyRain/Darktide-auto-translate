@@ -101,11 +101,21 @@ function M.scan_mod(name, lang)
     return entry
 end
 
-function M.scan(mod, lang)
+-- Whether a stored entry came from an offline model rather than from a service or a
+-- human. The `src` values are the engine ids ("local_base", "local_large") plus
+-- "unmasked" for the retry that runs without glossary masking.
+function M.is_local_source(src)
+    if type(src) ~= "string" then
+        return false
+    end
+    return src:match("^local") ~= nil or src == "unmasked"
+end
+
+function M.scan(mod, lang, opts)
     local report = {
         lang = lang,
         mods = {},
-        stats = { mods_total = 0, keys_total = 0, already = 0, ready = 0, pending = 0, stale = 0, skipped = 0 },
+        stats = { mods_total = 0, keys_total = 0, already = 0, ready = 0, pending = 0, stale = 0, skipped = 0, redo = 0 },
     }
 
     local dmf = get_mod("DMF")
@@ -123,6 +133,29 @@ function M.scan(mod, lang)
     for _, name in ipairs(names) do
         if not SKIP_MODS[name] then
             local entry = M.scan_mod(name, lang)
+
+            -- Offline answers are answers of last resort. With a better engine available
+            -- (opts.redo_local, decided by the caller: the option is on *and* an online
+            -- engine is in use) the entries a local model wrote are scanned as pending
+            -- again, so adding an API key later really does replace them. Nothing is
+            -- deleted first: the old text stays in the store until a better one is stored,
+            -- so a failing API costs requests, never data.
+            if opts and opts.redo_local and #entry.ready > 0 then
+                local keep = {}
+                for _, ready in ipairs(entry.ready) do
+                    if M.is_local_source(ready.src) then
+                        entry.pending[#entry.pending + 1] = { key = ready.key, en = ready.en, hash = ready.hash }
+                        entry.redo = (entry.redo or 0) + 1
+                    else
+                        keep[#keep + 1] = ready
+                    end
+                end
+                entry.ready = keep
+                table.sort(entry.pending, function(a, b)
+                    return a.key < b.key
+                end)
+            end
+
             report.mods[#report.mods + 1] = entry
             local st = report.stats
             st.mods_total = st.mods_total + 1
@@ -131,6 +164,7 @@ function M.scan(mod, lang)
             st.ready = st.ready + #entry.ready
             st.pending = st.pending + #entry.pending
             st.stale = st.stale + entry.stale
+            st.redo = st.redo + (entry.redo or 0)
             if entry.skipped then
                 st.skipped = st.skipped + 1
                 util.log(mod, "skipped %s: %s", name, entry.skipped)

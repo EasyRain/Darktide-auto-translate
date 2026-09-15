@@ -96,6 +96,20 @@ static void strip_proxy_args(int argc, char** argv)
 // ---------------------------------------------------------------------------
 // small test harness
 // ---------------------------------------------------------------------------
+// The thread count as the player sees it: -1 means "every core", 0 means nothing loaded.
+static const char* threads_text(void)
+{
+    static char buf[32];
+    const int n = at_model_threads();
+    if (n < 0) {
+        return "all";
+    }
+    if (n == 0) {
+        return "none";
+    }
+    snprintf(buf, sizeof(buf), "%d", n);
+    return buf;
+}
 static int g_checks = 0;
 static int g_failures = 0;
 
@@ -981,7 +995,7 @@ static int cmd_model(int argc, char** argv)
             return 3;
         }
         printf("loaded     : ok\n");
-        printf("threads    : %d of %d core(s)\n", at_model_threads(), at_model_core_count());
+        printf("threads    : %s of %d core(s)\n", threads_text(), at_model_core_count());
 
         // Show exactly what the model is fed: the source language token has to be
         // there as a token of its own (SentencePiece would shred "eng_Latn" into
@@ -1106,7 +1120,7 @@ static int cmd_queue(int argc, char** argv)
         fprintf(stderr, "load failed: %s\n", at_model_error());
         return 3;
     }
-    printf("threads     : %d of %d core(s)\n", at_model_threads(), at_model_core_count());
+    printf("threads     : %s of %d core(s)\n", threads_text(), at_model_core_count());
 
     // The regression this command exists for: a submit issued while the previous
     // string is still being translated must be refused. It used to be accepted, and
@@ -1200,7 +1214,7 @@ static int cmd_switch(int argc, char** argv)
     printf("load A       : %s -> %d\n", argv[2], at_model_load(argv[2]));
     at_model_loaded_dir(loaded, (int)sizeof(loaded));
     printf("loaded dir   : %s\n", loaded);
-    printf("threads      : %d of %d core(s)\n", at_model_threads(), at_model_core_count());
+    printf("threads      : %s of %d core(s)\n", threads_text(), at_model_core_count());
 
     n = at_model_translate("Reload Speed", lang, out, (int)sizeof(out));
     printf("answer A     : %s\n", n > 0 ? out : at_model_error());
@@ -1209,7 +1223,7 @@ static int cmd_switch(int argc, char** argv)
            second, at_model_load(second));
     at_model_loaded_dir(loaded, (int)sizeof(loaded));
     printf("loaded dir   : %s\n", loaded);
-    printf("threads      : %d of %d core(s)\n", at_model_threads(), at_model_core_count());
+    printf("threads      : %s of %d core(s)\n", threads_text(), at_model_core_count());
 
     n = at_model_translate("Reload Speed", lang, out, (int)sizeof(out));
     printf("answer B     : %s\n", n > 0 ? out : at_model_error());
@@ -1335,6 +1349,7 @@ static int cmd_proxy(int argc, char** argv)
 // ---------------------------------------------------------------------------
 // info
 // ---------------------------------------------------------------------------
+
 static int cmd_info(void)
 {
     int status = at_model_status();
@@ -1353,8 +1368,7 @@ static int cmd_info(void)
     if (loaded[0]) {
         printf("model loaded from : %s\n", loaded);
     }
-    printf("threads           : %d of %d core(s)%s\n", at_model_threads(), at_model_core_count(),
-           at_model_threads() == 0 ? " (nothing loaded)" : "");
+    printf("threads           : %s of %d core(s)\n", threads_text(), at_model_core_count());
     printf("proxy in use      : %s\n", at_proxy_in_use());
     if (at_proxy_hint() && at_proxy_hint()[0]) {
         printf("proxy note        : %s\n", at_proxy_hint());

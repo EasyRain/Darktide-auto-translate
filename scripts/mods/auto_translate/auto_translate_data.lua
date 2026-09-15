@@ -87,6 +87,33 @@ return {
                 default_value = false,
             },
             {
+                -- How many cores one offline translation may use. The default is
+                -- min(cores/2, 8); "all" is measurably the slowest choice *and* the one
+                -- that takes the machine away from the game, but it stays selectable for
+                -- a machine where the queue matters more than the frame rate.
+                setting_id = "model_threads",
+                type = "dropdown",
+                default_value = "auto",
+                options = {
+                    { text = "threads_auto", value = "auto" },
+                    { text = "threads_8",    value = "8" },
+                    { text = "threads_6",    value = "6" },
+                    { text = "threads_4",    value = "4" },
+                    { text = "threads_2",    value = "2" },
+                    { text = "threads_1",    value = "1" },
+                    { text = "threads_all",  value = "all" },
+                },
+            },
+            {
+                -- Offline answers are answers of last resort. With an online engine
+                -- selected, ticking this scans the entries a local model wrote as pending
+                -- again, so adding an API key later really does replace them - otherwise
+                -- the store keeps them forever and a fallback becomes permanent.
+                setting_id = "retranslate_local",
+                type = "checkbox",
+                default_value = false,
+            },
+            {
                 setting_id = "progress_hud",
                 type = "checkbox",
                 default_value = true,

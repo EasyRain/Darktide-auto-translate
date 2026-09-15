@@ -348,12 +348,16 @@ int load_model_locked(const char* dir_utf8)
         g_loader->compute_type = ctranslate2::str_to_compute_type(g_compute_type);
 
         // ReplicaPoolConfig is where the thread count lives in CTranslate2 4.x (it is not
-        // a ModelLoader member): num_threads_per_replica = 0 asks for every core, and this
-        // runs inside the game, so the default is half of them.
+        // a ModelLoader member). 0 there means "ask for every core" - exactly what the
+        // "all cores" choice wants, and what the automatic default deliberately avoids.
         ctranslate2::ReplicaPoolConfig pool;
-        pool.num_threads_per_replica = (size_t)(g_intra_threads > 0 ? g_intra_threads : default_intra_threads());
+        if (g_intra_threads < 0) {
+            pool.num_threads_per_replica = 0;
+        } else {
+            pool.num_threads_per_replica = (size_t)(g_intra_threads > 0 ? g_intra_threads : default_intra_threads());
+        }
         g_translator = new ctranslate2::Translator(*g_loader, pool);
-        g_effective_threads = (int)pool.num_threads_per_replica;
+        g_effective_threads = g_intra_threads < 0 ? -1 : (int)pool.num_threads_per_replica;
     } catch (const std::exception& e) {
         std::snprintf(g_error, sizeof(g_error), "could not load the CTranslate2 model: %s", e.what());
         return 0;
@@ -371,7 +375,9 @@ int load_model_locked(const char* dir_utf8)
 // model is loaded, so set it before at_model_load()/at_model_load_async().
 int at_model_set_threads(int threads)
 {
-    g_intra_threads = threads > 0 ? threads : 0;
+    // <0 = every core (CTranslate2's own default), 0 = automatic (min(cores/2, 8)),
+    // >0 = exactly that many.
+    g_intra_threads = threads < 0 ? -1 : (threads > 0 ? threads : 0);
     if (g_ready) {
         set_error("threads can only be set before the model is loaded");
         return 0;

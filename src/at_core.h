@@ -1,4 +1,4 @@
-// at_core.h — Auto Translate native core (HTTP + translation entry points)
+﻿// at_core.h — Auto Translate native core (HTTP + translation entry points)
 //
 // Async HTTP GET on a background thread so the game thread never blocks.
 //   at_http_get(host, path) -> request id (>0) or 0 on failure
@@ -93,9 +93,10 @@ AT_API int  at_load_model(void);
 // honoured or ignored.
 AT_API int  at_load_model_async(void);
 
-// Threads one translation may use. 0 = the default (half the cores): CTranslate2
-// otherwise asks for every core, and this runs inside the game. Set before loading;
-// returns 0 when a model is already loaded.
+// Threads one translation may use: <0 = every core (the slowest, measured), 0 = automatic
+// (min(cores/2, 8), the default), >0 = exactly that many. CTranslate2 would otherwise ask
+// for every core on its own, and this runs inside the game. Set before loading; returns 0
+// when a model is already loaded.
 AT_API int  at_set_model_threads(int threads);
 
 // Threads the loaded model uses (0 when nothing is loaded) and the machine's core
