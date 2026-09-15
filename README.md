@@ -116,23 +116,29 @@ return {
 
 ## Engines and language support
 
-The free online tier is a **list of providers**, tried in order, and each provider is only used for
-languages it can actually produce (`google_clients5` → `google_gtx` → `mymemory`).
+Two engines, chosen with the **Translation engine** option:
 
-| provider | host | notes |
+| engine | notes |
+| --- | --- |
+| **Automatic** | The largest downloaded offline model; if none is downloaded, the API when a key is set. If neither exists, translation stays paused and the mod tells you which two things would fix it. |
+| **Online (official API)** | Needs a key. Pick the service with **API service**: **DeepL** (default) or Google Cloud Translation. |
+| **Local model (small / large)** | Offline NLLB-200. *(not implemented yet — the next step)* |
+
+**API service** — why DeepL is the default:
+
+| service | reachable from mainland China | note |
 | --- | --- | --- |
-| `google_clients5` | `clients5.google.com` | **First choice.** Reachable from mainland China; answers `zh-CN` in Simplified and `zh-TW` in Traditional (verified). |
-| `google_gtx` | `translate.googleapis.com` | Same engine, but this host is **reset during the TLS handshake in China** (SNI filtering), so it is only the second choice. |
-| `mymemory` | `api.mymemory.translated.net` | Reachable in China, but **always answers in Traditional Chinese** whatever you ask for. That is a documented MyMemory limitation (confirmed by the Lingua Imperialis author), not a bug in this mod — so MyMemory is never used for a `zh-cn` target. |
-| `google_api` | `translation.googleapis.com` | Official Cloud Translation v2, needs a key (the "Online (official API)" engine). |
+| **DeepL** | yes | 1,000,000 characters/month on the free tier; keys ending in `:fx` use `api-free.deepl.com` automatically. |
+| Google Cloud Translation | **no** | `translation.googleapis.com` is reset during the TLS handshake, exactly like `translate.googleapis.com`. Works only behind a proxy. |
 
-* A provider that cannot produce the requested language is removed **before** any request is made, and
-  a translation that does not match the source's format placeholders is **refused, never stored** —
-  nothing wrong is silently shipped to the player.
-* A provider that fails to connect repeatedly is **dropped for the rest of the session**, so one
-  blocked host does not slow down every key.
-* Repeated failures across all providers trip a circuit breaker (3 in a row): translation pauses and
-  tells you, instead of retrying forever.
+Both are asked for `ZH-HANS` / `ZH-HANT` style codes, so Simplified and Traditional
+Chinese are never confused, and both leave our `⟦n⟧` placeholders and `%s` / `%.0f`
+format specifiers untouched (verified against the real API).
+
+The free public endpoints (`clients5.google.com`, `translate.googleapis.com`, MyMemory) are no
+longer offered: they are rate limited and blocked too easily to build on, and MyMemory answers in
+Traditional Chinese whatever you ask for. Their code is still in the core and still passes its
+offline tests — it is the only zero-setup path and is useful for testing — but nothing selects it.
 
 Check what actually works on your machine — one command, real requests:
 
