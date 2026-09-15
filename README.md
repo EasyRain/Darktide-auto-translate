@@ -636,6 +636,32 @@ python tools\lua_syntax_check.py                 # parses all 14 files, runs not
 python tools\check_exports.py                    # every at_* name in the Lua CDEF exists in the DLL
 ```
 
+### Deploying to the game (the path matters)
+
+`tools/deploy_to_game.ps1` copies the Lua where the game actually reads it and compares
+SHA-256 against the repository:
+
+```
+powershell -NoProfile -File tools\deploy_to_game.ps1
+```
+
+This exists because the layout is split and a wrong copy is silent:
+
+```
+mods/auto_translate/auto_translate.mod                              the descriptor
+mods/auto_translate/scripts/mods/auto_translate/<lua, modules/>     the code the descriptor names
+mods/auto_translate/{bin, models, translations}/                    the data the code loads at runtime
+```
+
+The descriptor's `mod_data` / `mod_script` / `mod_localization` all say
+`auto_translate/scripts/mods/auto_translate/...`, and `auto_translate.lua` builds its module
+paths from the same prefix (`BASE = "auto_translate/scripts/mods/auto_translate/modules/"`).
+Copying the modules to the mod **root** therefore looks like a successful deploy and changes
+nothing: the game keeps loading the nested copy. That happened here — the root and nested
+copies drifted apart for an evening while every hash check "passed", because the checks were
+looking at the root copy. The script writes to the nested path, verifies it, and reports any
+stray Lua left at the root.
+
 `check_exports.py` exists because a missing export is invisible until the game calls it: the
 C side compiles and links happily while the Lua CDEF declares a name nobody defines, and the
 symptom is "attempt to call a nil value" in the middle of a run.
