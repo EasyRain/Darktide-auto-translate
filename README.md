@@ -626,6 +626,14 @@ return {
   the mechanics terms, and zh-cn / zh-tw for class names); missing languages are welcome as
   reliable sources appear (official localisation mods, localised wiki pages).
 * Use **Test glossary** in the options to see masking/restoring in the log.
+* A space a service leaves next to a placeholder is removed when it would end up **between two Han
+  or kana characters**: a placeholder reads to a service as a Latin-shaped token, so `Show decimals`
+  came back as `显示 小数位`, and one real store had 15 of its 109 entries carrying that space. The
+  rule needs Han/kana on *both* sides, so Latin targets are untouched — and so is Korean, whose
+  words are separated by spaces (the neighbour is checked by code point, because Hangul shares the
+  leading UTF-8 bytes a byte-range check would have matched). Entries written before this rule keep
+  their space; `tools/fix_term_spacing.lua <translations dir> [--write]` rewrites them in place with
+  the same writer the mod uses, or the file can simply be deleted and translated again.
 
 ### Language names
 

@@ -206,14 +206,45 @@ do
         (through("中文版", "zh-cn")), "中文版")
     check("a term ending in punctuation is not eaten by its prefix",
         (through("Portuguese (Brazil)", "zh-cn")), "巴西葡萄牙语")
+    -- A term next to CJK text still matches. The space is gone because of the rule below: the
+    -- space sat between two Han characters, which is what Chinese typography does not do - the
+    -- point of this case is that the term was matched at all, not that the separator survived.
     check("an English term next to CJK text still matches",
-        (through("语言 German", "zh-cn")), "语言 德语")
+        (through("语言 German", "zh-cn")), "语言德语")
     check("and one glued to CJK text too",
         (through("语言German", "zh-cn")), "语言德语")
     check("and one inside a longer word does not",
         (through("Germans", "zh-cn")), "Germans")
     local masked = glossary.mask("Deutsch", "zh-cn", false)
     check("a whole-term string masks to one placeholder", masked:find("^⟦%d+⟧$") ~= nil, true)
+
+    -- The space a service leaves next to a placeholder. A placeholder reads as a Latin-shaped
+    -- token, so the service separates it from the text around it - measured on a real store:
+    -- "Show decimals" came back as "显示 小数位", and 15 of that file's 109 entries carried such a
+    -- space. Chinese and Japanese do not separate words with spaces, so the space goes.
+    check("a restored term loses the space a service added",
+        (glossary.unmask("显示 小数位", { { term = "显示" } })), "显示小数位")
+    check("and on the other side of the term",
+        (glossary.unmask("默认 冷却时间", { { term = "冷却时间" } })), "默认冷却时间")
+    check("and on both sides at once",
+        (glossary.unmask("默认 冷却时间 颜色", { { term = "默认" }, { term = "冷却时间" } })),
+        "默认冷却时间颜色")
+    check("a kana neighbour counts too",
+        (glossary.unmask("表示 されません", { { term = "表示" } })), "表示されません")
+    -- Not a blanket "remove spaces near terms" rule: the space is kept when the other side is
+    -- Latin, which is what Chinese typography wants, and a Latin target has no CJK neighbours.
+    check("a Latin term keeps its space", (glossary.unmask("FPS 伤害", { { term = "FPS" } })),
+        "FPS 伤害")
+    check("a Latin target is untouched",
+        (glossary.unmask("Keystone Modus", { { term = "Keystone" } })), "Keystone Modus")
+    -- Korean separates its words with spaces, and Hangul shares the leading UTF-8 bytes the
+    -- obvious shortcut would have matched - so the neighbour is checked by code point.
+    check("Korean keeps its word spaces",
+        (glossary.unmask("능력 충전", { { term = "능력" } })), "능력 충전")
+    check("a placeholder before Latin text keeps its space",
+        (glossary.unmask("⟦0⟧ Mode", { { term = "楔石" } })), "楔石 Mode")
+    check("a placeholder before CJK text loses it",
+        (glossary.unmask("⟦0⟧ 模式", { { term = "楔石" } })), "楔石模式")
 end
 
 print("languages present: " .. table.concat((function()

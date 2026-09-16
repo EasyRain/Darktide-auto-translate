@@ -207,6 +207,89 @@ function M.mask(text, lang, mask_markup)
     return result, tokens
 end
 
+-- A space that sits between two Han/Kana characters is wrong, and the placeholder is what put it
+-- there: a service sees `⟦0⟧` as a Latin-shaped token and separates it from the text around it, so
+-- `Show decimals` came back as `显示 小数位` and `Default Cooldown Color` as `默认 冷却时间 颜色`.
+-- Measured on a real store: 15 of the 109 entries in one file carried such a space.
+--
+-- The rule is deliberately narrow, because it is a typographic fix and not a rewrite:
+--   * only a space *directly* next to a term we just restored is removed, and only when the term
+--     itself continues in the same script - `FPS 伤害` keeps its space, which Chinese typography
+--     wants, while `显示 小数位` loses one;
+--   * the neighbour has to be Han or kana, checked by *code point* rather than by the leading
+--     byte. The obvious shortcut (three-byte sequences E3..ED) is wrong: Hangul syllables are
+--     U+AC00..U+D7AF, which UTF-8 encodes with the same leading bytes, and Korean does separate
+--     its words with spaces. Latin targets have no such neighbours at all, so nothing there is
+--     touched either.
+local CJK_3BYTE = "[\227-\237][\128-\191][\128-\191]"
+
+local function is_cjk_part(part)
+    if type(part) ~= "string" or #part ~= 3 then
+        return false
+    end
+
+    local b1, b2, b3 = part:byte(1), part:byte(2), part:byte(3)
+    if not (b1 and b2 and b3) or b1 < 0xE0 or b1 > 0xEF then
+        return false
+    end
+    if b2 < 0x80 or b2 > 0xBF or b3 < 0x80 or b3 > 0xBF then
+        return false
+    end
+
+    local cp = (b1 - 0xE0) * 4096 + (b2 - 0x80) * 64 + (b3 - 0x80)
+    return (cp >= 0x3000 and cp <= 0x30FF)      -- CJK punctuation and kana
+        or (cp >= 0x3400 and cp <= 0x4DBF)      -- unified ideographs, extension A
+        or (cp >= 0x4E00 and cp <= 0x9FFF)      -- unified ideographs
+        or (cp >= 0xF900 and cp <= 0xFAFF)      -- compatibility ideographs
+end
+
+-- Removes a space the service added between a restored term and a neighbouring character of the
+-- same script. Returning nil from the gsub function leaves that match untouched.
+local function tighten_script_boundary(text, term)
+    local escaped = escape_pattern(term)
+
+    if is_cjk_part(term:sub(-3)) then
+        -- The whole match starts at the term, so the term has to be part of the replacement:
+        -- returning just the neighbour deletes it.
+        text = text:gsub(escaped .. " +(" .. CJK_3BYTE .. ")", function(neighbour)
+            if is_cjk_part(neighbour) then
+                return term .. neighbour
+            end
+            return nil
+        end)
+    end
+
+    if is_cjk_part(term:sub(1, 3)) then
+        text = text:gsub("(" .. CJK_3BYTE .. ") +" .. escaped, function(neighbour)
+            if is_cjk_part(neighbour) then
+                return neighbour .. term
+            end
+            return nil
+        end)
+    end
+
+    return text
+end
+
+-- Applies the same boundary rule to a finished translation, for a given target language: it
+-- removes the space a service left between a glossary term and a neighbouring character of the
+-- same script. unmask() does this for the terms it has just restored; this is for text restored
+-- before the rule existed - a store written by an older build - which
+-- tools/fix_term_spacing.lua rewrites in place.
+function M.tighten(text, lang)
+    if type(text) ~= "string" or text == "" then
+        return text
+    end
+
+    for _, entry in ipairs(by_language[lang] or {}) do
+        if type(entry.term) == "string" and entry.term ~= "" then
+            text = tighten_script_boundary(text, entry.term)
+        end
+    end
+
+    return text
+end
+
 -- Puts the official terms back. Returns text and the number of tokens that went
 -- missing (a translator may drop a placeholder; the caller can then discard it).
 function M.unmask(text, tokens)
@@ -232,6 +315,13 @@ function M.unmask(text, tokens)
         end
         return ""
     end)
+
+    for i = 1, #tokens do
+        local token = tokens[i]
+        if token and type(token.term) == "string" and token.term ~= "" then
+            result = tighten_script_boundary(result, token.term)
+        end
+    end
 
     return result, missing
 end
