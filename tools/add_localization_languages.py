@@ -18,6 +18,7 @@ dropped %s is a runtime error in the options menu, not a cosmetic problem).
 
     python tools/add_localization_languages.py path/to/fragments
     python tools/add_localization_languages.py path/to/fragments --dry-run
+    python tools/add_localization_languages.py path/to/fragments --verify    # table vs fragments
 """
 import re
 import sys
@@ -129,6 +130,29 @@ def main() -> int:
             print(f"  ... and {len(problems) - 60} more")
         return 1
 
+    # --verify answers "is what is in the table what the fragments say?" - a translation that
+    # was revised after a merge leaves the table holding the older text, and nothing else
+    # notices: coverage is complete and the specifiers still match.
+    if "--verify" in sys.argv:
+        mismatches = []
+        for language in sorted(fragments):
+            for key in order:
+                current = entries[key].get(language)
+                wanted = fragments[language].get(key)
+                if current != wanted:
+                    mismatches.append((language, key, current, wanted))
+        if mismatches:
+            print(f"the table does not match the fragments ({len(mismatches)} value(s)):")
+            for language, key, current, wanted in mismatches[:20]:
+                print(f"  {language:6} {key}")
+                print(f"         table    : {current!r}")
+                print(f"         fragment : {wanted!r}")
+            if len(mismatches) > 20:
+                print(f"  ... and {len(mismatches) - 20} more")
+            return 1
+        print(f"the table matches all {len(fragments)} fragment(s): {', '.join(sorted(fragments))}")
+        return 0
+
     # ---- merge, line by line, leaving every other line where it is
     lines, newline = read_lines(PATH)
     out = []
@@ -137,7 +161,6 @@ def main() -> int:
 
     def rendered(language: str) -> str:
         return f'        ["{language}"] = "{lua_escape(fragments[language][block])}",'
-
     def flush():
         if block is None:
             return
