@@ -64,16 +64,26 @@ foreach ($file in (Get-ChildItem -Path $source -Recurse -File)) {
 # an older DLL against newer Lua is exactly the silent mismatch this script exists to prevent
 # (the CDEF names come from the DLL). It is 2 MB, so it is copied and verified like the Lua.
 # models/ is still left alone: 1.4 GB, and the mod downloads it itself.
+#
+# A copy is skipped when the two files already match: the game keeps the DLL loaded while it runs, so
+# overwriting an identical file fails with "used by another process" and makes a routine deploy look
+# broken. Comparing first costs one hash and turns that into a no-op.
 $coreSource = Join-Path $RepoRoot "bin\at_core.dll"
 $coreDest = Join-Path $GameMods "$name\bin\at_core.dll"
 if (Test-Path $coreSource) {
     New-Item -ItemType Directory -Force -Path (Split-Path -Parent $coreDest) | Out-Null
-    Copy-Item $coreSource -Destination $coreDest -Force
     $a = (Get-FileHash $coreSource -Algorithm SHA256).Hash
-    $b = (Get-FileHash $coreDest -Algorithm SHA256).Hash
-    $state = if ($a -eq $b) { "ok  " } else { "DIFF"; }
-    if ($a -ne $b) { $failures++ }
-    Write-Output ("{0} bin\{1,-31} {2}" -f $state, "at_core.dll", $a.Substring(0, 16))
+    $b = if (Test-Path $coreDest) { (Get-FileHash $coreDest -Algorithm SHA256).Hash } else { "" }
+    if ($a -eq $b) {
+        Write-Output ("{0} bin\{1,-31} {2}" -f "ok  ", "at_core.dll", $a.Substring(0, 16))
+        Write-Output "      (already deployed, copy skipped - the game may be holding it open)"
+    } else {
+        Copy-Item $coreSource -Destination $coreDest -Force
+        $b = (Get-FileHash $coreDest -Algorithm SHA256).Hash
+        $state = if ($a -eq $b) { "ok  " } else { "DIFF"; }
+        if ($a -ne $b) { $failures++ }
+        Write-Output ("{0} bin\{1,-31} {2}" -f $state, "at_core.dll", $a.Substring(0, 16))
+    }
 }
 
 # The data the Lua loads at runtime lives at the mod *root*, not next to the code: the glossary
