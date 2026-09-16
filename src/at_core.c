@@ -17,7 +17,13 @@
 #include "at_model.h"
 #include "at_json.h"
 
-#define AT_MAX_BODY (256 * 1024)
+// How much of a response body is kept. Almost every reply is a few hundred bytes (a
+// translation API answers with JSON about the size of the text), but one is not: Bing's
+// keyless flow needs its translator page, which measured 645,986 bytes with the session block
+// at offset 579,411 - past 256 KB, where this used to stop, so the page arrived truncated and
+// the session could never be read. The cap is applied by clamping the caller's buffer, so this
+// constant and BODY_CAP in modules/online.lua have to agree; the memory is that buffer, once.
+#define AT_MAX_BODY (1536 * 1024)
 #define AT_TIMEOUT_MS 20000
 
 typedef struct Job {

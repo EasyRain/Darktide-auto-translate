@@ -186,7 +186,10 @@ local QUOTA_COOLDOWN = 300
 
 local LOG_EVERY = 25
 
-local BODY_CAP = 262144
+-- How much of a reply this layer keeps, and the ceiling the core clamps it to (AT_MAX_BODY).
+-- 256 KB was enough for every translation API and not for Bing's translator page (645,986 bytes
+-- measured, session block at offset 579,411), which is the one reply that is a whole web page.
+local BODY_CAP = 1536 * 1024
 local SMALL_CAP = 8192
 local PATH_CAP = 16384
 

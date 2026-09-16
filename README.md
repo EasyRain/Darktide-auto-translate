@@ -765,6 +765,7 @@ python tools\check_exports.py                    # every at_* name in the Lua CD
 python tools\check_localization.py               # 131 keys × 12 languages
 luajit tools\smoke_online.lua                    # loads modules/online.lua with stubs, runs 262 assertions
 luajit tools\check_options_layout.lua [custom]   # what the options screen will actually show
+luajit tools\live_bing_check.lua                 # the whole Bing flow live, through the real DLL
 luajit tools\check_zh_variants.lua <translations/zh-tw>   # simplified characters in a traditional store
 luajit tools\scan_line_breaks.lua <translations-dir>      # how many sources carry a line break
 powershell -File tools\batch_probe.ps1 -Store <store> -ModelDir <models>   # is batching better than solo?
