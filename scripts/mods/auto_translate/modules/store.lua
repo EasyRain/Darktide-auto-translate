@@ -6,17 +6,24 @@
 --
 -- Format (hand editable on purpose):
 --     return {
---         enabled = true,          -- false = skip this mod completely
---         manual  = true,          -- hand written file: machine translation must not
---                                  -- overwrite it (mark once, not per entry)
+--         enabled = false,         -- false = skip this mod completely (always written, so it is
+--         manual  = false,         -- one word to flip: true = "I have hand checked this file")
 --         entries = {
---             ["some_key"] = { text = "译文" },
+--             ["some_key"] = { text = "译文" },                              -- hand written
+--             ["other"]    = { en = "...", hash = "1a2b3c4d", text = "...", src = "deepl", ts = 0 },
 --         },
 --     }
 --
--- Machine entries additionally keep their provenance and the source hash:
---     ["key"] = { en = "...", hash = "1a2b3c4d", text = "...", src = "local", ts = 0 }
--- `zh_prev` (now `text_prev`) keeps an out of date hand written translation.
+-- `manual = true` is an instruction, not a state: on load the mod reads it as "every entry in this
+-- file has been hand checked", drops the engine marker (`src`) from all of them, writes the file
+-- back and puts the flag to false again - so nobody has to delete the markers by hand. From then on
+-- the marker is what tells the two apart:
+--     no `src`   hand written: a machine translation never overwrites it while its source matches
+--     `src = X`  written by engine X, and it is the entry's history (the engine re-writes it when
+--                the mod's source text changes, which is also how a hand written entry becomes a
+--                machine one again: it goes stale, gets re-translated and comes back with a marker)
+-- `text_prev` keeps an out of date hand written translation (with `text_prev_src` saying where it
+-- came from) when the mod's source text changed under it.
 local M = {}
 
 local util
@@ -49,11 +56,49 @@ local function normalize(data)
 end
 
 -- Is this entry protected from machine translation?
+--
+-- No marker at all means hand written: that is the format the file header documents (`{ text = "…" }`),
+-- and it is what every entry looks like after `manual = true` has been carried out. The entry has to
+-- carry text for that to hold: a parked key (an engine's refusal record) has neither text nor marker,
+-- and treating it as hand written would block the translation that ends its refusal story.
 local function is_manual(data, entry)
     if data and data.manual == true then
         return true
     end
-    return type(entry) == "table" and entry.src == "manual"
+    if type(entry) ~= "table" then
+        return false
+    end
+    if entry.src == "manual" then
+        return true
+    end
+    return (entry.src == nil or entry.src == "")
+        and type(entry.text) == "string" and entry.text ~= ""
+end
+
+-- Returns true when the entry carries a machine marker (the value to write back to the file).
+local function machine_src(entry)
+    if type(entry) ~= "table" then
+        return nil
+    end
+    local src = entry.src
+    if type(src) == "string" and src ~= "" and src ~= "manual" then
+        return src
+    end
+    return nil
+end
+
+-- Carries out a `manual = true` instruction: every entry in the file has been hand checked, so the
+-- engine markers go. Returns how many were removed (0 = nothing to do, no write needed).
+local function strip_markers(data)
+    local stripped = 0
+    for _, entry in pairs(data.entries) do
+        if type(entry) == "table" and machine_src(entry) then
+            entry.src = nil
+            entry.text_prev_src = nil
+            stripped = stripped + 1
+        end
+    end
+    return stripped
 end
 
 function M.load(mod_id, lang)
@@ -65,7 +110,21 @@ function M.load(mod_id, lang)
     if not data then
         return nil, err
     end
-    return normalize(data)
+    data = normalize(data)
+
+    -- The hand-checking instruction is carried out here rather than at the next save, so the file
+    -- the player opens is already free of markers, and the flag goes back to false: leaving it set
+    -- would strip the marker off every entry the engine re-writes later, which is exactly the
+    -- distinction this is for.
+    if data.manual == true then
+        local stripped = strip_markers(data)
+        data.manual = false
+        data.manual_stripped = stripped
+        if stripped > 0 then
+            M.save(mod_id, lang, data)
+        end
+    end
+    return data
 end
 
 local function lua_quote(s)
@@ -77,17 +136,18 @@ end
 -- Serializes a store table back to Lua source (stable ordering, human editable).
 function M.serialize(mod_id, lang, data)
     data = normalize(data)
-    local manual_all = data.manual == true
 
     local out = {}
     out[#out + 1] = "-- Auto Translate translations for mod: " .. tostring(mod_id) .. "  (language: " .. tostring(lang) .. ")"
     out[#out + 1] = "-- enabled = false : skip this mod completely"
-    out[#out + 1] = "-- manual  = true  : hand written translations, machine translation never overwrites them"
+    out[#out + 1] = "-- manual  = true  : \"I have hand checked this file\": the engine markers below are"
+    out[#out + 1] = "--                   removed on the next start and the flag goes back to false."
+    out[#out + 1] = "-- An entry without a 'src' line is hand written (and never overwritten while its source"
+    out[#out + 1] = "-- text is unchanged); one with 'src' was written by that engine. Both flags are always"
+    out[#out + 1] = "-- written out, so there is one word to flip."
     out[#out + 1] = "return {"
     out[#out + 1] = string.format("    enabled = %s,", tostring(data.enabled == true))
-    if manual_all then
-        out[#out + 1] = "    manual = true,"
-    end
+    out[#out + 1] = string.format("    manual = %s,", tostring(data.manual == true))
     out[#out + 1] = "    entries = {"
 
     local keys = {}
@@ -110,8 +170,11 @@ function M.serialize(mod_id, lang, data)
             if type(e.text_prev) == "string" and e.text_prev ~= "" then
                 out[#out + 1] = "            text_prev = " .. lua_quote(e.text_prev) .. ", -- previous hand translation (source changed)"
             end
-            if not manual_all then
-                out[#out + 1] = "            src = " .. lua_quote(e.src or "local") .. ","
+            -- Only a real machine marker is written: an entry that has none is hand written, and
+            -- inventing `src = "local"` for it (which this used to do) made the two indistinguishable.
+            local src = machine_src(e)
+            if src then
+                out[#out + 1] = "            src = " .. lua_quote(src) .. ","
             end
             if tonumber(e.ts) and tonumber(e.ts) > 0 then
                 out[#out + 1] = "            ts = " .. tostring(math.floor(e.ts)) .. ","
@@ -161,8 +224,10 @@ function M.lookup(data, key, en, hash)
         return nil
     end
 
+    -- No marker means hand written (see the file header): that is how the engine tells its own work
+    -- from the player's, and it is what keeps a hand written entry from being overwritten.
     local src = e.src
-    if (src == nil or src == "") and data.manual == true then
+    if src == nil or src == "" then
         src = "manual"
     end
 
@@ -185,8 +250,11 @@ end
 -- Manual entries are protected while they still match the source text. When the
 -- source hash changed the hand written text is out of date, so the new translation
 -- is accepted and the old one is kept in `text_prev`. Missing bookkeeping is always
--- filled in. Storing a real machine translation also clears the file level
--- `manual` flag (the file is no longer purely hand written).
+-- filled in.
+--
+-- The file level `manual` flag is deliberately left alone here: it is the player's instruction
+-- ("I have hand checked this file") and store.load is what carries it out. Clearing it on the first
+-- machine write is how an instruction set while the game runs used to be dropped silently.
 function M.set_entry(data, key, en, hash, text, src, ts)
     data = normalize(data)
     local prev = data.entries[key]
@@ -219,11 +287,6 @@ function M.set_entry(data, key, en, hash, text, src, ts)
         -- up on it before, this text is what the player sees now.
         prev.refused_by = nil
         prev.refusals = nil
-
-        if data.manual == true then
-            data.manual = false
-            data.manual_cleared = true
-        end
         return true
     end
 
@@ -234,11 +297,6 @@ function M.set_entry(data, key, en, hash, text, src, ts)
         src = src or "local",
         ts = ts or now(),
     }
-
-    if data.manual == true then
-        data.manual = false
-        data.manual_cleared = true
-    end
     return true
 end
 

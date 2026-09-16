@@ -60,6 +60,18 @@ function M.merge(mod, name, loc_table, lang)
     if not data then
         return 0
     end
+    -- `manual = true` was carried out while the file was being read (the engine markers are gone and
+    -- the flag is back to false), so the player hears about it once - that is their "I hand checked
+    -- this file" having taken effect, not an error.
+    if data.manual_stripped then
+        if data.manual_stripped > 0 then
+            util.info(mod, "%s [%s]: %d hand checked entr%s - engine markers removed, the file now says manual = false",
+                name, lang, data.manual_stripped, data.manual_stripped == 1 and "y" or "ies")
+        else
+            util.log(mod, "%s [%s]: manual = true, nothing to strip (no engine markers left)", name, lang)
+        end
+        data.manual_stripped = nil
+    end
     if data.enabled == false then
         util.log(mod, "translation file for %s is disabled; skipped", name)
         return 0
@@ -102,10 +114,6 @@ end
 function M.flush(mod, lang)
     local saved = 0
     for name, data in pairs(dirty) do
-        if data.manual_cleared then
-            util.info(mod, "%s [%s]: machine translations were added, 'manual' flag cleared (add manual = true back to protect hand written text)", name, lang)
-            data.manual_cleared = nil
-        end
         local ok = store.save(name, lang, data)
         if ok then
             saved = saved + 1

@@ -817,7 +817,7 @@ One file per mod **and language**, at `mods/auto_translate/translations/<languag
 ```lua
 return {
     enabled = true,                      -- set false to skip this mod entirely
-    manual  = true,                      -- hand written file: machine translation never overwrites it
+    manual  = false,                     -- set true once: "I have hand checked this file"
     entries = {
         ["some_key"] = { text = "译文" },
     },
@@ -827,15 +827,22 @@ return {
 * The target language follows the game by default; override it with **Target language**.
 * **A mod that ships the target language itself always wins**: those keys are left completely
   untouched, so a mod update that adds its own translation is never fought over. Keys it does
-  *not* translate are still filled in by this mod — mixing author translations with ours is normal
-  and intended. (There is deliberately no option to override this.)
-* Mark `manual = true` **once per file**; a single entry can still be protected on its own with
-  `src = "manual"`. `manual` does **not** skip the mod: its file is still read and validated on
-  every launch, hand written text wins as long as it still matches the source, and keys added by
-  a mod update (or whose source changed) are queued for translation.
-* When a hand written entry goes out of date, the fresh translation is stored and the old text is
-  kept next to it as `text_prev`. Once **any** machine translation is stored in the file, the
-  `manual` flag is **cleared automatically** — add it back by hand to protect the file again.
+  *not* translate are still filled in by this mod - mixing author translations with ours is
+  normal and intended. (There is deliberately no option to override this.)
+* The `src` marker is what separates the two kinds of text: **an entry with no `src` is hand
+  written** and a machine translation never overwrites it while its source text is unchanged;
+  one with `src` says which engine wrote it, and it is also that entry's history.
+* `manual = true` is an **instruction, not a state**: on the next start the mod reads it as
+  "every entry in this file has been checked by hand", removes the engine markers from all of
+  them, writes the file back and puts the flag to `false` again - so nobody deletes markers
+  entry by entry. Set it again whenever the same treatment is wanted. `manual` does **not**
+  skip the mod: the file is still read and validated on every launch, and keys a mod update
+  adds (or whose source changed) are queued for translation as usual.
+* When a hand written entry goes out of date, the fresh translation is stored, the old text is
+  kept next to it as `text_prev`, and that one entry gets a `src` again - which is how a file
+  shows at a glance what is still yours and what the engine rewrote.
+* Both flags are always written out (`enabled`, `manual`), so there is one word to flip in
+  either direction and no field has to be guessed at.
 * `en` / `hash` are filled in automatically on the next run (they detect source changes). Delete
   an entry (or the whole file) to have it translated again.
 
