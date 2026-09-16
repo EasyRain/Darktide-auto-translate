@@ -1944,8 +1944,100 @@ end
 -- `code` says *why* it failed, because one reason is worth a different second attempt:
 -- "tokens" means the glossary placeholders went missing, and the same sentence without
 -- masking may well come back translated.
-function fail_item(mod, req, reason, http_status, transport, code)
+function fail_item(mod, req, reason, http_status, transport, code, quiet_provider)
     local item = req.item
+
+    -- A batch is several strings in one request, so its record carries `items` and no `item` -
+    -- the planner popped them together. Everything below is written for one item (the provider
+    -- advance, the store write, the refusal budget), and a failed batch used to arrive here
+    -- unchanged: `item.provider_index` then threw "attempt to index local 'item'" *inside*
+    -- M.update(), after the batch had already been popped, so the frame's remaining work was
+    -- lost and the batch's keys went with it. Measured in the game log: a Google endpoint
+    -- timing out (network error -13) on a batched request produced exactly that, once per
+    -- timeout, and the run crawled.
+    --
+    -- Two rules make the batch case behave like the single case rather than like eight of them:
+    -- the provider is counted once (it is one failed request), and the whole-tier wait is
+    -- entered once - the budget is three waits, and a batch of eight spending all three on one
+    -- timeout would replace this crash with a quieter one.
+    if not item and type(req.items) == "table" then
+        local items = req.items
+        req.items = nil
+
+        if not quiet_provider then
+            if transport then
+                note_provider_transport_failure(mod, req.provider, reason)
+            else
+                note_provider_success(req.provider)
+            end
+        end
+
+        local exhausted = 0
+        for i = 1, #items do
+            local one = items[i]
+            local index = one.provider_index or 1
+            local advanced = nil
+
+            while one.providers[index + 1] do
+                index = index + 1
+                if not disabled_providers[one.providers[index]] then
+                    advanced = index
+                    break
+                end
+            end
+
+            if advanced then
+                one.provider_index = advanced
+                util.log(mod, "provider %s failed (%s); retrying %s:%s with %s",
+                    tostring(req.provider), tostring(reason), one.mod_id, one.key,
+                    one.providers[advanced])
+                q_unshift(one)
+            else
+                exhausted = exhausted + 1
+                items[exhausted] = one        -- compacted: what is left for the tier wait below
+            end
+        end
+
+        if exhausted == 0 then
+            return
+        end
+
+        if transport and M.state.engine == "online_free"
+            and retry_whole_tier(mod, items[1], tostring(reason)) then
+            for i = 2, exhausted do
+                q_unshift(items[i])
+            end
+            return
+        end
+
+        -- No wait left (or not the keyless tier): the items that ran out of providers are
+        -- counted exactly the way a single one would be.
+        for i = 1, exhausted do
+            local one = items[i]
+            if transport then
+                M.state.failed = M.state.failed + 1
+                util.warn(mod, "could not translate %s:%s (%s)", one.mod_id, one.key, tostring(reason))
+            else
+                M.state.refused = M.state.refused + 1
+                util.info(mod, "refused %s:%s (%s)", one.mod_id, one.key, tostring(reason))
+            end
+        end
+
+        if transport then
+            engines.note_failure(mod, reason)
+            if engines.is_paused() then
+                M.state.running = false
+            end
+        end
+        return
+    end
+
+    if not item then
+        -- Nothing to attribute this to. Said out loud instead of thrown: an error here lands in
+        -- the middle of update() and takes the frame's pacing and dispatch with it.
+        util.warn(mod, "internal: a failed request carried no item (%s)", tostring(req.kind or "?"))
+        return
+    end
 
     -- The offline engine has no provider to blame and no quota to respect. A string it
     -- cannot translate is a content problem - the same category as a service refusing
@@ -1993,7 +2085,9 @@ function fail_item(mod, req, reason, http_status, transport, code)
     end
 
     if transport then
-        note_provider_transport_failure(mod, req.provider, reason)
+        if not quiet_provider then
+            note_provider_transport_failure(mod, req.provider, reason)
+        end
     else
         note_provider_success(req.provider)
     end
@@ -2078,6 +2172,9 @@ M.tier_retry_for_tests = function()
     return tier_retries, TIER_RETRY_LIMIT, TIER_RETRY_COOLDOWN
 end
 M.note_provider_success_for_tests = note_provider_success
+-- A failed *batch* is the case that crashed inside update() (see fail_item): the planner pops
+-- several items into one request, and the failure path was written for one item only.
+M.fail_item_for_tests = fail_item
 
 -- Puts items back at the head of the queue, marked so that take_batch() leaves them
 -- alone. Used when a batch answer cannot be attributed to individual items: the same

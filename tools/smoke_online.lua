@@ -1491,6 +1491,59 @@ do
     end
 
     -- -----------------------------------------------------------------------
+    -- A failed *batch* (this crashed inside update() in the game)
+    -- -----------------------------------------------------------------------
+    -- The planner pops several short labels into one request, so that inflight has `items` and
+    -- no `item`. When the provider then timed out, the failure path - written for a single item -
+    -- read item.provider_index and threw "attempt to index local 'item' (a nil value)" from
+    -- inside M.update(). The items had already been popped, so each timeout silently ate the
+    -- batch, and the log showed exactly two lines: the update error, then the provider being
+    -- skipped. Both halves are pinned here.
+    do
+        local function make_item(key)
+            return {
+                mod_id = "some_mod", key = key, en = key,
+                providers = { "google_clients5", "google_gtx", "bing" },
+                provider_index = 1,
+            }
+        end
+
+        local first, second = make_item("first_key"), make_item("second_key")
+        local before = online.status().left
+        local disabled, failures = online.provider_health()
+        local failures_before = failures["google_clients5"] or 0
+        local disabled_before = disabled["google_clients5"]
+
+        local ok, err = pcall(online.fail_item_for_tests, probe_mod,
+            { kind = "online_batch", provider = "google_clients5", items = { first, second } },
+            "network error -13 (the operation timed out)", 0, true)
+
+        check("a failed batch does not throw inside update", ok, true)
+        if not ok then
+            print("       error: " .. tostring(err))
+        end
+        check("both of its items go back to the queue",
+            online.status().left - before, 2)
+        check("and both advanced past the provider that failed",
+            first.provider_index == 2 and second.provider_index == 2, true)
+        -- One failed request, not one per string: counting it twice would disable the provider
+        -- after a single timeout instead of after three.
+        check("the provider is counted once for the whole batch",
+            (failures["google_clients5"] or 0) - failures_before, 1)
+        check("and it is not skipped yet",
+            disabled["google_clients5"], disabled_before)
+
+        -- The defensive half: a failure with nothing to attribute it to is said out loud, not
+        -- thrown - an error here lands in the middle of update().
+        local quiet, quiet_err = pcall(online.fail_item_for_tests, probe_mod,
+            { kind = "online_batch", provider = "google_clients5" }, "no items at all", 0, true)
+        check("a failure carrying no item at all is reported, not thrown", quiet, true)
+        if not quiet then
+            print("       error: " .. tostring(quiet_err))
+        end
+    end
+
+    -- -----------------------------------------------------------------------
     -- A sample the glossary covers entirely masks down to a bare placeholder
     --
     -- That is what the game log recorded: a 69-byte reply whose entire translation was "⟦0⟧",
