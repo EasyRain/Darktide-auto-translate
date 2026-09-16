@@ -3,7 +3,7 @@
 Automatically translates the texts of your installed mods **in memory** — the original mod
 files are never modified. Translations are cached locally in editable text files.
 
-> **Status: v0.2.1 — all four engines implemented and working.**
+> **Status: v0.2.2 — all four engines implemented and working.**
 > Scans every loaded mod, applies translations from the local library, hot-injects the
 > merged table back into DMF, and translates what is missing through one of four engines:
 > `Automatic` (API key → downloaded offline model → keyless free endpoints), the official
