@@ -246,6 +246,62 @@ do
     check("batch request: and one part", #single_parts, 1)
 end
 
+-- Pacing: the free endpoints are the ones a burst gets cut off on, so they have to be the
+-- slower of the two - a whole second between requests, against a quarter of a second for a
+-- paid API. This is a rule about which tier is fragile, so it is pinned here rather than left
+-- to whoever edits the tuning block next.
+check("free requests are a second apart or slower",
+    online.min_interval_for_tests("online_free") >= 1.0, true)
+check("the paid API is allowed to be faster",
+    online.min_interval_for_tests("online_api") < 1.0, true)
+check("and the free tier is the slower one",
+    online.min_interval_for_tests("online_free") > online.min_interval_for_tests("online_api"), true)
+
+-- The balance that keeps a sentence out of a batch. An item is eligible only when it is short
+-- (<= 24 characters, counted in UTF-8 characters rather than bytes), has no line break, and was
+-- not part of a batch that already failed; a batch stops at 8 items *and* at 160 characters, so
+-- a handful of longer phrases cannot be pushed into one request either. plan_batch_for_tests()
+-- drives the real queue and the real take_batch(), so this is what dispatch() does - and the
+-- online engines take the same route, which is why these rules cover them too.
+do
+    local function batch_items(texts)
+        local out = {}
+        for i, text in ipairs(texts) do
+            out[i] = { en = text, key = "k" .. i, mod_id = "m", hash = "" }
+        end
+        return out
+    end
+
+    local long = string.rep("x", 120)
+    local groups = online.plan_batch_for_tests(batch_items({ "Ammo", long, "Damage" }))
+    check("balance: a long string is not batched", #groups, 3)
+    check("balance: and it travels alone", #groups[2], 1)
+
+    groups = online.plan_batch_for_tests(batch_items({ "Ammo", "line one\nline two", "Damage" }))
+    check("balance: a multi-line string is not batched", #groups, 3)
+    check("balance: and it travels alone too", #groups[2], 1)
+
+    -- 24 characters each: six fit inside 160, the seventh would make 168
+    local wide = {}
+    for i = 1, 8 do
+        wide[i] = string.rep("w", 24)
+    end
+    groups = online.plan_batch_for_tests(batch_items(wide))
+    check("balance: the character cap splits the batch", #groups, 2)
+    check("balance: six of 24 characters fit in 160", #groups[1], 6)
+
+    -- short labels: the item cap is what binds
+    groups = online.plan_batch_for_tests(batch_items({ "a", "b", "c", "d", "e", "f", "g", "h", "i", "j" }))
+    check("balance: the item cap splits too", #groups, 2)
+    check("balance: eight per batch", #groups[1], 8)
+
+    -- an item that already came back unusable from a batch is never regrouped
+    local mixed = batch_items({ "Ammo", "Damage", "Cancel" })
+    mixed[2].no_batch = true
+    groups = online.plan_batch_for_tests(mixed)
+    check("balance: an item marked no_batch is not regrouped", #groups, 3)
+end
+
 -- ---------------------------------------------------------------------------
 -- Multi-line strings (the mask-once, translate-each-line, join-back-verbatim path)
 --

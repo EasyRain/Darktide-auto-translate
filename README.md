@@ -519,14 +519,19 @@ one line per key (solo answer next to the batched one) plus a summary.
 
 **The online engines batch the same way**, for a different reason: the free endpoints are rate
 limited and easily cut off, so the *number of requests* is the budget, and one request per
-eight labels is eight times the headroom (a metered API saves the same). Each item is masked
-on its own — its placeholder numbers belong to its own token list — and the only thing the
-service has to do is copy the markers. Measured with `tools/live_free_check.lua`:
-`[1] Reload Speed [2] Ammo [3] Damage [4] Cancel` came back with all four markers intact from
-`google_clients5`, `google_gtx`, `MyMemory` and DeepL alike, which is why the batching is not
-provider-specific. The same rules apply as for the local batch: a part that cannot be trusted
-is retried on its own, and a reply whose markers are gone sends the whole batch through
-singly rather than guessing which text belongs to which key.
+eight labels is eight times the headroom (a metered API saves the same). Eligibility is the
+planner's rule, unchanged: at most 24 characters and one line per item, at most eight items and
+160 characters per request — so a sentence, a multi-line string, or an item that already came
+back unusable from a batch is never joined into one. Balanced by length rather than by count:
+six 24-character phrases fill a request, a pile of two-word labels fills all eight. On the
+135-string probe corpus that put 90 labels into 12 requests and sent all 45 longer strings on
+their own. Each item is masked on its own — its placeholder numbers belong to its own token
+list — and the only thing the service has to do is copy the markers. Measured with
+`tools/live_free_check.lua`: `[1] Reload Speed [2] Ammo [3] Damage [4] Cancel` came back with
+all four markers intact from `google_clients5`, `google_gtx`, `MyMemory` and DeepL alike, which
+is why the batching is not provider-specific. The same rules apply as for the local batch: a
+part that cannot be trusted is retried on its own, and a reply whose markers are gone sends the
+whole batch through singly rather than guessing which text belongs to which key.
 
 ### Multi-line strings
 
@@ -594,6 +599,18 @@ What they are not: a service. They are rate limited, they can be blocked or rese
 network (Google's hosts especially — a proxy rule for the host is what fixed it here), and
 they can disappear without notice. That is why the option's tooltip says so, and why the
 offline model stays above them in `Automatic`.
+
+**Pacing is per tier**: the free endpoints send **one request per second**, the paid API a
+quarter of a second. A burst inside the same second is what gets the free tier to stop
+answering, and batching does not change that — it only means a second buys up to eight short
+labels instead of one.
+
+**What batching costs, measured.** A batched request carries `[n] ` markers, and a service that
+bills per character charges for those too. Over the 135 strings of the probe corpus:
+requests **135 → 57 (−58%)**, characters **3,405 → 3,855 (+13.2%)**. The extra is paid on short
+labels only, and it is why the same rule is a clear win for the free endpoints (charged per
+request) and a deliberate trade on a metered API. DeepL's API accepts several `text` parameters
+in one request, which would remove the markers entirely; that is a C-side change and is not done.
 
 ### Custom endpoints
 

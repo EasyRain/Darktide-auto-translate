@@ -157,10 +157,19 @@ end
 -- ---------------------------------------------------------------------------
 -- Tuning
 -- ---------------------------------------------------------------------------
--- The API is paid/quota'd rather than hostile, but a burst is still a bad idea:
--- being rate limited costs a 300 s cooldown, so four requests a second is the
--- sensible ceiling. ~1800 keys take about 8 minutes.
-local MIN_INTERVAL_FREE = 0.6
+-- How often a request may be sent, per engine. Two different reasons, two different numbers.
+--
+-- The free endpoints are rate limited by request and are the tier most likely to be cut off,
+-- so they get one request per second - a burst inside the same second is what gets them to
+-- stop answering, and no amount of batching makes that safe. With batching (up to eight short
+-- labels per request) that is still several times the throughput of a request per label.
+--
+-- The API is paid or quota'd rather than hostile: being rate limited costs a 300 s cooldown, so
+-- a request every 0.25 s is the sensible ceiling. The API does *not* need the request-count
+-- relief the free endpoints do (DeepL's limit is characters, not requests), but batching still
+-- saves the round trips - the marker text it adds is a few characters per label, which is why
+-- the option is worth having on a fast engine and mandatory on a slow one.
+local MIN_INTERVAL_FREE = 1.0
 local MIN_INTERVAL_API = 0.25
 
 -- HTTP 429/403 means "you are over the quota" — back off instead of burning
@@ -1016,6 +1025,10 @@ end
 local function min_interval(engine)
     return engine == "online_api" and MIN_INTERVAL_API or MIN_INTERVAL_FREE
 end
+
+-- Exposed because the two numbers encode a rule, not a preference: the free endpoints are the
+-- ones that get cut off by a burst, so they must be the slower of the two.
+M.min_interval_for_tests = min_interval
 
 -- ---------------------------------------------------------------------------
 -- Pipeline control
