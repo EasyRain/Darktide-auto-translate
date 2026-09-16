@@ -95,6 +95,7 @@ sub-widgets of that dropdown: DMF hides all ten under `DeepL` and shows them the
 | Reload translation files | Maintenance | Re-scan and re-inject without restarting. |
 | Clear local translations | Maintenance | Deletes the local library files. |
 | Test the glossary | Maintenance | Reports how many terms are loaded and which are missing. |
+| Collect terms | Maintenance | Writes the game's own wording for the collected keys into `translations/export/`. Off by default: switch it on for a collection round and off afterwards. Turning it on collects straight away, so no restart is needed. |
 | Debug logging | Maintenance | Verbose `[AT]` logging. |
 
 ## Engines and language support
@@ -725,7 +726,7 @@ sees, so the stored text is rewritten to the official one.)
 | | |
 | --- | --- |
 | **the repository** | yes. It is the input the glossary is built from, and the only record of the game's own terminology in all twelve languages — re-collecting it means launching the game once per language, because the strings only exist at runtime. The files say "safe to delete" because they are; the *repository's* copies are what keep the glossary reproducible. |
-| **the game/mod folder** | no. Nothing reads them at runtime: `glossary.lua` is the data the mod loads, and `term_keys.lua` is the key list the exporter reads. The mod only *writes* an export, and only when the exporter is invoked (the automatic call was removed — it announced "already collected" on every launch). |
+| **the game/mod folder** | only while collecting. Nothing reads them at runtime: `glossary.lua` is the data the mod loads, and `term_keys.lua` is the key list the exporter reads. The mod writes an export only when the **Collect terms** switch is on and the language is missing or older than the key list, so with the switch off the folder stays as it is — and what is already in it can be deleted once it has been imported. |
 | **re-collecting** | delete the file for the language in question (or bump `version` in `term_keys.lua`), then invoke `exporter.run(mod, current_lang())`. The exporter skips a language whose file already exists at the current key-list version, so a stale copy in the game folder does not merely sit there — it blocks the refresh. |
 
 `tools/deploy_to_game.ps1` therefore syncs `glossary.lua` and `term_keys.lua` and prints a note
@@ -733,7 +734,7 @@ about the export folder, rather than copying 73 KB the game never reads.
 
 ### A collection round, start to finish
 
-The mod writes both files for a language on its own, so a round is one launch per language:
+Turn the **Collect terms** switch on first (Maintenance; it collects immediately, so it can also be switched on mid-session). The mod then writes both files for a language on its own, so a round is one launch per language:
 
 1. Switch the game's language — `powershell -File tools\lang_round.ps1 -Language <code>` edits the
    Steam per-game setting for Darktide and waits; the launcher needs one click, then the script stops
@@ -745,6 +746,8 @@ The mod writes both files for a language on its own, so a round is one launch pe
    its key list up directly), but the *harvest* can only name keys the session has actually resolved,
    and the English round is the source column every other language is paired against.
 4. Repeat — twelve rounds for the twelve languages the game ships.
+5. Switch **Collect terms** off again — what was collected stays where it is, and nothing
+   more is written.
 
 Why a round needs a launch at all, measured on 2026-09-16 (the player had already hit this making an
 earlier mod, and it is worth writing down before someone tries again):
@@ -936,7 +939,7 @@ load, and a missing export only shows up when the game calls it:
 ```
 python tools\lua_syntax_check.py                 # parses all 15 files, runs nothing
 python tools\check_exports.py                    # every at_* name in the Lua CDEF exists in the DLL
-python tools\check_localization.py               # 131 keys × 12 languages
+python tools\check_localization.py               # 133 keys × 12 languages
 luajit tools\smoke_online.lua                    # loads modules/online.lua with stubs, runs 262 assertions
 luajit tools\smoke_export.lua                    # the string-cache harvest: what it keeps, drops and rewrites
 luajit tools\check_options_layout.lua [custom]   # what the options screen will actually show

@@ -306,6 +306,15 @@ return {
                         function_name = "test_glossary",
                     },
                     {
+                        setting_id = "collect_terms",
+                        type = "checkbox",
+                        -- off by default: collecting writes the game's wording into
+                        -- translations/export/ for as long as it is on, and nothing reads those files
+                        -- at runtime - they are the input of the glossary build. Switch it on when
+                        -- the terminology is being collected, off again afterwards.
+                        default_value = false,
+                    },
+                    {
                         setting_id = "debug_logging",
                         type = "checkbox",
                         default_value = false,

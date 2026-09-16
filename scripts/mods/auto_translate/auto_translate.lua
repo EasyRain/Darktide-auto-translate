@@ -365,11 +365,14 @@ function mod.update(dt)
 
     -- The game's string cache grows as the player opens talent trees and menus; looking at it
     -- now and then is what names the keys no key list guessed. Writing only happens when there
-    -- is something new, so a session that changes nothing costs one table walk a minute.
+    -- is something new, so a session that changes nothing costs one table walk a minute - and it
+    -- stays out of the way entirely while collecting is switched off.
     harvest_timer = harvest_timer + (dt or 0)
     if harvest_timer >= CACHE_HARVEST_INTERVAL then
         harvest_timer = 0
-        pcall(exporter.harvest_cache, mod, util.game_language())
+        if mod:get("collect_terms") then
+            pcall(exporter.harvest_cache, mod, util.game_language())
+        end
     end
 end
 
@@ -388,20 +391,30 @@ function mod.on_all_mods_loaded()
     -- launch again. That is how the game's own wording for equipment, slots, missions and talents
     -- gets in - and it can only be collected from inside the game, because the strings live in the
     -- bundles rather than on disk.
-    local collected, collect_err = pcall(exporter.run, mod, util.game_language())
-    if not collected then
-        util.warn(mod, "term export error: %s", tostring(collect_err))
-    end
+    --
+    -- It is behind a switch, off by default: collecting is something you turn on for a round, and
+    -- the files it writes are the glossary's input rather than anything the game reads.
+    if mod:get("collect_terms") then
+        local collected, collect_err = pcall(exporter.run, mod, util.game_language())
+        if not collected then
+            util.warn(mod, "term export error: %s", tostring(collect_err))
+        end
 
-    -- Key names the key list does not have, read from the strings this session has already
-    -- resolved. At this point that is mostly what the launch itself did; the timer in update()
-    -- picks up the rest as the player opens menus. See exporter.harvest_cache.
-    pcall(exporter.harvest_cache, mod, util.game_language())
+        -- Key names the key list does not have, read from the strings this session has already
+        -- resolved. At this point that is mostly what the launch itself did; the timer in update()
+        -- picks up the rest as the player opens menus. See exporter.harvest_cache.
+        pcall(exporter.harvest_cache, mod, util.game_language())
+    else
+        util.log(mod, "term collection is off ('Collect terms'): nothing is written to translations/export/")
+    end
 
     -- One line in the log that answers whether a *full* dump is possible: if the game's
     -- localization manager keeps its table reachable, the key list stops mattering and no future
-    -- term change ever needs another collection run. Log only; nothing is written.
-    pcall(exporter.describe_localization, mod)
+    -- term change ever needs another collection run. Log only; nothing is written - and the answer
+    -- is known (it is not), so it only runs with debug logging on.
+    if mod:get("debug_logging") then
+        pcall(exporter.describe_localization, mod)
+    end
 
     -- exporter.probe_languages() answered its question on 2026-09-16 and is no longer called: the
     -- localizers are bound to the language loaded at startup, so a session cannot collect another
@@ -623,6 +636,19 @@ mod.on_setting_changed = function(setting_id)
         local ok, err = pcall(run_pipeline, "master switch")
         if not ok then
             util.warn(mod, "could not re-apply: %s", tostring(err))
+        end
+    elseif setting_id == "collect_terms" then
+        if mod:get("collect_terms") then
+            -- Switching it on collects straight away rather than at the next launch: the export only
+            -- needs the language the game is already running in.
+            local lang = util.game_language()
+            local ok, err = pcall(exporter.run, mod, lang)
+            if not ok then
+                util.warn(mod, "term export error: %s", tostring(err))
+            end
+            pcall(exporter.harvest_cache, mod, lang)
+        else
+            util.info(mod, "term collection off: nothing more is written to translations/export/ (the files already there stay)")
         end
     end
 end
