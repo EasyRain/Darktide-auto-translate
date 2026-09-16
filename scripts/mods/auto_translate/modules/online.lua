@@ -348,25 +348,40 @@ local function is_key_label(text)
     return text:match("^%[.-%]$") ~= nil
 end
 
--- Colour-picker entries: the whole string is one {#color(r,g,b)}...#reset() run.
+-- Styled asset names: the whole string is one {#tag(...)}...#reset() run whose content is the
+-- name of an asset rather than prose.
 --
--- Several mods surface the game's entire colour palette as swatch names, and on a
--- live install that is almost the whole workload: 1300 of 1356 keys, while the
--- three mods responsible contribute two lines of real interface text between them.
--- The names are Citadel paint names ("Rakarth Flesh", "Rhinox Hide"), which players
--- know in English; translating them literally ("拉卡斯要塞的血色") makes them harder to
--- match against the paint, and short brand-like strings are exactly where a machine
--- translation drifts between calls.
+--   {#color(162,158,145)}Rakarth Flesh{#reset()}    a colour-picker swatch
+--   {#font(mono_tide_bold)}Mono Tide Bold{#reset()} a font-picker entry
 --
--- Anchored, and the text between the tags may not contain braces: a string with
--- two or more coloured runs ("{#color(...)}Fire{#reset()} and {#color(...)}Ice{#reset()}")
--- is real interface text and is still translated. Only a single wrapped run counts
--- as a swatch. Set the "Translate colour names" option to take those on anyway.
+-- Several mods surface the game's entire colour palette as swatch names, and on a live install
+-- that is almost the whole workload: 1300 of 1356 keys. The names are Citadel paint names
+-- ("Rakarth Flesh", "Rhinox Hide"), which players know in English; translating them literally
+-- ("拉卡斯要塞的血色") makes them harder to match against the paint, and short brand-like strings
+-- are exactly where a machine translation drifts between calls.
+--
+-- The font lists are the same category and were measured doing real damage: two mods wrap each
+-- font name as {#font(id)}Proxima Nova Bold{#reset()}, and their own source says the text is the
+-- same in every language on purpose ("одинаково для всех языков"). Sent to a translation service
+-- they came back refused instead - the markup placeholders were dropped - which cost requests on
+-- the tier that is rate limited for no answer at all. Left in English, like the swatches.
+--
+-- Both patterns are anchored and the text between the tags may not contain braces, so a string
+-- with two styled runs ("{#color(...)}Fire{#reset()} and {#color(...)}Ice{#reset()}") is real
+-- interface text and is still translated; only a single run counts. The "Translate colour names"
+-- option takes them on anyway.
 local COLOUR_ENTRY = "^{#color%(%d+,%d+,%d+%)}[^{}]*{#reset%(%)}$"
+local FONT_ENTRY = "^{#font%([^)]+%)}[^{}]*{#reset%(%)}$"
 
-local function is_colour_entry(text)
-    return type(text) == "string" and text:match(COLOUR_ENTRY) ~= nil
+local function is_asset_entry(text)
+    if type(text) ~= "string" then
+        return false
+    end
+    return text:match(COLOUR_ENTRY) ~= nil or text:match(FONT_ENTRY) ~= nil
 end
+
+-- Exposed so the smoke test can pin the two shapes that are skipped and the two that are not.
+M.is_asset_entry_for_tests = is_asset_entry
 
 -- A mod may write `en = Localize("loc_some_game_key")`. That is evaluated when the
 -- file loads, so "en" ends up holding the *game's own text in the player's current
@@ -1174,8 +1189,8 @@ function M.start(mod, report, lang)
     for _, entry in ipairs(report.mods) do
         if not entry.skipped and #entry.pending > 0 then
             for _, item in ipairs(entry.pending) do
-                if not take_colours and is_colour_entry(item.en) then
-                    -- Swatch names: left in English on purpose (see COLOUR_ENTRY).
+                if not take_colours and is_asset_entry(item.en) then
+                    -- Swatch and font names: left in English on purpose (see the patterns above).
                     colours = colours + 1
                 elseif translatable(item.en, lang) then
                     q_push({
@@ -1215,7 +1230,7 @@ function M.start(mod, report, lang)
         notes[#notes + 1] = string.format("%d had no text to translate", skipped)
     end
     if colours > 0 then
-        notes[#notes + 1] = string.format("%d colour name(s) left in English", colours)
+        notes[#notes + 1] = string.format("%d styled asset name(s) left in English (colour/font)", colours)
     end
     util.info(mod, "online translation queued: %d key(s) into '%s' via %s [%s]%s",
         queued, tostring(lang), engine,

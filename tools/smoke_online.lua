@@ -219,6 +219,33 @@ check("split: nor is a unit with its number", online.is_translatable("5 个", "z
 check("split: while the sentence before it still is",
     online.is_translatable("Increases damage by 15%", "zh-cn"), true)
 
+-- Styled asset names are left in English: a colour swatch, and a font-picker entry. The font
+-- case came from a live run - two mods wrap each font name as {#font(id)}Proxima Nova Bold
+-- {#reset()}, and asking a service to translate that produced refusals (the markup
+-- placeholders were dropped) instead of an answer, on the tier that is rate limited.
+-- Measured: 26 of 41 queued keys in one run were these.
+local is_asset = online.is_asset_entry_for_tests
+check("asset: a colour swatch is left alone",
+    is_asset("{#color(162,158,145)}Rakarth Flesh{#reset()}"), true)
+check("asset: a font-picker entry is left alone",
+    is_asset("{#font(mono_tide_bold)}Mono Tide Bold{#reset()}"), true)
+check("asset: another font entry, with a raw id inside the tag",
+    is_asset("{#font(itc_novarese_medium)}Itc Novarese Medium{#reset()}"), true)
+check("asset: two styled runs are real text, not an asset name",
+    is_asset("{#color(1,2,3)}Fire{#reset()} and {#color(4,5,6)}Ice{#reset()}"), false)
+check("asset: plain interface text is untouched",
+    is_asset("Reload Speed"), false)
+check("asset: an unstyled colour name is not an asset entry either",
+    is_asset("Rakarth Flesh"), false)
+check("asset: a font tag that is not the whole string is not skipped",
+    is_asset("{#font(arial)}Reload Speed{#reset()} now"), false)
+-- The trade this rule makes, stated rather than discovered later: a whole string wrapped in one
+-- font run is treated as the font's name even if the text inside it happens to be a label. That
+-- is the same trade the colour rule has always made (a label wrapped in a colour tag is skipped
+-- too), and the "Translate colour names" option takes both on for a player who wants them.
+check("asset: a whole-string font run is skipped, label or not",
+    is_asset("{#font(arial)}Reload Speed{#reset()}"), true)
+
 -- The rule that keeps a batch from ever being worse than a solo request. Measured: the-- batch left "EXIT" and "BUY" in English while the same strings, alone, came back as
 -- "退出" and "購買" - so an unchanged part has to be refused, not stored as "unchanged".
 local refusal = online.batch_part_refusal_for_tests

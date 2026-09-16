@@ -753,6 +753,25 @@ cause of "nothing translates" on a machine where the browser works fine, so the 
 `at_cli.exe proxy` prints what would be used, and any command accepts `--proxy host:port` to
 override it — the quickest way to tell a proxy problem from a code problem.
 
+## What is deliberately not translated
+
+A run reports more than "translated", and the other categories are not failures. Measured on a
+live install (31 mods, 4449 keys, zh-cn, 1588 pending):
+
+| category | what it is | that run |
+| --- | --- | --- |
+| **no text to translate** | nothing a translator could change: no letters at all (`12`, `—`), key labels (`[F10]`), or text already in the target language | 247 keys |
+| **styled asset names** | one `{#color(r,g,b)}…{#reset()}` swatch or `{#font(id)}…{#reset()}` font entry: the *name* of an asset, which players match in English (`Citadel Rakarth Flesh`, `Proxima Nova Bold`). A font name is the same in every language on purpose — one mod says so in its own source — and asking a service to translate the markup instead produced refusals, because it drops the placeholders | 1300 colour names, 26 font names |
+| **unchanged** | the service handed the string back as it was, so it is tagged `src = "unchanged"` rather than stored as a translation | 0 |
+| **refused** | the engine would not translate this string: a service dropped a glossary placeholder, or the offline model answered with something unusable. Nothing wrong is stored, and the next run tries again | 0 after the font rule above (26 before it) |
+
+`Translate colour names` (off by default) takes the swatches and the font entries on anyway.
+
+Every key that enters the queue leaves it with an outcome: `41 queued, 0 left, 15 translated,
+26 refused` accounts for all 41, and the remaining pending keys were one of the categories above.
+A stored answer always names where it came from (`src`), which is also what tells a later run
+whether a human or an engine wrote it.
+
 ## Testing without launching the game
 
 `src/at_core.c` builds a native core (`bin/at_core.dll`) plus a command line front end
