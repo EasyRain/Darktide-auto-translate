@@ -52,6 +52,11 @@ for _, word in ipairs({
     -- generic labels for other things
     "name", "title", "type", "mode", "size", "value", "level", "key", "head", "range", "count",
     "total", "amount", "number", "text", "info", "help", "unknown",
+    -- words the game uses as a label but which also appear in ordinary text. Both came in with the
+    -- collected key names: "Space" is the keybind (空格键 - but "Space Marine" is not a keyboard),
+    -- and "Blocked" is the game's wording for a blocked player (已屏蔽 - but "damage blocked" is a
+    -- number, not a block list). They are masked only where the whole string is the label.
+    "space", "blocked",
     -- short words that are also things you do in combat
     "charge", "guard", "block", "push", "pull", "hold", "release", "burst", "delay", "dodge",
 }) do

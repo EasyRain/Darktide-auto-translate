@@ -277,6 +277,27 @@ do
     check("and is left alone where it has no verified wording",
         (through("Rampage", "ru")), "Rampage")
 
+    -- The English collection round's terms: the enemy names, weapons and places whose keys the list
+    -- only learned from the string cache. The English column is what had been missing, and these are
+    -- the words a mod repeats at the player.
+    check("an enemy name is masked", (through("Dreg Rager", "zh-cn")), "渣滓狂暴者")
+    check("another one", (through("Scab Trapper", "zh-cn")), "血痂陷阱手")
+    check("a weapon name is masked", (through("Thunder Hammer", "zh-cn")), "雷霆锤")
+    check("and the relic slot's", (through("Relic Blade", "zh-cn")), "圣物剑")
+    check("a place name is masked", (through("Hab Dreyko", "zh-cn")), "德雷克居住区")
+    -- Where the game itself shipped English, the term restores English - which is the point: the mod
+    -- then shows what the game shows instead of a machine translation of it ("替补无线电操作员").
+    check("a term the game did not translate stays as it is",
+        (through("Scab Radio Operator", "zh-cn")), "Scab Radio Operator")
+    -- A quote inside an English term is a quote, not a backslash: the exports are Lua literals, and
+    -- without decoding them this term was stored as \"Devil's Claw\" Sword and matched nothing.
+    check("quotes in a term survive", (through("\"Devil's Claw\" Sword", "zh-cn")), "卡塔昌剑“恶魔之爪”")
+    -- Two of the collected words are ordinary text as well, so they only mask as a whole label.
+    check("a keybind label is masked on its own", (through("Space", "zh-cn")), "空格键")
+    check("but not inside a word pair", (through("Space Marine", "zh-cn")), "Space Marine")
+    check("the blocked-player label masks on its own", (through("Blocked", "zh-cn")), "已屏蔽")
+    check("but a sentence keeps the word", (through("they blocked it", "zh-cn")), "they blocked it")
+
     -- A multi-word term that merely starts with a label-only word is a name of its own.
     check("a multi-word name keeps masking",
         (glossary.mask("Close Combat", "zh-cn", false)):find("^⟦%d+⟧$") ~= nil, true)

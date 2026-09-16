@@ -40,12 +40,32 @@ RICH = re.compile(r'\{#[^}]*\}')
 def strip_rich(s):
     return RICH.sub('', s).replace('\\n', ' ').strip()
 
+def unescape_lua(s):
+    """Decode the escapes of a Lua string literal, except \\n which strip_rich turns into a space.
+
+    The exports, the harvest files and the generated glossary are all Lua literals, and the regexes
+    below capture their text verbatim: without this, the game's `"Devil's Claw" Sword` arrived as
+    `\\"Devil's Claw\\" Sword` and became a term with backslashes in it, which matches nothing.
+    """
+    out = []
+    i = 0
+    while i < len(s):
+        char = s[i]
+        if char == '\\' and i + 1 < len(s) and s[i + 1] in ('"', '\\'):
+            out.append(s[i + 1])
+            i += 2
+            continue
+        out.append(char)
+        i += 1
+    return ''.join(out)
+
 def parse_export(lang):
     p = os.path.join(EXPORT, lang + '.lua')
     if not os.path.exists(p):
         return {}          # exports only exist on a machine that has run the game
     t = io.open(p, encoding='utf-8').read()
-    return dict(re.findall(r'\["(loc_[^"]+)"\] = "((?:[^"\\]|\\.)*)"', t))
+    return {k: unescape_lua(v)
+            for k, v in re.findall(r'\["(loc_[^"]+)"\] = "((?:[^"\\]|\\.)*)"', t)}
 
 # The file this script writes is also a source. Without this, regenerating on a
 # machine whose translations/export/ is missing (or was cleaned) silently dropped
@@ -65,9 +85,9 @@ def parse_existing(path):
         for fm in FIELD_RE.finditer(body):
             lang = fm.group(1) or fm.group(2)
             if lang and lang != 'en':
-                vals[lang] = fm.group(3)
+                vals[lang] = unescape_lua(fm.group(3))
         if vals:
-            out.setdefault(en.lower(), {}).update(vals)
+            out.setdefault(unescape_lua(en).lower(), {}).update(vals)
     return out
 
 # ---- Ukrainian: from the community mod (complete translation) ----
@@ -182,7 +202,8 @@ def parse_cache(lang):
     if not os.path.exists(path):
         return {}
     text = io.open(path, encoding='utf-8').read()
-    return dict(re.findall(r'\["(loc_[^"]+)"\] = "((?:[^"\\]|\\.)*)"', text))
+    return {k: unescape_lua(v)
+            for k, v in re.findall(r'\["(loc_[^"]+)"\] = "((?:[^"\\]|\\.)*)"', text)}
 
 cache = {lang: parse_cache(lang) for lang in GAME_LANGS}
 cache = {lang: values for lang, values in cache.items() if values}
