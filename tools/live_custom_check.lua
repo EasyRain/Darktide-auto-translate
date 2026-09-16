@@ -87,12 +87,19 @@ local function shipped_defaults()
     local data = assert(loadfile(here .. "/../scripts/mods/auto_translate/auto_translate_data.lua"))()
     get_mod = real_get_mod
 
+    -- The custom-endpoint fields are sub_widgets of the API-service dropdown (DMF hides
+    -- them unless that dropdown says "custom"), so this has to walk the tree, not the
+    -- top level.
     local shipped = {}
-    for _, widget in ipairs((data.options and data.options.widgets) or {}) do
-        if widget.setting_id and widget.default_value ~= nil then
-            shipped[widget.setting_id] = widget.default_value
+    local function walk(list)
+        for _, widget in ipairs(list or {}) do
+            if widget.setting_id and widget.default_value ~= nil then
+                shipped[widget.setting_id] = widget.default_value
+            end
+            walk(widget.sub_widgets)
         end
     end
+    walk(data.options and data.options.widgets)
     return shipped
 end
 

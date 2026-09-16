@@ -54,17 +54,44 @@ in the native core `bin/at_core.dll` — see *Testing without launching the game
 
 ## Options
 
-| Setting | Description |
-| --- | --- |
-| Apply translations | Master switch. Off = nothing is injected (library files are kept). |
-| Continue translating | Off = no new keys are translated; already translated keys still apply. |
-| Translation engine | `Automatic` (key → downloaded model → free endpoints) / `Online (official API)` / `Online (free endpoints)` / `Local model (1.3B)`. |
-| API service | `DeepL` or `Custom` (any translation service you describe yourself). |
-| Download the offline model | Turn on to download, off to cancel; the part that arrived is kept for the next attempt. |
-| Show progress | Bottom-right progress line for the translation run. |
-| Reload translation files | Re-scan and re-inject without restarting. |
-| Clear local translations | Deletes the local library files. |
-| Debug logging | Verbose `[AT]` logging. |
+The settings are **grouped into four sections — General, Engine, Offline model and
+Maintenance** — instead of one long list. This uses DMF's own `group` widget and nothing
+else:
+
+* in DMF's options view each group is a section header, so the page reads as four blocks;
+* a top-level group that holds real widgets is also what **DMF's built-in options tab strip
+  pages on**. DMF shows that strip once the content overflows, and the four groups become
+  the four tabs (no tab name is declared — the group's title is the tab, and it is
+  localized like every other setting);
+* neither of those needs another mod. If [Alf's DMF
+  Extensions](https://www.nexusmods.com/warhammer40kdarktide/mods/864) is installed it reads
+  the same headers and gives them its own tab bar instead — a bonus, not a requirement, and
+  nothing in this mod calls into it.
+
+The custom-endpoint fields (URL, auth header, request template, language map, response
+path) only matter when the API service is set to `Custom`, so they are sub-widgets of that
+dropdown: DMF hides all ten of them under `DeepL` and shows them the moment `Custom` is
+picked.
+
+| Setting | Where | Description |
+| --- | --- | --- |
+| Apply translations | General | Master switch. Off = nothing is injected (library files are kept). |
+| Continue translating | General | Off = no new keys are translated; already translated keys still apply. |
+| Target language | General | The language to translate into (`Automatic` follows the game). |
+| Show progress | General | Bottom-right progress line for the translation run. |
+| Translate colour names | General | Off by default: colour swatches are asset names players match in English. |
+| Translation engine | Engine | `Automatic` (key → downloaded model → free endpoints) / `Online (official API)` / `Online (free endpoints)` / `Local model (1.3B)`. |
+| API service | Engine | `DeepL` or `Custom` (any translation service you describe yourself). |
+| API key / Proxy | Engine | The key for the selected service; the proxy every request goes through. |
+| Custom endpoint | Engine | The ten fields that describe an unlisted service (hidden unless `Custom` is selected). |
+| Download the offline model | Offline model | Turn on to download, off to cancel; the part that arrived is kept for the next attempt. |
+| Mirror / Delete the model / Cores | Offline model | Which host to start from, how to remove the files, how many cores one translation may use. |
+| Retranslate offline results | Offline model | With an online engine, treats what the model wrote as pending again. |
+| Translation status | Maintenance | Shows the run's state (also the progress line's source). |
+| Reload translation files | Maintenance | Re-scan and re-inject without restarting. |
+| Clear local translations | Maintenance | Deletes the local library files. |
+| Test the glossary | Maintenance | Reports how many terms are loaded and which are missing. |
+| Debug logging | Maintenance | Verbose `[AT]` logging. |
 
 ## Languages (the mod's own interface)
 
@@ -78,7 +105,7 @@ English for the gaps rather than an empty label.
 a translation kept the English's `%`-specifiers: DMF runs every string through
 `string.format`, so a dropped `%s` is an error in the options menu, not slightly wrong text.
 
-Adding or updating a language takes a fragment, not 127 hand edits:
+Adding or updating a language takes a fragment, not 131 hand edits:
 
 ```
 # <language>.lua is  return { ["key"] = "translation", ... }  for every key of
@@ -894,7 +921,8 @@ runs — and exits non-zero on the first mismatch.
 A syntax check never runs a line, so the Lua queue has more checks of its own:
 
 ```
-luajit tools\smoke_online.lua                    # loads modules/online.lua with stubs, runs 254 assertions
+luajit tools\smoke_online.lua                    # loads modules/online.lua with stubs, runs 262 assertions
+luajit tools\check_options_layout.lua [custom]    # what the options screen will actually show
 luajit tools\check_zh_variants.lua <translations/zh-tw>   # simplified characters in a traditional store
 luajit tools\scan_line_breaks.lua <translations-dir>      # how many sources carry a line break
 powershell -File tools\batch_probe.ps1 -Store <store> -ModelDir <models>   # is batching better than solo?
@@ -907,6 +935,12 @@ that are easy to get wrong: what counts as translatable, the format-specifier an
 truncation guards, the batch planner, the marker splitter and the "an unchanged part of a
 batch is refused" rule. `batch_probe.ps1` is the measurement behind the batching design —
 see [Batching short strings](#batching-short-strings).
+
+`check_options_layout.lua` runs DMF's own layout rules (unfold, visibility, tab
+candidates) against the shipped settings file and prints the sections, the rows each one
+holds and which rows the API-service dropdown hides — so a setting left outside every
+group, or a `show_widgets` index pointing at nothing, fails here instead of in the options
+menu. Run it with `custom` to see the other dropdown state.
 
 `model_probe.ps1` is the one that decided the model tiers: it runs two models over the
 same strings through the real planner, the real split/restore code and the real guards,

@@ -971,6 +971,32 @@ check("custom: the default content type is a form",
 -- just plausible-looking ones: a field left empty while the module expects it filled is the
 -- failure this catches. auto_translate_data.lua is loaded here with a stubbed get_mod, the
 -- same way DMF loads it.
+--
+-- The option tree is grouped - four top-level groups, which DMF draws as section headers
+-- and pages its own built-in options tab strip on (Alf's DMF Extensions, when installed,
+-- reads the same headers for its tab bar; nothing here requires it) - so anything looking
+-- for a setting has to walk `sub_widgets` too.
+local function flatten_widgets(widgets, into)
+    into = into or {}
+    for _, widget in ipairs(widgets or {}) do
+        into[#into + 1] = widget
+        if type(widget.sub_widgets) == "table" then
+            flatten_widgets(widget.sub_widgets, into)
+        end
+    end
+    return into
+end
+
+local function shipped_defaults(widgets)
+    local shipped = {}
+    for _, widget in ipairs(flatten_widgets(widgets)) do
+        if widget.setting_id and widget.default_value ~= nil then
+            shipped[widget.setting_id] = widget.default_value
+        end
+    end
+    return shipped
+end
+
 do
     local real_get_mod = get_mod
     get_mod = function() return { localize = function(_, key) return key end } end
@@ -978,12 +1004,7 @@ do
     local data = chunk and chunk()
     get_mod = real_get_mod
 
-    local shipped = {}
-    for _, widget in ipairs((data and data.options and data.options.widgets) or {}) do
-        if widget.setting_id and widget.default_value ~= nil then
-            shipped[widget.setting_id] = widget.default_value
-        end
-    end
+    local shipped = shipped_defaults(data and data.options and data.options.widgets)
 
     check("settings: the custom URL ships with DeepL's endpoint",
         shipped.custom_url, "https://api-free.deepl.com/v2/translate")
@@ -1012,6 +1033,71 @@ do
     check("settings: and the body says what DeepL expects",
         cu.build(shipped_spec, cu.values(shipped_spec, "Ammo", "en", "zh-cn")),
         "text=Ammo&source_lang=EN&target_lang=ZH-HANS")
+
+    -- The tree itself. A setting that ends up outside every group is one DMF's tab strip
+    -- cannot page to, and a duplicated setting_id makes DMF refuse the mod's options
+    -- outright, so both are worth pinning here rather than finding them in the log.
+    local top_level = (data and data.options and data.options.widgets) or {}
+    local by_id, duplicates = {}, 0
+
+    for _, widget in ipairs(flatten_widgets(top_level)) do
+        if by_id[widget.setting_id] then
+            duplicates = duplicates + 1
+        end
+        by_id[widget.setting_id] = widget
+    end
+
+    check("settings: no setting_id is defined twice", duplicates, 0)
+    check("settings: every top-level widget is a group - this is what the tabs page on",
+        #top_level == 4 and top_level[1].type == "group" and top_level[2].type == "group"
+            and top_level[3].type == "group" and top_level[4].type == "group", true)
+    check("settings: the four groups are general, engine, offline model and maintenance",
+        by_id.group_general ~= nil and by_id.group_engine ~= nil
+            and by_id.group_offline_model ~= nil and by_id.group_maintenance ~= nil, true)
+    check("settings: every group holds settings (DMF refuses an empty one)",
+        by_id.group_general.sub_widgets[1] ~= nil and by_id.group_engine.sub_widgets[1] ~= nil
+            and by_id.group_offline_model.sub_widgets[1] ~= nil
+            and by_id.group_maintenance.sub_widgets[1] ~= nil, true)
+
+    -- The nine custom-endpoint fields live under the API-service dropdown, so DMF only
+    -- draws them while that dropdown says "custom". Every index in show_widgets has to
+    -- point at one of them - DMF throws on a dangling index - and the list has to cover
+    -- all ten (the button included), or a field would be permanently invisible.
+    local provider = by_id.api_provider
+    local custom_option = provider and provider.options and provider.options[2]
+
+    check("settings: the API service dropdown owns the custom-endpoint fields",
+        provider ~= nil and provider.sub_widgets ~= nil and #provider.sub_widgets == 10, true)
+    check("settings: picking Custom asks DMF for all ten of them",
+        custom_option ~= nil and custom_option.value == "custom"
+            and custom_option.show_widgets ~= nil and #custom_option.show_widgets == 10, true)
+
+    if provider and custom_option then
+        local dangling = 0
+
+        for _, index in ipairs(custom_option.show_widgets) do
+            if provider.sub_widgets[index] == nil then
+                dangling = dangling + 1
+            end
+        end
+
+        check("settings: every show_widgets index points at a real sub_widget", dangling, 0)
+
+        local shown = {}
+
+        for _, index in ipairs(custom_option.show_widgets) do
+            local widget = provider.sub_widgets[index]
+
+            if widget then
+                shown[widget.setting_id] = true
+            end
+        end
+
+        check("settings: and the ten are the nine custom fields plus the test button",
+            shown.custom_url and shown.custom_key and shown.custom_auth and shown.custom_method
+                and shown.custom_content_type and shown.custom_body and shown.custom_langs
+                and shown.custom_headers and shown.custom_path and shown.test_custom_api, true)
+    end
 end
 
 -- One key, entered once: an empty 'Custom: key' falls back to the API key, which is what
@@ -1214,11 +1300,7 @@ do
         get_mod = function() return { localize = function(_, key) return key end } end
         local data = assert(loadfile(here .. "/../scripts/mods/auto_translate/auto_translate_data.lua"))()
         get_mod = real_get_mod
-        for _, widget in ipairs((data.options and data.options.widgets) or {}) do
-            if widget.setting_id and widget.default_value ~= nil then
-                shipped[widget.setting_id] = widget.default_value
-            end
-        end
+        shipped = shipped_defaults(data.options and data.options.widgets)
     end
     shipped.online_api_key = "key-from-the-settings"
 
