@@ -60,6 +60,22 @@ foreach ($file in (Get-ChildItem -Path $source -Recurse -File)) {
     Write-Output ("{0} {1,-34} {2}" -f $state, $relative, $a.Substring(0, 16))
 }
 
+# The native core is built, not authored, but it changes whenever src/ does - and a game running
+# an older DLL against newer Lua is exactly the silent mismatch this script exists to prevent
+# (the CDEF names come from the DLL). It is 2 MB, so it is copied and verified like the Lua.
+# models/ is still left alone: 1.4 GB, and the mod downloads it itself.
+$coreSource = Join-Path $RepoRoot "bin\at_core.dll"
+$coreDest = Join-Path $GameMods "$name\bin\at_core.dll"
+if (Test-Path $coreSource) {
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $coreDest) | Out-Null
+    Copy-Item $coreSource -Destination $coreDest -Force
+    $a = (Get-FileHash $coreSource -Algorithm SHA256).Hash
+    $b = (Get-FileHash $coreDest -Algorithm SHA256).Hash
+    $state = if ($a -eq $b) { "ok  " } else { "DIFF"; }
+    if ($a -ne $b) { $failures++ }
+    Write-Output ("{0} bin\{1,-31} {2}" -f $state, "at_core.dll", $a.Substring(0, 16))
+}
+
 # The data the Lua loads at runtime lives at the mod *root*, not next to the code: the glossary
 # and the term key list. Those change as often as the code does (the glossary did, when language
 # names were added), so they are synced and verified here too - "the file did not land" is

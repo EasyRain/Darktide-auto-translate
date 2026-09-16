@@ -357,6 +357,90 @@ static int cmd_selftest(void)
                                 "FREE TRANSLATIONS FOR TODAY\"},\"quotaFinished\":true,\"responseStatus\":200}",
                                 out, (int)sizeof(out)) < 0);
 
+    // The rest of the fixed sentences it answers with instead of a translation. Two of them
+    // are not about quota at all, and one fires when source and target are the same language -
+    // all three would otherwise be stored as the translation of the string that was asked for.
+    expect_true("a source==target refusal is rejected",
+                at_online_parse("mymemory",
+                                "{\"responseData\":{\"translatedText\":\"PLEASE SELECT TWO DISTINCT LANGUAGES\"},"
+                                "\"responseStatus\":200,\"responseDetails\":\"\"}",
+                                out, (int)sizeof(out)) < 0 &&
+                    strstr(at_online_error(), "DISTINCT LANGUAGES") != NULL);
+    expect_true("an over-long query refusal is rejected",
+                at_online_parse("mymemory",
+                                "{\"responseData\":{\"translatedText\":\"QUERY LENGTH LIMIT EXCEEDED. MAX ALLOWED "
+                                "QUERY : 500 CHARS\"},\"responseStatus\":200}",
+                                out, (int)sizeof(out)) < 0);
+    expect_true("an invalid source language refusal is rejected",
+                at_online_parse("mymemory",
+                                "{\"responseData\":{\"translatedText\":\"'EN-GB' IS AN INVALID SOURCE LANGUAGE\"},"
+                                "\"responseStatus\":200}",
+                                out, (int)sizeof(out)) < 0);
+    // Case is not something the service is consistent about.
+    expect_true("the refusal check ignores case",
+                at_online_parse("mymemory",
+                                "{\"responseData\":{\"translatedText\":\"Mymemory warning: quota\"},"
+                                "\"responseStatus\":200}",
+                                out, (int)sizeof(out)) < 0);
+    // And a real answer that merely mentions one of the words is still a translation.
+    expect_true("an ordinary answer is not mistaken for a refusal",
+                at_online_parse("mymemory",
+                                "{\"responseData\":{\"translatedText\":\"Bitte zwei Sprachen w\xC3\xA4hlen\"},"
+                                "\"responseStatus\":200}",
+                                out, (int)sizeof(out)) > 0);
+
+    printf("\n== multi-text batches (DeepL's own form) ==\n");
+    {
+        // The Lua layer joins short labels with [n] markers; DeepL takes `text=` repeatedly
+        // instead, which needs no markers and costs no extra characters. Providers without that
+        // form must say so, because that is what sends the caller down the marker path.
+        const char* texts[3];
+        char body[512];
+
+        texts[0] = "Reload Speed";
+        texts[1] = "Ammo & More";
+        texts[2] = "\xE8\xA3\x85\xE5\xBC\xB9";     // 装弹, to check UTF-8 survives encoding
+        expect_true("deepl multi-text body builds",
+                    at_online_body_multi("deepl", "en", "zh-cn", texts, 3, body, (int)sizeof(body)) == 1 &&
+                        strcmp(body,
+                               "text=Reload%20Speed&text=Ammo%20%26%20More&text=%E8%A3%85%E5%BC%B9&"
+                               "source_lang=EN&target_lang=ZH-HANS") == 0);
+        expect_true("a single text through the multi form equals the single form",
+                    at_online_body_multi("deepl", "en", "zh-cn", texts, 1, body, (int)sizeof(body)) == 1 &&
+                        strcmp(body, "text=Reload%20Speed&source_lang=EN&target_lang=ZH-HANS") == 0);
+        expect_true("a provider without a multi-text form says so",
+                    at_online_body_multi("mymemory", "en", "zh-cn", texts, 3, body, (int)sizeof(body)) == 0);
+        expect_true("the count is bounded",
+                    at_online_body_multi("deepl", "en", "zh-cn", texts, 0, body, (int)sizeof(body)) == 0);
+        expect_true("an unsupported target is refused",
+                    at_online_body_multi("deepl", "en", "xx", texts, 2, body, (int)sizeof(body)) == 0);
+
+        expect_true("and the capability is reported per provider",
+                    at_online_supports_multi_text("deepl") == 1 &&
+                        at_online_supports_multi_text("mymemory") == 0 &&
+                        at_online_supports_multi_text("google_clients5") == 0 &&
+                        at_online_supports_multi_text("custom") == 0);
+
+        // The reply: one translation per input, in order.
+        {
+            const char* reply =
+                "{\"translations\":[{\"detected_source_language\":\"EN\",\"text\":\"\xE8\xA3\x85\xE5\xBC\xB9"
+                "\xE9\x80\x9F\xE5\xBA\xA6\"},{\"detected_source_language\":\"EN\",\"text\":\"\xE5\xBC\xB9"
+                "\xE8\x8D\xAF\"}]}";
+            expect_true("index 0 is read out",
+                        at_online_parse_at("deepl", reply, 0, body, (int)sizeof(body)) > 0 &&
+                            strcmp(body, "\xE8\xA3\x85\xE5\xBC\xB9\xE9\x80\x9F\xE5\xBA\xA6") == 0);
+            expect_true("index 1 is read out",
+                        at_online_parse_at("deepl", reply, 1, body, (int)sizeof(body)) > 0 &&
+                            strcmp(body, "\xE5\xBC\xB9\xE8\x8D\xAF") == 0);
+            expect_true("an index past the end fails",
+                        at_online_parse_at("deepl", reply, 2, body, (int)sizeof(body)) == 0 &&
+                            strstr(at_online_error(), "index 2") != NULL);
+            expect_true("a marker-style provider has no indexed reply",
+                        at_online_parse_at("mymemory", "{}", 0, body, (int)sizeof(body)) == 0);
+        }
+    }
+
     printf("\n== google_api parsing ==\n");
     expect_true("translatedText",
                 at_online_parse("google_api",

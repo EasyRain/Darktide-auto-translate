@@ -333,6 +333,30 @@ do
     end
 end
 
+-- Which way a batch travels. A provider with its own multi-text form (DeepL: `text=a&text=b`)
+-- carries the labels as separate parameters - nothing extra to bill, nothing to copy back - and
+-- the reply is read by position. Everything else joins them with [n] markers, which is what a
+-- *custom* endpoint gets: the player described that endpoint, and a generic marker request works
+-- with any of them.
+do
+    online.set_core_for_tests({
+        at_online_supports_multi_text = function(provider)
+            return provider == "deepl" and 1 or 0
+        end,
+    })
+    check("batch mode: the API uses its own multi-text form",
+        online.native_batch_for_tests("deepl", 3), true)
+    check("batch mode: a single string is not a batch",
+        online.native_batch_for_tests("deepl", 1), false)
+    check("batch mode: the free hosts keep markers",
+        online.native_batch_for_tests("google_clients5", 3), false)
+    check("batch mode: so does a custom endpoint",
+        online.native_batch_for_tests("custom", 3), false)
+    online.set_core_for_tests(nil)
+    check("batch mode: with no core loaded at all, markers",
+        online.native_batch_for_tests("deepl", 3), false)
+end
+
 -- Pacing: the free endpoints are the ones a burst gets cut off on, so they have to be the
 -- slower of the two - a whole second between requests, against a quarter of a second for a
 -- paid API. This is a rule about which tier is fragile, so it is pinned here rather than left

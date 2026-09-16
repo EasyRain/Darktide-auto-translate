@@ -458,13 +458,52 @@ static int parse_google_gtx(const char* body, char* out, int cap)
 //   "MYMEMORY WARNING: YOU USED ALL AVAILABLE FREE TRANSLATIONS FOR TODAY..."
 // Storing that as a translation would look like a successful result and end up in
 // the player's files, so refusals are detected explicitly.
+// The fixed sentences MyMemory answers with when it refuses a request while still reporting
+// responseStatus 200 and an empty responseDetails. Kept as a table because the service adds
+// one now and then, and matched case-insensitively because it is not consistent about case.
+//
+// The first entry is a prefix match ("MYMEMORY WARNING: ..." carries the reason after the
+// colon); the rest are substrings, since the message is wrapped in quotes and language codes.
+static const char* MYMEMORY_REFUSAL_PHRASES[] = {
+    "MYMEMORY WARNING",
+    "IS AN INVALID TARGET LANGUAGE",
+    "IS AN INVALID SOURCE LANGUAGE",
+    "YOU USED ALL AVAILABLE FREE TRANSLATIONS",
+    "QUERY LENGTH LIMIT EXCEEDED",
+    "PLEASE SELECT TWO DISTINCT LANGUAGES",   // source == target: it echoes this instead
+    "NO QUERY SPECIFIED",
+    "AUTHENTICATION FAILED",
+};
+
+static const char* contains_nocase(const char* haystack, const char* needle)
+{
+    size_t n = strlen(needle);
+    const char* p;
+
+    if (n == 0 || !haystack) {
+        return NULL;
+    }
+    for (p = haystack; *p; p++) {
+        if (_strnicmp(p, needle, n) == 0) {
+            return p;
+        }
+    }
+    return NULL;
+}
+
 static int mymemory_text_looks_like_a_refusal(const char* text)
 {
-    return _strnicmp(text, "MYMEMORY WARNING", 16) == 0 ||
-           strstr(text, "IS AN INVALID TARGET LANGUAGE") != NULL ||
-           strstr(text, "IS AN INVALID SOURCE LANGUAGE") != NULL ||
-           strstr(text, "YOU USED ALL AVAILABLE FREE TRANSLATIONS") != NULL ||
-           strstr(text, "QUERY LENGTH LIMIT EXCEEDED") != NULL;
+    size_t i;
+
+    if (!text) {
+        return 0;
+    }
+    for (i = 0; i < sizeof(MYMEMORY_REFUSAL_PHRASES) / sizeof(MYMEMORY_REFUSAL_PHRASES[0]); i++) {
+        if (contains_nocase(text, MYMEMORY_REFUSAL_PHRASES[i])) {
+            return 1;
+        }
+    }
+    return 0;
 }
 
 static int parse_mymemory(const char* body, char* out, int cap)
@@ -691,6 +730,93 @@ int at_online_body(const char* provider, const char* source_lang, const char* ta
     return 1;
 }
 
+// One request, several strings - the way DeepL's API is meant to be used.
+//
+// Batching in the Lua layer joins short labels into one text with [n] markers, which costs a few
+// characters per label (billed, on a service that charges per character) and relies on the
+// service copying the markers back. DeepL takes the same parameter repeatedly instead
+// (text=a&text=b&...) and answers with one translations[i] per input, so for that provider the
+// markers are unnecessary. Providers without such a form (Google's undocumented hosts, MyMemory,
+// a custom endpoint) return 0 here and keep the marker path - which is what makes the two
+// mechanisms interchangeable rather than a special case per provider.
+//
+// Returns 1 with the body in `out`, 0 when this provider has no multi-text form (the caller then
+// batches the marker way). More than a handful of strings is refused: the request is a form body,
+// and the point of batching here is the round trip, not a megabyte of parameters.
+#define AT_MULTI_TEXT_MAX 16
+
+int at_online_body_multi(const char* provider, const char* source_lang, const char* target_lang,
+                         const char** texts, int count, char* out, int cap)
+{
+    char src[16];
+    char dst[16];
+    int i;
+    int used;
+
+    if (!provider || !texts || !out || cap <= 0) {
+        set_error("missing argument");
+        return 0;
+    }
+    if (_stricmp(provider, "deepl") != 0) {
+        set_errorf("provider '%s' has no multi-text request form%s", provider, "");
+        return 0;
+    }
+    if (count < 1 || count > AT_MULTI_TEXT_MAX) {
+        // set_errorf() formats two *strings*; anything with a number goes through g_error.
+        _snprintf_s(g_error, sizeof(g_error), _TRUNCATE,
+                    "multi-text count %d is out of range (1..%d)", count, AT_MULTI_TEXT_MAX);
+        return 0;
+    }
+    if (!at_online_lang_code_for(provider, source_lang ? source_lang : "en", src, (int)sizeof(src))) {
+        set_errorf("unsupported source language '%s'%s", source_lang, "");
+        return 0;
+    }
+    if (!at_online_lang_code_for(provider, target_lang, dst, (int)sizeof(dst))) {
+        set_errorf("unsupported target language '%s'%s", target_lang, "");
+        return 0;
+    }
+
+    out[0] = 0;
+    used = 0;
+    for (i = 0; i < count; i++) {
+        const char* text = texts[i] ? texts[i] : "";
+        size_t need = strlen(text) * 3 + 1;
+        char* encoded = (char*)malloc(need);
+        int written;
+
+        if (!encoded) {
+            set_error("out of memory");
+            return 0;
+        }
+        if (!url_encode(text, encoded, (int)need)) {
+            free(encoded);
+            set_error("text too long to encode");
+            return 0;
+        }
+        written = _snprintf_s(out + used, (size_t)(cap - used), _TRUNCATE, "text=%s&", encoded);
+        free(encoded);
+        if (written < 0) {
+            _snprintf_s(g_error, sizeof(g_error), _TRUNCATE, "request body too long (buffer: %d bytes)", cap);
+            return 0;
+        }
+        used += written;
+    }
+
+    if (_snprintf_s(out + used, (size_t)(cap - used), _TRUNCATE,
+                    "source_lang=%s&target_lang=%s", src, dst) < 0) {
+        _snprintf_s(g_error, sizeof(g_error), _TRUNCATE, "request body too long (buffer: %d bytes)", cap);
+        return 0;
+    }
+    return 1;
+}
+
+// Whether this provider has a multi-text request form (see at_online_body_multi). The Lua layer
+// asks instead of hard-coding a provider name: which services ship is the core's business.
+int at_online_supports_multi_text(const char* provider)
+{
+    return provider && _stricmp(provider, "deepl") == 0;
+}
+
 int at_online_headers(const char* provider, const char* api_key, char* out, int cap)
 {
     if (!provider || !out || cap <= 0) {
@@ -753,6 +879,55 @@ static int parse_deepl(const char* body, char* out, int cap)
         json_free(root);
         set_error("translated text does not fit the output buffer");
         return -1;
+    }
+    memcpy(out, text, (size_t)n + 1);
+    json_free(root);
+    return n;
+}
+
+// One answer out of a multi-text reply, by position.
+//
+// DeepL answers `text=a&text=b` with translations[0].text for a and translations[1].text for b,
+// so the batch is attributed by index instead of by markers. Providers without that form return
+// 0 and the caller uses the (already tested) marker splitter.
+int at_online_parse_at(const char* provider, const char* body_utf8, int index, char* out, int cap)
+{
+    JVal* root;
+    JVal* node;
+    const char* text;
+    char path[64];
+    int n;
+
+    if (!provider || !body_utf8 || !out || cap <= 0 || index < 0) {
+        set_error("missing argument");
+        return 0;
+    }
+    out[0] = 0;
+
+    if (_stricmp(provider, "deepl") != 0) {
+        set_errorf("provider '%s' has no multi-text reply form%s", provider, "");
+        return 0;
+    }
+
+    root = json_parse(body_utf8);
+    if (!root) {
+        set_error("response was not valid JSON");
+        return 0;
+    }
+    _snprintf_s(path, sizeof(path), _TRUNCATE, "translations.%d.text", index);
+    node = json_path(root, path);
+    text = json_str(node);
+    if (!text || !*text) {
+        _snprintf_s(g_error, sizeof(g_error), _TRUNCATE,
+                    "the reply has no translation at index %d", index);
+        json_free(root);
+        return 0;
+    }
+    n = (int)strlen(text);
+    if (n >= cap) {
+        json_free(root);
+        set_error("translated text does not fit the output buffer");
+        return 0;
     }
     memcpy(out, text, (size_t)n + 1);
     json_free(root);

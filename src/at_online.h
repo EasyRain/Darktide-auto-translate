@@ -47,6 +47,15 @@ AT_API int at_online_path(const char* provider, const char* api_key, const char*
 // Body for providers that POST (form encoded). Returns 1 on success.
 AT_API int at_online_body(const char* provider, const char* source_lang, const char* target_lang,
                           const char* text_utf8, char* out, int cap);
+// Several strings in one request, for providers that have such a form (DeepL: repeated `text`).
+// Returns 0 when the provider has none, and the caller batches with markers instead.
+AT_API int at_online_body_multi(const char* provider, const char* source_lang, const char* target_lang,
+                                const char** texts, int count, char* out, int cap);
+// One answer out of a multi-text reply, by position. 0 when the provider has no such form.
+AT_API int at_online_parse_at(const char* provider, const char* body_utf8, int index, char* out, int cap);
+// 1 when the provider takes several strings in one request (i.e. the marker batching in Lua is
+// unnecessary for it).
+AT_API int at_online_supports_multi_text(const char* provider);
 
 // Extra header block ("Name: value\r\n") for this provider, e.g. DeepL's
 // Authorization line. Returns 1 on success (empty string when none is needed).

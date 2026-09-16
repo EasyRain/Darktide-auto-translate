@@ -3,19 +3,21 @@
 Automatically translates the texts of your installed mods **in memory** — the original
 mod files are never modified. Translations are cached locally in editable text files.
 
-> **Status: v0.1.0 — online engine works, local model still a stub.**
+> **Status: v0.1.0 — all four engines implemented and working.**
 > Working today: scanning every loaded mod, applying translations from the local
 > library, hot-injecting the merged table back into DMF, and translating missing
-> keys through the online providers (one request at a time, resumable, saved as it
-> goes). The offline NLLB-200 engine is implemented — see
-> [The offline engine](#the-offline-engine-local-nllb-200), including the
-> `add_source_eos` trap that makes this particular model look broken.
+> keys through one of four engines — `Automatic` (API key → downloaded offline
+> model → keyless free endpoints), the official API, the keyless free endpoints, or
+> the offline NLLB-200 model. Requests are paced per tier, batched where it helps,
+> one at a time and resumable, saved as it goes. The offline engine's one trap
+> (`add_source_eos`) is documented under
+> [The offline engine](#the-offline-engine-local-nllb-200).
 
 ## How it works
 
 1. On `on_all_mods_loaded`, DMF's registry (`dmf.mods`) is enumerated.
 2. For each mod, its localization file is read (per the `mod_localization` field in its
-   `.mod` file) and every key without a `zh-cn` entry is collected.
+   `.mod` file) and every key without an entry in the target language is collected.
 3. Translations are looked up in the local library (`translations/<language>/<modid>.lua`).
 4. The merged table is written back into DMF's in-memory registry via
    `dmf:initialize_mod_localization()`. **No file of the translated mod is touched.**
@@ -33,7 +35,9 @@ thread never blocks.
   source. A translation whose specifiers do not match is **refused, not stored** — a stray
   `%` reaching `string.format` throws.
 * **Quota handling**: HTTP 429/403 pauses the queue for 5 minutes instead of hammering the
-  service. Three consecutive transport failures trip the circuit breaker and stop the run.
+  service. Three consecutive transport failures trip the circuit breaker: an API provider
+  ends the run there, while the free tier first gives its whole list three 5-minute retries
+  (see *Free endpoints* below).
 * **Saved as it goes**: translation files are written every 25 keys and at the end, so
   quitting mid-run loses nothing. The rest is picked up on the next launch.
 * **No restart needed**: when the queue drains, the newly translated keys are injected into
@@ -544,6 +548,17 @@ is why the batching is not provider-specific. The same rules apply as for the lo
 part that cannot be trusted is retried on its own, and a reply whose markers are gone sends the
 whole batch through singly rather than guessing which text belongs to which key.
 
+**DeepL does not use markers at all.** Its API accepts several `text` parameters in one request,
+so the paid provider sends the parts side by side and the answer is read position by position:
+nothing is added to the source, and a "lost marker" cannot misattribute an answer, because there
+is none. The core decides who gets this (`at_online_supports_multi_text`), and the answer comes
+back indexed, so a provider that grows the same feature needs no Lua change. DeepL is the only one
+today; the custom endpoint and the free tier keep the `[n]` markers, which is the shape a generic
+service understands. Measured with `tools/live_deepl_batch.lua` (four labels, en → zh-cn): **88
+characters native against 119 with markers**, and all four answers came back in order —
+`Reload Speed / Ammo / Damage / Cancel` → `重载速度 / 弹药 / 损坏 / 取消`. The core's cap is 16
+parts in one request; the batch rule (8 items) is what applies in practice.
+
 ### Multi-line strings
 
 Real mod text is full of line breaks — `Enhanced_descriptions` joins its descriptions
@@ -635,15 +650,28 @@ keyless player has):
 | the service answers **429/403** (rate limited, quota) | translation pauses for **5 minutes** and the item is retried when the pause ends — the HUD counts it down |
 | **all three** are unreachable | the run does **not** end: it waits 5 minutes, re-arms all three providers and works through the queue again. Three such waits at most, then it stops with the usual "every provider was unreachable" message — a machine that is simply offline should not loop forever |
 
+**A refusal can arrive as an HTTP 200.** MyMemory in particular answers with the failure *inside*
+the successful reply: a 774-character query came back as status 200 with
+`QUERY LENGTH LIMIT EXCEEDED. MAX ALLOWED QUERY : 500 CHARS` in the place a translation belongs,
+and it took a live request to see it — the offline fixtures only know the shapes that were captured
+before. The core therefore checks the reply text itself for that family of messages
+(`PLEASE SELECT TWO DISTINCT LANGUAGES`, `NO QUERY SPECIFIED`, `AUTHENTICATION FAILED`, the length
+limit) and reports a failure instead of a translation, so nothing wrong is ever stored. The check
+is case-insensitive and looks for the phrase anywhere in the reply, so a message wrapped in quotes
+and language codes still counts; the table also holds the rest of the family the service uses
+(`MYMEMORY WARNING`, `IS AN INVALID TARGET LANGUAGE`, `IS AN INVALID SOURCE LANGUAGE`, `YOU USED
+ALL AVAILABLE FREE TRANSLATIONS`), and the selftest carries both the refusals and a false-positive
+control.
+
 **What batching costs, measured.** A batched request carries `[n] ` markers, and a service that
 bills per character charges for those too. Over the 135 strings of the probe corpus
 (`tools/batch_cost.lua` drives the real planner): requests **135 → 67 (−50%)**, characters
 **3,405 → 3,830 (+12.5%)**. Two details from that run are worth keeping: a long string does not
 merely sit out a batch, it *ends* the one being built (85 of the corpus's strings travelled in
-17 batches, the rest alone), and the extra characters land on short labels only — which is why
-the same rule is a clear win for the free endpoints (charged per request) and a deliberate trade
-on a metered API. DeepL's API accepts several `text` parameters in one request, which would
-remove the markers entirely; that is a C-side change and is not done.
+17 batches, the rest alone), and the extra characters land on short labels only. That makes the
+rule a clear win for the free endpoints, which are billed per request and pay nothing for the
+markers, and no cost at all for DeepL, which takes the parts as several `text` parameters instead
+(see above).
 
 ### Custom endpoints
 
@@ -866,7 +894,7 @@ runs — and exits non-zero on the first mismatch.
 A syntax check never runs a line, so the Lua queue has more checks of its own:
 
 ```
-luajit tools\smoke_online.lua                    # loads modules/online.lua with stubs, runs ~50 assertions
+luajit tools\smoke_online.lua                    # loads modules/online.lua with stubs, runs 254 assertions
 luajit tools\check_zh_variants.lua <translations/zh-tw>   # simplified characters in a traditional store
 luajit tools\scan_line_breaks.lua <translations-dir>      # how many sources carry a line break
 powershell -File tools\batch_probe.ps1 -Store <store> -ModelDir <models>   # is batching better than solo?
@@ -910,20 +938,24 @@ when the whole tier is down), the glossary (official terminology, language names
 the placeholder and format-specifier guards, the background run with resumable progress, and the
 mod's own interface in all twelve game languages.
 
-Still open, in the order they would matter to a player:
+Settled as a limitation rather than as work — the one thing that is knowingly imperfect:
 
-* **What is on screen first.** The queue is alphabetical within a mod; a player sees the options
-  menu and the HUD long before the far end of a mod's text. Translating by visibility (or letting
-  the player reorder) is the deferred "priority strategy" from the design notes.
-* **A progress bar rather than a line.** The HUD shows `done / total`, failures and a cooldown
-  countdown; a bar with the current mod and a time estimate is the remaining polish item.
-* **DeepL's native multi-`text` request.** Batching (see above) costs ~12.5% more characters in
-  markers on a metered API; DeepL accepts several `text` parameters in one request, which removes
-  them entirely. It is a C-side change (`at_online_body` plus per-index parsing) and is not done.
-* **Long strings on the offline model.** The 1.3B still truncates long descriptions; the
-  `too_short` guard refuses those answers and the key is parked rather than stored wrong. Fixing
-  it means a different model, which was measured and did not earn its cost (see the offline
-  engine section).
+* **Long strings on the offline model.** The 1.3B truncates long descriptions; the `too_short`
+  guard refuses those answers, and after three refusals the key is parked for that engine rather
+  than stored wrong (see *When the placeholder is dropped*). That is the answer: three tries, then
+  it counts as failed, and switching engines — or letting `Automatic` fall through to the free
+  tier — picks the key up again, because parking is per engine. A better model was the only real
+  fix, and it was measured and did not earn its cost (see *Why the 600M model was dropped* and
+  *The offline model is a fallback*).
+
+Settled the other way — recorded so they do not come back as "open" work:
+
+* **A priority strategy** (translate by what is on screen, let the player reorder the queue) —
+  dropped. The queue is already grouped by mod and the run happens while the player is playing;
+  a strategy layer would change the order of a background job, not the amount of work in it.
+* **A progress bar instead of the status line** — dropped. `done / total`, the failure count and
+  the cooldown countdown are the whole state an unattended run has to report.
+* **DeepL's native multi-`text` request** — shipped; see *Batching short strings*.
 
 ## Credits and licence
 

@@ -57,9 +57,12 @@ int at_online_uses_post(const char*);
 int at_online_host(const char*, const char*, char*, int);
 int at_online_path(const char*, const char*, const char*, const char*, const char*, char*, int);
 int at_online_body(const char*, const char*, const char*, const char*, char*, int);
+int at_online_body_multi(const char*, const char*, const char*, const char**, int, char*, int);
+int at_online_supports_multi_text(const char*);
 int at_online_headers(const char*, const char*, char*, int);
 const char* at_online_content_type(const char*);
 int at_online_parse(const char*, const char*, char*, int);
+int at_online_parse_at(const char*, const char*, int, char*, int);
 const char* at_online_error(void);
 int at_online_lang_code_for(const char*, const char*, char*, int);
 int at_set_model_dir(const char*);
@@ -1313,6 +1316,7 @@ local fail_item
 local dispatch_custom     -- defined below, next to handle_response()
 local handle_online_batch -- defined below, next to handle_local_batch()
 local join_batch          -- defined below, next to dispatch_lines()
+local native_batch_for    -- defined below, next to join_batch()
 local retry_whole_tier    -- defined below, next to fail_item()
 
 -- Starts a request for one queued item. Returns false when nothing was started.
@@ -1487,16 +1491,33 @@ local function dispatch(mod)
     -- limited and easily cut off, so one request per eight labels is eight times the headroom
     -- (and the same saving on a metered API). Eligibility is the local batch's rule - short
     -- labels, one line, not already refused as part of a batch - and each item is masked on
-    -- its own so its placeholders restore independently; the only thing the service has to do
-    -- is copy the markers. Measured: "[1] Reload Speed [2] Ammo [3] Damage [4] Cancel" came
-    -- back with every marker intact and every part translated from clients5, gtx, MyMemory and
-    -- DeepL alike, which is why this is not provider-specific.
+    -- its own so its placeholders restore independently.
+    --
+    -- Two ways to carry them, and the core says which one a provider takes:
+    --   * the provider's own multi-text form (DeepL: `text=a&text=b`), which needs no markers
+    --     at all - nothing extra to bill, nothing for the service to copy back correctly - and
+    --     the reply is read back by position;
+    --   * otherwise one joined text with [n] markers, split on the way back. Measured: all four
+    --     shipped services keep the markers, so this is the portable path, and it is the one a
+    --     *custom* endpoint gets: the player described that endpoint, and a generic marker
+    --     request works with any of them.
     local batch = take_batch(item)
 
     -- Glossary masking: official terms become placeholders so a service cannot
     -- paraphrase them; they are restored from the token list afterwards. Rich-text
     -- markup is masked too, but only for providers that cannot handle it.
-    local masked, batch_parts, batch_tokens = join_batch(batch, provider)
+    local native = native_batch_for(provider, #batch)
+    local masked, batch_parts, batch_tokens
+    if native then
+        batch_parts, batch_tokens = {}, {}
+        for i, one in ipairs(batch) do
+            local part, item_tokens = glossary.mask(one.en, M.state.lang, not MARKUP_SAFE[provider])
+            batch_parts[i], batch_tokens[i] = part, item_tokens
+        end
+        masked = batch_parts[1]
+    else
+        masked, batch_parts, batch_tokens = join_batch(batch, provider)
+    end
     local tokens = batch_tokens[1]
 
     -- The extra items were taken out of the queue for this attempt, so any failure before the
@@ -1525,7 +1546,20 @@ local function dispatch(mod)
     -- Providers that take their query in the body (DeepL) also need an auth header.
     local job
     if core.at_online_uses_post(provider) == 1 then
-        if core.at_online_body(provider, "en", M.state.lang, masked, body_buf, BODY_CAP) == 0 then
+        local body_ok
+        if native then
+            -- LuaJIT hands a Lua string to a `const char*` element directly; the core then
+            -- writes `text=..&text=..&source_lang=..&target_lang=..`.
+            local texts = ffi.new("const char*[?]", #batch_parts)
+            for i, part in ipairs(batch_parts) do
+                texts[i - 1] = part
+            end
+            body_ok = core.at_online_body_multi(provider, "en", M.state.lang, texts, #batch_parts,
+                                               body_buf, BODY_CAP) == 1
+        else
+            body_ok = core.at_online_body(provider, "en", M.state.lang, masked, body_buf, BODY_CAP) == 1
+        end
+        if not body_ok then
             M.state.last_error = cstr(core.at_online_error())
             M.state.failed = M.state.failed + 1
             util.warn(mod, "could not build the request body for %s: %s", provider, tostring(M.state.last_error))
@@ -1556,6 +1590,7 @@ local function dispatch(mod)
     if #batch > 1 then
         inflight = {
             kind = "online_batch",
+            native = native,
             items = batch,
             parts = batch_parts,
             tokens = batch_tokens,
@@ -2063,21 +2098,47 @@ end
 handle_online_batch = function(mod, req, body)
     local ffi = Mods.lua.ffi
 
-    local parse_error
-    local n = read_response(req, body, function(_, message) parse_error = message end)
-    if n == 0 then
-        util.warn(mod, "a batch reply from %s could not be read (%s); %d item(s) go through one at a time",
-            tostring(req.provider), tostring(parse_error), #req.items)
-        requeue_no_batch(req.items)
-        return
+    -- A provider with a multi-text form answers with one translation per input, so the parts are
+    -- read by position and no marker has to survive the round trip. A reply that is missing one
+    -- of them falls through to the marker path below, which then reports it as unusable and
+    -- sends the batch through singly - the same outcome as a lost marker.
+    local parts
+    if req.native then
+        parts = {}
+        for i = 1, #req.items do
+            local n = core.at_online_parse_at(req.provider, body, i - 1, out_buf, SMALL_CAP)
+            if n == 0 then
+                util.warn(mod, "the reply from %s is missing answer %d of %d (%s); %d item(s) go through one at a time",
+                    tostring(req.provider), i, #req.items, tostring(cstr(core.at_online_error())), #req.items)
+                parts = nil
+                break
+            end
+            parts[i] = ffi.string(out_buf, n)
+        end
     end
 
-    local parts = split_batch(ffi.string(out_buf, n), #req.items)
     if not parts then
-        util.info(mod, "%s did not keep the batch markers; %d item(s) go through one at a time",
-            tostring(req.provider), #req.items)
-        requeue_no_batch(req.items)
-        return
+        if req.native then
+            requeue_no_batch(req.items)
+            return
+        end
+
+        local parse_error
+        local n = read_response(req, body, function(_, message) parse_error = message end)
+        if n == 0 then
+            util.warn(mod, "a batch reply from %s could not be read (%s); %d item(s) go through one at a time",
+                tostring(req.provider), tostring(parse_error), #req.items)
+            requeue_no_batch(req.items)
+            return
+        end
+
+        parts = split_batch(ffi.string(out_buf, n), #req.items)
+        if not parts then
+            util.info(mod, "%s did not keep the batch markers; %d item(s) go through one at a time",
+                tostring(req.provider), #req.items)
+            requeue_no_batch(req.items)
+            return
+        end
     end
 
     local stored, retry = 0, {}
@@ -2126,6 +2187,18 @@ local function is_local_request(kind)
     return kind == "local" or kind == "local_batch" or kind == "local_line"
 end
 
+
+-- Whether this batch travels in the provider's own multi-text form rather than as one text with
+-- [n] markers. One string is never a batch, and a provider without that form (the free hosts, a
+-- custom endpoint) always uses markers.
+local function native_batch_for_impl(provider, count)
+    return count > 1 and core ~= nil
+        and core.at_online_supports_multi_text(provider) == 1
+end
+
+native_batch_for = native_batch_for_impl
+
+M.native_batch_for_tests = native_batch_for
 
 -- Turns a batch of items into the text one request carries, plus the per-item masked text
 -- and token lists (one entry per item, so each part restores on its own).
