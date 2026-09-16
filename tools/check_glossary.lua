@@ -259,8 +259,10 @@ do
     check("a name still masks on its own", (through("Melee", "zh-cn")), "近战")
     check("and inside a sentence", (function()
         local masked, tokens = glossary.mask("Increases Melee damage", "zh-cn", false)
+        -- No space between the two restored terms: the boundary rule above removes the one the
+        -- service leaves beside a placeholder, because Chinese does not separate words with spaces.
         return (glossary.unmask(masked, tokens):gsub("近战", "X"))
-    end)(), "Increases X 伤害")
+    end)(), "Increases X伤害")
     -- A multi-word term that merely starts with a label-only word is a name of its own.
     check("a multi-word name keeps masking",
         (glossary.mask("Close Combat", "zh-cn", false)):find("^⟦%d+⟧$") ~= nil, true)
