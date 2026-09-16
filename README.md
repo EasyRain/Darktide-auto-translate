@@ -143,6 +143,41 @@ return {
   localised wiki pages).
 * Use **Test glossary** in the options to see masking/restoring in the log.
 
+### Language names
+
+A language list is where machine translation fails where the player notices: "German" comes back as a
+nationality, "Chinese" loses Simplified/Traditional, and a lone word is exactly what the offline
+model mangles. Two conventions exist in mod UIs and both are covered by the glossary:
+
+* the **English name** ("German", "Chinese (Simplified)") is replaced by the name in the target
+  language — `德语`, `ドイツ語`, `Немецкий` — for all twelve game languages plus nl / sv / tr / ar.
+* an **autonym** ("Deutsch", "日本語", "简体中文") is its own value in every language, so a list
+  written in autonyms (the Steam convention: English / Deutsch / 日本語) stays an autonym list
+  instead of turning into a translated one. Those terms exist only to keep the word away from the
+  translator. The one exception is "English", which is its own autonym too: it is handled as a name,
+  so a Chinese UI reads 英语.
+
+Language **codes** ("en", "de", "es") are deliberately *not* terms: two letters are ordinary words in
+other languages (French `en`, Portuguese `de`) and matching ignores case, so masking them would wreck
+prose. `tools/check_glossary.lua` fails if one ever appears in the data.
+
+### Where the data comes from
+
+`tools/build_glossary.py` is the only writer of `translations/glossary.lua`:
+
+```
+python tools\build_glossary.py                    # regenerate from the exports + the hand-verified blocks
+python tools\check_glossary.lua                   # load it and exercise masking through the module
+```
+
+It reads the game's own localisation exports (`translations/export/<lang>.lua`), carries over values
+the current exports no longer have (Ukrainian, which the game never shipped), and adds the
+hand-verified blocks for the wording the game has no string for: core mechanics, general UI labels,
+language names and autonyms. Editing the generated file by hand is lost on the next run, and
+`check_glossary.lua` is what proves the result still masks what it should — including that a term in
+another script is not matched inside a longer run of that script, and that a term ending in
+punctuation ("Chinese (Simplified)") is not eaten by its shorter prefix.
+
 ### When the placeholder is dropped, and when a key is given up on
 
 Masking is a protection, not a translation strategy: a model can lose a placeholder, and the string

@@ -60,6 +60,34 @@ foreach ($file in (Get-ChildItem -Path $source -Recurse -File)) {
     Write-Output ("{0} {1,-34} {2}" -f $state, $relative, $a.Substring(0, 16))
 }
 
+# The data the Lua loads at runtime lives at the mod *root*, not next to the code: the
+# glossary, the term exports and the hand-editable translation files. Those change as often
+# as the code does (the glossary did, when language names were added), so they are synced and
+# verified here too - "the file did not land" is otherwise invisible until a player notices
+# the old data. bin/ and models/ are deliberately left alone: the DLL is built, the models are
+# 1.4 GB, and neither belongs in a routine deploy.
+$dataSource = Join-Path $RepoRoot "translations"
+$dataDest = Join-Path $GameMods "$name\translations"
+if (Test-Path $dataSource) {
+    New-Item -ItemType Directory -Force -Path $dataDest | Out-Null
+    Copy-Item -Path (Join-Path $dataSource '*') -Destination $dataDest -Recurse -Force
+    Write-Output ""
+    foreach ($file in (Get-ChildItem -Path $dataSource -Recurse -File)) {
+        $relative = $file.FullName.Substring($dataSource.Length + 1)
+        $target = Join-Path $dataDest $relative
+        if (-not (Test-Path $target)) {
+            Write-Output ("MISSING  translations\{0}" -f $relative)
+            $failures++
+            continue
+        }
+        $a = (Get-FileHash $file.FullName -Algorithm SHA256).Hash
+        $b = (Get-FileHash $target -Algorithm SHA256).Hash
+        $state = if ($a -eq $b) { "ok  " } else { "DIFF"; }
+        if ($a -ne $b) { $failures++ }
+        Write-Output ("{0} translations\{1,-23} {2}" -f $state, $relative, $a.Substring(0, 16))
+    }
+}
+
 if ($decoys -or (Test-Path $decoyModules)) {
     Write-Output ""
     Write-Output "note: stray Lua at the mod root (unused by the game, remove if it is a stale copy):"

@@ -118,6 +118,29 @@ local function loose_pattern(s)
     return table.concat(out)
 end
 
+-- Whether the byte next to a match means the match is part of a longer word.
+--
+-- The rule depends on the term's own script, which is the only way to get both cases right:
+--
+--   * an ASCII term ("Ammo") is a word when its neighbours are ASCII word bytes; a CJK
+--     neighbour does not block it, because "语言 Ammo" and "语言Ammo" are how mixed text is
+--     actually written.
+--   * a term in another script ("日本語") is a word only when its neighbours are not part of
+--     that script either, so it is never matched in the middle of a longer run - "中文" must
+--     not match inside "简体中文".
+--
+-- Lua's %w is ASCII-only in the C locale; multi-byte characters have to be recognised by
+-- their bytes (every byte of a UTF-8 sequence is >= 128).
+local function makes_it_a_longer_word(byte, term_is_multibyte)
+    if not byte or byte == "" then
+        return false
+    end
+    if byte:match("%w") then
+        return true
+    end
+    return term_is_multibyte and byte:byte() >= 128
+end
+
 -- Rich-text markup has to be masked for the same reason glossary terms are, and
 -- for one more: given "{#color(14,127,120)}Citadel Coelia Greenshade{#reset()}"
 -- the free services hand the whole string straight back untranslated. Masking the
@@ -142,9 +165,21 @@ function M.mask(text, lang, mask_markup)
     local list = type(lang) == "string" and by_language[lang] or nil
     if list and #list > 0 then
         for _, item in ipairs(list) do
-            local pattern = "%f[%w]" .. loose_pattern(item.en) .. "%f[%W]"
+            -- The whole-word rule is checked on the two bytes *around* the match, not with
+            -- the %f frontier: a frontier at the end of the pattern fails for any term that
+            -- ends in punctuation ("Chinese (Simplified)", "Portuguese (Brazil)") and for
+            -- every term in a non-Latin script, because it asks the term's own last byte to
+            -- be a word byte. Measured: with the frontier, "Chinese (Simplified)" came back
+            -- as "中文 (Simplified)" - the shorter "Chinese" term matched inside it - and
+            -- "日本語" was never protected at all.
+            local pattern = "()" .. loose_pattern(item.en) .. "()"
+            local multibyte = item.en:find("[\128-\255]") ~= nil
             local token_index = nil
-            result = result:gsub(pattern, function()
+            result = result:gsub(pattern, function(from_pos, to_pos)
+                if makes_it_a_longer_word(result:sub(from_pos - 1, from_pos - 1), multibyte)
+                    or makes_it_a_longer_word(result:sub(to_pos, to_pos), multibyte) then
+                    return nil      -- part of a longer word: leave it alone
+                end
                 if not token_index then
                     tokens[#tokens + 1] = { term = item.term, source = item.en }
                     token_index = #tokens
