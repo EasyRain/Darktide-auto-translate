@@ -428,6 +428,13 @@ session expired and is treated as "fetch a new one"; a **0-byte 200 is a failure
 translation** — `www.bing.com` answers exactly that to the request `cn.bing.com` answers with a
 translation, which is why the China host is the one configured.
 
+Its batching is not as reliable as the probe suggested, and the design accounts for it. Four
+labels in one marker batch came back with all four markers intact in `tools/live_bing_check.lua`,
+but the first real run logged `bing did not keep the batch markers; 8 item(s) go through one at a
+time` — so it does lose them sometimes. Nothing is guessed when that happens: the batch is
+abandoned and those items are retried singly, which is the same fallback the marker design has for
+every provider that mangles an answer.
+
 Two further endpoints were measured and **rejected** — for reasons that only show up by trying
 them:
 
