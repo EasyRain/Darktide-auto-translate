@@ -903,14 +903,27 @@ not a bug — run `at_cli.exe` from a normal shell to check HTTPS.
 
 ## Roadmap
 
-* Local model: NLLB-200 1.3B (~1.4 GB) int8 CTranslate2 conversion — the downloader now
-  exists (resume + checksum + mirror); remaining: a progress bar for the HUD beyond the
-  percentage line.
-* Online engines: free public endpoints (with back-off on 429/403) and official APIs.
-* Slow, continuous translation in the background with a progress bar; unfinished work
-  resumes on the next launch.
-* Glossary (official Darktide terminology) applied before/after machine translation.
-* Placeholder/rich-text protection (`%s`, `%.0f`, `%%`, `{#color(...)}`, `{damage:%s}`).
+Shipped, for reference: the injector and the hand-editable library, the offline NLLB-200 1.3B
+engine with its downloader (resume + checksum + mirror), the online engines (official API, custom
+endpoint, and the keyless free tier with back-off, per-provider failover and a five-minute retry
+when the whole tier is down), the glossary (official terminology, language names, autonyms) with
+the placeholder and format-specifier guards, the background run with resumable progress, and the
+mod's own interface in all twelve game languages.
+
+Still open, in the order they would matter to a player:
+
+* **What is on screen first.** The queue is alphabetical within a mod; a player sees the options
+  menu and the HUD long before the far end of a mod's text. Translating by visibility (or letting
+  the player reorder) is the deferred "priority strategy" from the design notes.
+* **A progress bar rather than a line.** The HUD shows `done / total`, failures and a cooldown
+  countdown; a bar with the current mod and a time estimate is the remaining polish item.
+* **DeepL's native multi-`text` request.** Batching (see above) costs ~12.5% more characters in
+  markers on a metered API; DeepL accepts several `text` parameters in one request, which removes
+  them entirely. It is a C-side change (`at_online_body` plus per-index parsing) and is not done.
+* **Long strings on the offline model.** The 1.3B still truncates long descriptions; the
+  `too_short` guard refuses those answers and the key is parked rather than stored wrong. Fixing
+  it means a different model, which was measured and did not earn its cost (see the offline
+  engine section).
 
 ## Credits and licence
 

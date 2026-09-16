@@ -1097,20 +1097,6 @@ return {
         ["pl"] = "Auto Translate: wybrano silnik modelu lokalnego, ale jego model nie został pobrany. Włącz w opcjach „Pobierz model offline” (~1.4 GB) — albo wybierz „Online (darmowe publiczne punkty końcowe)”, które nie wymaga pobierania niczego. Oczekiwane pliki: %s",
         ["pt-br"] = "Auto Translate: um mecanismo de modelo local está selecionado, mas o modelo dele não foi baixado. Ative “Baixar o modelo offline” nas opções (~1,4 GB) — ou selecione “Online (endpoints gratuitos)”, que não precisa baixar nada. Arquivos esperados: %s",
     },
-    model_download_missing = {
-        en = "Auto Translate: the automatic model download is not implemented yet. Place the 4 model files (model.bin, config.json, shared_vocabulary.json, sentencepiece.bpe.model) in: %s",
-        ["zh-cn"] = "Auto Translate：自动下载功能尚未实现。请把 4 个模型文件（model.bin、config.json、shared_vocabulary.json、sentencepiece.bpe.model）放到：%s",
-        ["zh-tw"] = "Auto Translate：自動下載模型的功能尚未實作。請將 4 個模型檔案（model.bin、config.json、shared_vocabulary.json、sentencepiece.bpe.model）放到：%s",
-        ["ja"] = "Auto Translate：モデルの自動ダウンロードはまだ実装されていません。4 つのモデルファイル（model.bin、config.json、shared_vocabulary.json、sentencepiece.bpe.model）を次の場所に配置してください：%s",
-        ["ko"] = "Auto Translate: 자동 모델 다운로드는 아직 구현되지 않았습니다. 모델 파일 4개(model.bin, config.json, shared_vocabulary.json, sentencepiece.bpe.model)를 다음 위치에 넣으세요: %s",
-        ["ru"] = "Auto Translate: автоматическая загрузка модели пока не реализована. Поместите 4 файла модели (model.bin, config.json, shared_vocabulary.json, sentencepiece.bpe.model) в: %s",
-        ["de"] = "Auto Translate: Der automatische Modell-Download ist noch nicht implementiert. Lege die 4 Modelldateien (model.bin, config.json, shared_vocabulary.json, sentencepiece.bpe.model) hier ab: %s",
-        ["fr"] = "Auto Translate : le téléchargement automatique du modèle n'est pas encore implémenté. Placez les 4 fichiers du modèle (model.bin, config.json, shared_vocabulary.json, sentencepiece.bpe.model) dans : %s",
-        ["es"] = "Auto Translate: la descarga automática del modelo aún no está implementada. Coloca los 4 archivos del modelo (model.bin, config.json, shared_vocabulary.json, sentencepiece.bpe.model) en: %s",
-        ["it"] = "Auto Translate: il download automatico del modello non è ancora implementato. Metti i 4 file del modello (model.bin, config.json, shared_vocabulary.json, sentencepiece.bpe.model) in: %s",
-        ["pl"] = "Auto Translate: automatyczne pobieranie modelu nie zostało jeszcze zaimplementowane. Umieść 4 pliki modelu (model.bin, config.json, shared_vocabulary.json, sentencepiece.bpe.model) w: %s",
-        ["pt-br"] = "Auto Translate: o download automático do modelo ainda não foi implementado. Coloque os 4 arquivos do modelo (model.bin, config.json, shared_vocabulary.json, sentencepiece.bpe.model) em: %s",
-    },
     -- Only one model fits in the game process (1.7 GB resident),
     -- and the core never releases one), so switching engines mid-session cannot work.
     model_restart_needed = {
@@ -1218,20 +1204,6 @@ return {
 
     -- The local models are a fallback, and the engine list should say so: they are the
     -- only option without a network, and measurably the weakest one.
-    engine_local_note = {
-        en = "The offline models are the fallback for when no API key is available: they are smaller than the online services and make more mistakes, so they are used only when nothing else can be.",
-        ["zh-cn"] = "本地模型是没有 API 密钥时的保底手段：它们比在线服务小、出错更多，因此只会在别无选择时使用。",
-        ["zh-tw"] = "離線模型是沒有 API 金鑰時的備援：它們比線上服務小、也更容易出錯，因此只有在別無選擇時才會使用。",
-        ["ja"] = "オフラインモデルは、API キーが使えないときの代替手段です。オンラインサービスより小型で誤りも多いため、他に手段がない場合にのみ使用されます。",
-        ["ko"] = "오프라인 모델은 API 키를 사용할 수 없을 때의 대체 수단입니다. 온라인 서비스보다 작고 실수가 많으므로 다른 방법이 전혀 없을 때만 사용됩니다.",
-        ["ru"] = "Офлайн-модели — запасной вариант на случай, когда ключа API нет: они меньше онлайн-сервисов и допускают больше ошибок, поэтому используются только тогда, когда ничего другого не остаётся.",
-        ["de"] = "Die Offline-Modelle sind der Fallback, wenn kein API-Schlüssel verfügbar ist: Sie sind kleiner als die Online-Dienste und machen mehr Fehler, deshalb werden sie nur verwendet, wenn nichts anderes geht.",
-        ["fr"] = "Les modèles hors ligne sont la solution de repli lorsqu'aucune clé API n'est disponible : ils sont plus petits que les services en ligne et font plus d'erreurs, ils ne sont donc utilisés que lorsque rien d'autre ne le peut.",
-        ["es"] = "Los modelos sin conexión son la reserva para cuando no hay ninguna clave de API disponible: son más pequeños que los servicios en línea y cometen más errores, así que solo se usan cuando no queda otra opción.",
-        ["it"] = "I modelli offline sono il ripiego per quando non è disponibile una chiave API: sono più piccoli dei servizi online e sbagliano di più, quindi vengono usati solo quando non c'è alternativa.",
-        ["pl"] = "Modele offline to zabezpieczenie na wypadek braku klucza API: są mniejsze niż usługi online i popełniają więcej błędów, dlatego używa się ich tylko wtedy, gdy nie ma innej możliwości.",
-        ["pt-br"] = "Os modelos offline são a alternativa para quando não há chave de API disponível: são menores que os serviços online e erram mais, por isso só são usados quando não há outra opção.",
-    },
     model_threads = {
         en = "Cores for the offline model",
         ["zh-cn"] = "本地模型使用核心数",
@@ -1498,20 +1470,6 @@ return {
         ["it"] = "Rimuove i quattro file del modello (~1,4 GB) e qualsiasi file che non ha superato il controllo del checksum. Il motore offline smette di funzionare finché non vengono scaricati di nuovo. Se il modello è già caricato in questa sessione, i suoi 1,7 GB di memoria vengono liberati solo al riavvio del gioco.",
         ["pl"] = "Usuwa cztery pliki modelu (~1.4 GB) oraz każdy plik, który nie przeszedł weryfikacji sumy kontrolnej. Silnik offline przestaje działać, dopóki pliki nie zostaną pobrane ponownie. Jeśli model został już wczytany w tej sesji, jego 1.7 GB pamięci zostanie zwolnione dopiero po restarcie gry.",
         ["pt-br"] = "Remove os quatro arquivos do modelo (~1,4 GB) e qualquer arquivo que falhou na verificação de checksum. O mecanismo offline para de funcionar até que eles sejam baixados de novo. Se o modelo já estiver carregado nesta sessão, seus 1,7 GB de memória só são liberados quando o jogo for reiniciado.",
-    },
-    model_download_started = {
-        en = "Auto Translate: downloading the offline model (starting with %s). The game can keep running.",
-        ["zh-cn"] = "Auto Translate：正在下载离线模型（从 %s 开始）。期间可以继续游戏。",
-        ["zh-tw"] = "Auto Translate：正在下載離線模型（從 %s 開始）。遊戲可以照常運行。",
-        ["ja"] = "Auto Translate：オフラインモデルをダウンロードしています（%s から開始）。ゲームは続けられます。",
-        ["ko"] = "Auto Translate: 오프라인 모델을 다운로드하는 중입니다(%s부터 시작). 게임은 계속 실행할 수 있습니다.",
-        ["ru"] = "Auto Translate: идёт загрузка офлайн-модели (начиная с %s). Игра может работать дальше.",
-        ["de"] = "Auto Translate: Das Offline-Modell wird heruntergeladen (Beginn bei %s). Das Spiel kann weiterlaufen.",
-        ["fr"] = "Auto Translate : téléchargement du modèle hors ligne (début avec %s). Le jeu peut continuer à tourner.",
-        ["es"] = "Auto Translate: descargando el modelo sin conexión (empezando por %s). El juego puede seguir en marcha.",
-        ["it"] = "Auto Translate: download del modello offline in corso (a partire da %s). Il gioco può continuare a girare.",
-        ["pl"] = "Auto Translate: pobieranie modelu offline (zaczynając od %s). Gra może działać dalej.",
-        ["pt-br"] = "Auto Translate: baixando o modelo offline (começando por %s). O jogo pode continuar rodando.",
     },
     model_download_done = {
         en = "Auto Translate: the offline model is complete and verified. Selecting the local engine now works.",
