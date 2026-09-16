@@ -625,6 +625,16 @@ quarter of a second. A burst inside the same second is what gets the free tier t
 answering, and batching does not change that — it only means a second buys up to eight short
 labels instead of one.
 
+**What happens when one is cut off** (the free tier is meant to survive that, since it is all a
+keyless player has):
+
+| when | what the mod does |
+| --- | --- |
+| one request fails | the item moves to the next provider in the list (`clients5` → `gtx` → `MyMemory`) and is retried there |
+| one provider fails to connect **3 times** | it is dropped for the rest of the session with a log line, so every later key skips it instead of paying the timeout again; a request that succeeds resets that counter |
+| the service answers **429/403** (rate limited, quota) | translation pauses for **5 minutes** and the item is retried when the pause ends — the HUD counts it down |
+| **all three** are unreachable | the run does **not** end: it waits 5 minutes, re-arms all three providers and works through the queue again. Three such waits at most, then it stops with the usual "every provider was unreachable" message — a machine that is simply offline should not loop forever |
+
 **What batching costs, measured.** A batched request carries `[n] ` markers, and a service that
 bills per character charges for those too. Over the 135 strings of the probe corpus
 (`tools/batch_cost.lua` drives the real planner): requests **135 → 67 (−50%)**, characters

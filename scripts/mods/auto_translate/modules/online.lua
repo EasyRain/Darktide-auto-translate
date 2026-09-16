@@ -815,6 +815,16 @@ end
 -- ---------------------------------------------------------------------------
 local PROVIDER_DISABLE_AFTER = 3
 
+-- When *every* provider of the keyless tier is unusable, that is the network rather than the
+-- string - and the free endpoints are what a player with no key and no model has, so ending the
+-- run is the one answer that helps nobody. Instead the whole tier is given another chance after
+-- a wait (the same 300 s the quota path uses, and the HUD counts it down because `cooldown` is
+-- already part of M.status()). Bounded on purpose: TIER_RETRY_LIMIT waits, then the run stops
+-- with its usual message, so a machine that is simply offline does not loop forever.
+local TIER_RETRY_COOLDOWN = 300
+local TIER_RETRY_LIMIT = 3
+local tier_retries = 0
+
 local provider_failures = {}
 local disabled_providers = {}
 
@@ -837,6 +847,8 @@ local function note_provider_success(name)
     if (provider_failures[name] or 0) > 0 then
         provider_failures[name] = 0
     end
+    -- A provider that answered means the outage the tier retry was waiting out is over.
+    tier_retries = 0
 end
 
 function M.provider_health()
@@ -1301,6 +1313,7 @@ local fail_item
 local dispatch_custom     -- defined below, next to handle_response()
 local handle_online_batch -- defined below, next to handle_local_batch()
 local join_batch          -- defined below, next to dispatch_lines()
+local retry_whole_tier    -- defined below, next to fail_item()
 
 -- Starts a request for one queued item. Returns false when nothing was started.
 -- dispatch_lines() is defined further down, next to the accept path it has to use.
@@ -1432,9 +1445,15 @@ local function dispatch(mod)
     end
 
     if not provider then
-        -- Every provider this language had was ruled out. Consuming the rest of
-        -- the queue here would count hundreds of "refusals" without a single
-        -- request (that happened: 252 items drained in two seconds), so stop.
+        -- Every provider this language had was ruled out. For the keyless tier that is almost
+        -- always the network rather than the string, and there is nothing below it to fall back
+        -- to, so wait the outage out and try the tier again before ending the run.
+        if M.state.engine == "online_free"
+            and retry_whole_tier(mod, item, "every provider was unreachable") then
+            return false
+        end
+        -- Otherwise: consuming the rest of the queue here would count hundreds of "refusals"
+        -- without a single request (that happened: 252 items drained in two seconds), so stop.
         M.state.last_error = "no usable provider left"
         util.warn(mod, "no online provider is usable for '%s'; stopping with %d key(s) left",
             tostring(M.state.lang), q_count())
@@ -1881,6 +1900,12 @@ function fail_item(mod, req, reason, http_status, transport, code)
     M.state.last_error = reason
 
     if transport then
+        -- The item ran out of providers: for the keyless tier that means the whole tier is
+        -- unreachable right now, so wait it out rather than counting an engine failure that
+        -- would pause the engine and end the run.
+        if M.state.engine == "online_free" and retry_whole_tier(mod, item, tostring(reason)) then
+            return
+        end
         M.state.failed = M.state.failed + 1
         util.warn(mod, "could not translate %s:%s (%s)", item.mod_id, item.key, tostring(reason))
         engines.note_failure(mod, reason)
@@ -1892,6 +1917,47 @@ function fail_item(mod, req, reason, http_status, transport, code)
         util.info(mod, "refused %s:%s (%s)", item.mod_id, item.key, tostring(reason))
     end
 end
+
+-- Waits out an outage of the whole free tier and gives its providers another chance.
+--
+-- Returns true when the run should wait rather than end: the item goes back to the head of the
+-- queue, the per-provider verdicts are cleared (they were made *during* the outage, which is
+-- exactly what the retry is testing), and the usual cooldown clock holds dispatch off - the HUD
+-- counts it down. After TIER_RETRY_LIMIT waits it returns false and the caller stops the run the
+-- way it always did, so an offline machine gets three 5-minute chances and then a clear message
+-- instead of an endless loop.
+retry_whole_tier = function(mod, item, reason)
+    if tier_retries >= TIER_RETRY_LIMIT then
+        return false
+    end
+    tier_retries = tier_retries + 1
+
+    -- Cleared in place: M.provider_health() hands these tables out.
+    for name in pairs(disabled_providers) do
+        disabled_providers[name] = nil
+    end
+    for name in pairs(provider_failures) do
+        provider_failures[name] = nil
+    end
+
+    cooldown_until = elapsed + TIER_RETRY_COOLDOWN
+    M.state.provider = nil
+    q_unshift(item)
+
+    util.popup(mod, "free_tier_retry", math.floor(TIER_RETRY_COOLDOWN / 60), tier_retries, TIER_RETRY_LIMIT)
+    util.warn(mod, "every free endpoint failed (%s); waiting %d s and trying the whole tier again (attempt %d of %d)",
+        tostring(reason), TIER_RETRY_COOLDOWN, tier_retries, TIER_RETRY_LIMIT)
+    return true
+end
+
+-- Exposed for tools/smoke_online.lua: the wait, its bound, and that it re-arms the providers.
+M.retry_whole_tier_for_tests = function(mod, item, reason)
+    return retry_whole_tier(mod, item, reason)
+end
+M.tier_retry_for_tests = function()
+    return tier_retries, TIER_RETRY_LIMIT, TIER_RETRY_COOLDOWN
+end
+M.note_provider_success_for_tests = note_provider_success
 
 -- Puts items back at the head of the queue, marked so that take_batch() leaves them
 -- alone. Used when a batch answer cannot be attributed to individual items: the same

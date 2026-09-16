@@ -293,6 +293,46 @@ do
     check("batch request: and one part", #single_parts, 1)
 end
 
+-- When the whole free tier is down, the run waits and tries the tier again instead of ending:
+-- that tier is the fallback for a player with no key and no model, so stopping helps nobody.
+-- Bounded, so a machine that is simply offline gets three 5-minute chances and then the usual
+-- "every provider was unreachable" stop.
+do
+    local notices = {}
+    online.init({ popup = function(_, key, ...) notices[#notices + 1] = { key = key, args = { ... } } end,
+                  info = function() end, warn = function() end, log = function() end },
+                nil, fake_glossary, { api_provider = function() return "deepl" end,
+                                      resolve = function() return "online_free" end,
+                                      providers_for = function() return { "google_clients5" } end }, nil)
+    online.state.engine = "online_free"
+
+    local _, limit, cooldown = online.tier_retry_for_tests()
+    check("tier retry: five minutes, three attempts", cooldown, 300)
+    check("tier retry: the bound is three", limit, 3)
+
+    local item = { mod_id = "m", key = "k", en = "Reload Speed", hash = "" }
+    check("tier retry: a failing tier waits instead of ending the run",
+        online.retry_whole_tier_for_tests({}, item, "unreachable"), true)
+    check("tier retry: and the wait is visible", online.status().cooldown > 0, true)
+    check("tier retry: the notice names the attempt",
+        notices[1] and notices[1].key, "free_tier_retry")
+    check("tier retry: and the item is back in the queue", online.status().left > 0, true)
+
+    online.retry_whole_tier_for_tests({}, item, "unreachable")
+    check("tier retry: a third wait is still allowed",
+        online.retry_whole_tier_for_tests({}, item, "unreachable"), true)
+    check("tier retry: but not a fourth", 
+        online.retry_whole_tier_for_tests({}, item, "unreachable"), false)
+
+    -- A provider answering again clears the budget, so a later outage gets its own three waits.
+    local note_success = online.note_provider_success_for_tests
+    if note_success then
+        note_success("google_clients5")
+        check("tier retry: a working provider resets the attempts",
+            online.tier_retry_for_tests() == 0, true)
+    end
+end
+
 -- Pacing: the free endpoints are the ones a burst gets cut off on, so they have to be the
 -- slower of the two - a whole second between requests, against a quarter of a second for a
 -- paid API. This is a rule about which tier is fragile, so it is pinned here rather than left
