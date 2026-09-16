@@ -1450,6 +1450,24 @@ do
         check("session: and the gate is open afterwards",
             online.session_ready_for_tests("bing"), true)
 
+        -- A page that arrives for a request we are not waiting for belongs to a run that was
+        -- stopped or replaced: it must be discarded, not parsed into a session.
+        session_ready = false
+        parsed_page = nil
+        online.start_bootstrap_for_tests(probe_mod, "bing")
+        fake_http_core.at_http_poll = function(id, result, code, body, cap, len)
+            if not ready then return 0 end
+            ready = false
+            id[0], result[0], code[0] = 7, 0, 200          -- 7, not the 9 we are waiting for
+            local page = "<script>IG:\"abc\",params_AbusePreventionHelper = [1,\"tok\",3]</script>"
+            ffi.copy(body, page)
+            len[0] = #page
+            return 1
+        end
+        online.update(probe_mod, 0.016)
+        check("session: a page for another request is discarded, not parsed",
+            parsed_page == nil and online.session_ready_for_tests("bing") == false, true)
+
         -- A page without the block: no session, and the provider is counted against.
         session_ready = false
         online.start_bootstrap_for_tests(probe_mod, "bing")

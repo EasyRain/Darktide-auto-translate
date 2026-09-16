@@ -2449,6 +2449,15 @@ function M.update(mod, dt)
             return
         end
 
+        -- Same rule as the translation branch below: the answer has to belong to the request we
+        -- are waiting for. A page fetched by a run that was stopped or replaced can still be
+        -- finishing, and reading it here would both invent a session out of whatever it is and
+        -- eat the turn of the page actually on its way.
+        if rc == 1 and id_buf[0] ~= inflight.job then
+            util.info(mod, "discarding stale response %d (waiting for %d)", id_buf[0], inflight.job)
+            return
+        end
+
         local req = inflight
         inflight = nil
 
