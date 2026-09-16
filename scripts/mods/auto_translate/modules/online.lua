@@ -879,6 +879,15 @@ local function provider_answered(mod, name)
     if type(name) ~= "string" or name == "" then
         return
     end
+
+    -- Only the keyless tier has a learnt order. The paid API reports success through the same hook,
+    -- so without this an API run wrote its own provider name into a setting that is only ever
+    -- compared against free endpoints - found in a real settings file as
+    -- `free_provider_first = "deepl"` - and threw away the free endpoint that network needs.
+    if M.state.engine ~= "online_free" then
+        return
+    end
+
     if type(mod) ~= "table" or type(mod.get) ~= "function" or type(mod.set) ~= "function" then
         return
     end

@@ -1517,15 +1517,32 @@ do
 
         check("order: an endpoint that answers is remembered",
             (function()
+                local previous = online.state.engine
+                online.state.engine = "online_free"
                 online.provider_answered_for_tests(remembering, "google_clients5")
+                online.state.engine = previous
                 return stored.free_provider_first
             end)(), "google_clients5")
         check("order: and written once, not on every later success",
             (function()
+                local previous = online.state.engine
                 local first = writes
+                online.state.engine = "online_free"
                 online.provider_answered_for_tests(remembering, "google_clients5")
+                online.state.engine = previous
                 return writes - first
             end)(), 0)
+        -- The paid API reports success through the same hook and its provider name is not a free
+        -- endpoint: a real settings file held `free_provider_first = "deepl"`, which left the learnt
+        -- order with nothing to prefer.
+        check("order: an API run leaves the free-tier preference alone",
+            (function()
+                local previous = online.state.engine
+                online.state.engine = "online_api"
+                online.provider_answered_for_tests(remembering, "deepl")
+                online.state.engine = previous
+                return stored.free_provider_first
+            end)(), "google_clients5")
 
         check("order: the remembered endpoint is tried first",
             online.providers_for_tests(remembering, "online_free", "zh-cn")[1], "google_clients5")
