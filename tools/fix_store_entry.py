@@ -1,76 +1,87 @@
-"""Correct one stored translation that predates the glossary term.
+"""Correct stored translations that predate a glossary fix.
 
-Why a hand edit: a stored entry is only re-translated when the *source* hash changes (store.lua
-compares util.hash(value["en"])), so a glossary fix never reaches text that is already stored.
-The wording this key would get now is produced by the glossary (Rampage -> 狂暴), which
-tools/check_glossary.lua asserts; this brings the existing entry in line without paying for a
-re-translation of the whole store.
+Why a hand edit: a stored entry is only redone when its *source* text changes (store.lua compares
+util.hash(value["en"])), so a glossary fix alone does not reach text that is already stored - the
+player would keep reading the old wording until that key happens to be translated again. Editing the
+one entry is free; re-translating the store is not.
+
+Each fix names the store file, the entry, and the wording the glossary now produces.
 
     python tools/fix_store_entry.py            # dry run: show what would change
     python tools/fix_store_entry.py --write
 """
 import sys
-import io
-import os
 
-STORE = r"D:\Steam\steamapps\common\Warhammer 40,000 DARKTIDE\mods\auto_translate\translations\zh-cn\ability_timer.lua"
-KEY = "broker_ability_punk_rage"
-NEW_TEXT = "狂暴！"
+# The game/mod root, where the mod writes its translation stores.
+TRANSLATIONS = (r"D:\Steam\steamapps\common\Warhammer 40,000 DARKTIDE"
+                r"\mods\auto_translate\translations")
 
-path = sys.argv[1] if len(sys.argv) > 1 and not sys.argv[1].startswith("--") else STORE
-write = "--write" in sys.argv
+# (language, store, entry key, new text, why)
+FIXES = [
+    ("zh-cn", "ability_timer", "broker_ability_punk_rage", "怒火冲天！",
+     "Rampage! came back as 大闹天宫 from every engine; the game's own key "
+     "loc_talent_broker_ability_punk_rage says 怒火冲天！"),
+    ("zh-cn", "ability_timer", "broker_ability_stimm_field", "兴奋剂补给",
+     "Stimm Supply came back as 斯蒂姆供应公司; the game's own key "
+     "loc_talent_broker_ability_stimm_field says 兴奋剂补给"),
+]
 
-with open(path, "rb") as fh:
-    raw = fh.read()
-bom = raw.startswith(b"\xef\xbb\xbf")
-text = raw.decode("utf-8-sig")
-newline = "\r\n" if "\r\n" in text else "\n"
-lines = text.split(newline)
 
-start = None
-for i, line in enumerate(lines):
-    if line.strip() == '["%s"] = {' % KEY:
-        start = i
-        break
-if start is None:
-    print("entry %s not found in %s" % (KEY, path))
-    raise SystemExit(2)
+def fix(lang, store, key, new_text, why, write):
+    path = "%s\\%s\\%s.lua" % (TRANSLATIONS, lang, store)
+    with open(path, "rb") as fh:
+        raw = fh.read()
+    bom = raw.startswith(b"\xef\xbb\xbf")
+    text = raw.decode("utf-8-sig")
+    newline = "\r\n" if "\r\n" in text else "\n"
+    lines = text.split(newline)
 
-text_at = None
-for i in range(start + 1, min(start + 12, len(lines))):
-    stripped = lines[i].strip()
-    if stripped.startswith("text = "):
-        text_at = i
-        break
-    if stripped.startswith('["'):
-        break
+    marker = '["%s"] = {' % key
+    start = next((i for i, line in enumerate(lines) if line.strip() == marker), None)
+    if start is None:
+        print("SKIP  %s/%s: no entry for %s" % (lang, store, key))
+        return "missing"
 
-if text_at is None:
-    print("no text field inside the entry for %s" % KEY)
-    raise SystemExit(2)
+    at = None
+    for i in range(start + 1, min(start + 12, len(lines))):
+        stripped = lines[i].strip()
+        if stripped.startswith("text = "):
+            at = i
+            break
+        if stripped.startswith('["'):
+            break
+    if at is None:
+        print("SKIP  %s/%s: entry %s has no text field" % (lang, store, key))
+        return "missing"
 
-old_line = lines[text_at]
-indent = old_line[:len(old_line) - len(old_line.lstrip())]
-new_line = '%stext = "%s",' % (indent, NEW_TEXT)
+    old = lines[at]
+    indent = old[:len(old) - len(old.lstrip())]
+    new = '%stext = "%s",' % (indent, new_text)
+    print("%s/%s  %s" % (lang, store, key))
+    print("    %s -> %s" % (old.strip(), new.strip()))
+    print("    because %s" % why)
+    if old == new:
+        print("    already correct")
+        return "same"
+    if not write:
+        return "would-fix"
+    lines[at] = new
+    with open(path, "wb") as fh:
+        if bom:
+            fh.write(b"\xef\xbb\xbf")
+        fh.write(newline.join(lines).encode("utf-8"))
+    return "fixed"
 
-print("file      : %s" % path)
-print("entry     : %s (line %d)" % (KEY, start + 1))
-print("old       : %s" % old_line.strip())
-print("new       : %s" % new_line.strip())
-print("BOM       : %s, newlines: %s" % (bom, "CRLF" if newline == "\r\n" else "LF"))
 
-if old_line == new_line:
-    print("nothing to do")
-    raise SystemExit(0)
+def main():
+    write = "--write" in sys.argv
+    results = [fix(*f, write) for f in FIXES]
+    print("")
+    print("%s: %s" % ("applied" if write else "dry run", ", ".join(results)))
+    if not write and "would-fix" in results:
+        print("pass --write to apply")
+    return 1 if "missing" in results else 0
 
-if not write:
-    print("\ndry run - pass --write to apply")
-    raise SystemExit(0)
 
-lines[text_at] = new_line
-out = newline.join(lines)
-with open(path, "wb") as fh:
-    if bom:
-        fh.write(b"\xef\xbb\xbf")
-    fh.write(out.encode("utf-8"))
-print("\nwritten")
+if __name__ == "__main__":
+    raise SystemExit(main())

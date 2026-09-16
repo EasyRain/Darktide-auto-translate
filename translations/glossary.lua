@@ -32,7 +32,9 @@ return {
 
         -- game terms whose own loc key is not in the collected key list (yet); the game's
         -- wording, checked against the export where the export has the term
-        { en = "Rampage", ["zh-cn"] = "狂暴", ["zh-tw"] = "狂暴" },
+        { en = "Rampage!", ["zh-cn"] = "怒火冲天！", ["zh-tw"] = "怒火沖天！" },
+        { en = "Rampage", ["zh-cn"] = "怒火冲天", ["zh-tw"] = "怒火沖天" },
+        { en = "Stimm Supply", ["zh-cn"] = "兴奋剂补给", ["zh-tw"] = "興奮劑補給" },
 
         -- hand written interface labels (general UI words, 16 languages)
         { en = "Right", ["zh-cn"] = "右侧", ["zh-tw"] = "右側", ja = "右", ko = "오른쪽", ru = "справа", de = "rechts", fr = "droite", es = "derecha", it = "destra", pl = "prawo", ["pt-br"] = "direita", uk = "праворуч", nl = "rechts", sv = "höger", tr = "sağ", ar = "يمين" },

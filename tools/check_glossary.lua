@@ -263,12 +263,15 @@ do
         -- service leaves beside a placeholder, because Chinese does not separate words with spaces.
         return (glossary.unmask(masked, tokens):gsub("近战", "X"))
     end)(), "Increases X伤害")
-    -- A game term whose loc key is not in the collected key list yet: its wording comes from the
-    -- hand checked block in i18n/build_glossary.py, and the bug it fixes was this exact string -
-    -- "Rampage!" (the Hive Scum ability) was translated as "大闹天宫!" by every engine.
-    check("a term with an uncollected loc key still masks", (through("Rampage", "zh-cn")), "狂暴")
-    check("and keeps the punctuation around it", (through("Rampage!", "zh-cn")), "狂暴!")
+    -- A game term whose loc key is not in the collected key list yet: the wording is the game's
+    -- own, read out of the game by the string-cache harvest, and the bug it fixes was this exact
+    -- string - "Rampage!" (the Hive Scum ability) was translated as "大闹天宫!" by every engine.
+    check("a term with an uncollected loc key still masks", (through("Rampage", "zh-cn")), "怒火冲天")
+    check("and keeps the punctuation around it", (through("Rampage!", "zh-cn")), "怒火冲天！")
     check("and does not touch a longer word", (through("Rampaged", "zh-cn")), "Rampaged")
+    -- A two-word name whose game key is not collected either ("Stimm Supply" is the mod's name for
+    -- loc_talent_broker_ability_stimm_field, which the client shows as 兴奋剂补给).
+    check("a two word name is masked too", (through("Stimm Supply", "zh-cn")), "兴奋剂补给")
     -- Only Chinese has a verified wording, so anywhere else the term stays out of the way instead
     -- of forcing an invented one.
     check("and is left alone where it has no verified wording",

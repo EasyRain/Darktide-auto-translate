@@ -675,20 +675,50 @@ for key names somebody wrote down: 701 of the 1459 names in `translations/term_k
 the other 758 are reported as unknown. A term whose key nobody guessed is therefore invisible. The
 `MISSING_LOC` block in the script is for those: the game's own wording, checked against the export
 where the export has the term, and *shadowed* by it — as soon as an export really resolves the key
-the game's value wins and the entry drops out of the generated file by itself. The first entry is
-`Rampage` (the Hive Scum ability): its key was never collected, so every engine translated the word
-as 大闹天宫, which is the name of a well-known story rather than the ability.
+the game's value wins and the entry drops out of the generated file by itself. Two of them, and both
+were reported by the player:
 
-The key names themselves come from the game's string cache. `exporter.harvest_cache` reads
+| term | the game's wording | the key it comes from |
+| --- | --- | --- |
+| `Rampage!` | 怒火冲天！ | `loc_talent_broker_ability_punk_rage` |
+| `Stimm Supply` | 兴奋剂补给 | `loc_talent_broker_ability_stimm_field` |
+
+"Rampage!" (the Hive Scum combat ability) had no wording to protect it, so every engine translated
+it as 大闹天宫 — the name of a well-known story rather than the ability. The values in the table are
+read out of the game itself, not from a third-party keyword list: the harvest below named the keys,
+and the wording is what the game's own localization holds for them.
+
+The key names come from the game's string cache. `exporter.harvest_cache` reads
 `Managers.localization._string_cache` — the memo of every string the session has resolved — keeps the
 term-shaped values whose keys the list does not have, and writes them to
 `translations/export/cache_<lang>.lua` (the same shape as an export). It runs once at startup and
 then every 60 seconds, and writes only when it found something new, so browsing the talent tree once
-is what names the keys no key list guessed. Note that a *stored* translation is never redone because
-the glossary changed — a stored entry is only re-translated when its source text changes — so
-correcting wording that is already stored means editing that one entry, which
-`python tools\fix_store_entry.py` does in place (dry run by default, `--write` to apply) instead of
-paying for a re-translation.
+is what names the keys no key list guessed. The first run named 221 keys, which is how a class added
+after the list was written (its talents, abilities, auras and keystones), the enemy families, the
+mission names and the keyboard labels became visible.
+
+`python tools\build_term_keys.py <mods-dir>` merges those names into `translations/term_keys.lua`
+(the block is labelled "named by the game's string cache") and bumps the version, so the next launch
+collects them. One step stays manual for terms the glossary has to pair up: it matches the *English*
+source word against the target language, and an English value only exists once the game has been
+launched in English. Switching language once is therefore what turns the harvested keys into ordinary
+terms — and the exported term then shadows the block above.
+
+The harvest is a term source in its own right. `build_glossary.py` pairs `cache_en.lua` with the other
+`cache_<lang>.lua` files **per key**, so a key no list contains still yields a term as long as both
+sides carry it — measured with a stand-in English harvest: "Renegade Berzerker" → 血痂狂暴者,
+"Scab Berzerker" → 渣滓狂暴者, "Magistratum Dungeon" → TM8-707 法庭密牢. Nothing is invented: both
+values have to pass the same "is this a bare term" test the exports do, a word the exports already
+carry wins, and a cache-sourced term shadows the hand-written block exactly like an exported one.
+That is what makes a repeated collection round worthwhile: the key list supplies the terms it knows,
+the cache supplies the ones it does not.
+
+Note that a *stored* translation is never redone because the glossary changed: a stored entry is only
+re-translated when its source text changes, so correcting wording that is already stored means
+editing that one entry. `python tools\fix_store_entry.py` does it in place — dry run by default,
+`--write` to apply, preserving hash, source and encoding — which is cheaper than re-translating the
+store. (A manual "translate again" run does pick the new wording up: the glossary is what the engine
+sees, so the stored text is rewritten to the official one.)
 
 ### Where `translations/export/` belongs
 
@@ -700,6 +730,33 @@ paying for a re-translation.
 
 `tools/deploy_to_game.ps1` therefore syncs `glossary.lua` and `term_keys.lua` and prints a note
 about the export folder, rather than copying 73 KB the game never reads.
+
+### A collection round, start to finish
+
+The mod writes both files for a language on its own, so a round is one launch per language:
+
+1. Steam → Darktide → Properties → Language, pick one, launch the game.
+2. Wait for the "terms exported for <lang>" notice — a few seconds; the log line is
+   `exported N term(s) for '<lang>'`.
+3. Open the screens whose wording a mod is likely to repeat: the talent trees of every class, the
+   mission board, the inventory, the options, the penances. The export does not need this (it looks
+   its key list up directly), but the *harvest* can only name keys the session has actually resolved,
+   and the English round is the source column every other language is paired against.
+4. Quit, switch to the next language, repeat — twelve rounds for the twelve languages the game ships.
+
+Then bring the results over and rebuild:
+
+```
+python tools\import_exports.py            # copy every export + harvest into the repository
+python tools\build_term_keys.py <mods>    # merge newly named keys into the key list (bumps the version)
+python tools\build_glossary.py            # rebuild the terms from both sources
+luajit tools\check_glossary.lua           # prove the result still masks what it should
+```
+
+`import_exports.py` reports each file's language, version and key count, flags an export that is
+older than the key list, and says which languages are still missing. A version bump makes the next
+launch collect that language again, which is the point when the key list grew; nothing has to be
+deleted by hand.
 
 ### When the placeholder is dropped, and when a key is given up on
 

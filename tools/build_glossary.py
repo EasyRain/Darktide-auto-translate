@@ -165,6 +165,50 @@ for k in sorted(data.keys()):
         continue
     terms[key] = dict(langs)
 
+# ---- the string-cache harvest ----
+#
+# Everything above only covers key names translations/term_keys.lua contains, and the *English* value
+# is what pairs a key with its target languages - which is why a term whose key nobody guessed stays
+# invisible no matter how many languages are collected. The harvest files
+# (exporter.harvest_cache -> translations/export/cache_<lang>.lua) point the other way: they hold
+# key -> string for the keys the key list does NOT have, in whichever language the game ran.
+#
+# Pairing them per key turns "Renegade Berzerker" -> "血痂狂暴者" into a term as soon as an English
+# harvest exists - no second collection round, and no key list entry. Nothing is invented: a key is
+# used only when the English side and at least one target side both carry it, both values have to
+# pass the same "is this a bare term" test the exports do, and a word the exports already carry wins.
+def parse_cache(lang):
+    path = os.path.join(EXPORT, 'cache_' + lang + '.lua')
+    if not os.path.exists(path):
+        return {}
+    text = io.open(path, encoding='utf-8').read()
+    return dict(re.findall(r'\["(loc_[^"]+)"\] = "((?:[^"\\]|\\.)*)"', text))
+
+cache = {lang: parse_cache(lang) for lang in GAME_LANGS}
+cache = {lang: values for lang, values in cache.items() if values}
+harvested = 0
+if 'en' in cache:
+    for cache_key, raw in cache['en'].items():
+        en = strip_rich(raw)
+        if not is_term(en):
+            continue
+        key = en.lower()
+        if key in terms or key in exported_keys:
+            continue
+        langs = {'en': en}
+        for lang, values in cache.items():
+            if lang == 'en' or cache_key not in values:
+                continue
+            text = strip_rich(values[cache_key])
+            if is_term(text):
+                langs[lang] = text
+        if len(langs) > 1:
+            terms[key] = langs
+            exported_keys.add(key)
+            harvested += 1
+print('string cache: %d extra term(s) from %s'
+      % (harvested, ', '.join(sorted(cache)) if cache else 'no cache_*.lua file'))
+
 # ---- carry over whatever a previous run produced (see parse_existing) ----
 #
 # This happens after the hand-verified blocks are defined, because it needs to know which
@@ -196,21 +240,29 @@ HAND = [
 # never resolved, and a key nobody guessed cannot be looked up (the export resolves 701 of the 1459
 # names in translations/term_keys.lua and reports the other 758 as unknown). Machine translation
 # then invents a wording: "Rampage!" (the Hive Scum ability, key `broker_ability_punk_rage` in
-# ability_timer) came back as "大闹天宫!". Values below are the game's own client wording, taken
-# from mods that record it and checked where the export can check them:
+# ability_timer) came back as "大闹天宫!".
 #
-#   * Enhanced_descriptions/Colors_Keywords_Numbers/COLORS_KWords_zh_cn.lua (_tw.lua) - a keyword
-#     table whose entries agree with the export on the ones the export has: Rending = 撕裂,
-#     Desperado = 亡命之徒, Momentum = 动量
-#   * vfx_swapper's zh-cn localisation ("禁用狂暴状态屏幕特效" for the scum_rampage_screen setting)
+# The values below are the game's own wording, read out of the game itself: exporter.harvest_cache
+# dumped the keys and strings its string cache held (translations/export/cache_zh-cn.lua, 221 keys
+# the key list did not have) and the wording comes from those entries - a loc key the game really
+# has, carrying the string the Chinese client displays. Two of them, and the mod's own key names
+# line up with them one for one:
 #
-# Ordered before the exported section but shadowed by it: as soon as an export really resolves the
-# key, the game's wording wins and this entry disappears from the file on its own. Only languages
-# with a verified wording are listed - for the others the term is simply not masked, which leaves
-# the engine's own translation in place rather than an invented one.
+#     loc_talent_broker_ability_punk_rage   怒火冲天！     ability_timer: broker_ability_punk_rage
+#     loc_talent_broker_ability_stimm_field 兴奋剂补给     ability_timer: broker_ability_stimm_field
+#     loc_talent_broker_ability_focus       亡命之徒       ability_timer: broker_ability_focus (already
+#                                                                         in the glossary from the export)
+#
+# The keys themselves are in translations/term_keys.lua now, so an English collection round turns
+# these into ordinary exported terms - and the export then shadows this block, because it is
+# authoritative for its own terms.
 MISSING_LOC = [
-    # Hive Scum (Broker) combat ability, "punk_rage" in the game's own placeholder syntax
-    ("Rampage", {"zh-cn": "狂暴", "zh-tw": "狂暴"}),
+    # Hive Scum (Broker) combat abilities. The game spells the name with its own exclamation mark,
+    # and the mod writes the English that way too ("Rampage!"), so both spellings are listed: the
+    # matcher prefers the longer term where it applies.
+    ("Rampage!",       {"zh-cn": "怒火冲天！", "zh-tw": "怒火沖天！"}),
+    ("Rampage",        {"zh-cn": "怒火冲天", "zh-tw": "怒火沖天"}),
+    ("Stimm Supply",   {"zh-cn": "兴奋剂补给", "zh-tw": "興奮劑補給"}),
 ]
 
 # ---- hand written interface labels, all 16 languages ----
