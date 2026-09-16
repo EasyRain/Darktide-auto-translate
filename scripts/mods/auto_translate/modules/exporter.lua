@@ -317,15 +317,29 @@ end
 
 -- ---- can another language be read without restarting the game? ----
 --
--- The export above needs one launch per language, because the game runs in one language at a time and
--- switching it means quitting through Steam: twelve launches for twelve languages. Whether that can
--- be avoided depends on the localization manager - if it can hand out a string in a language other
--- than the current one (a language argument, a setter, a per-language localizer, or a backend that
--- loads the package on demand), one session collects every language. Calling into the game from a mod
--- is normal (CuriosChecker opens a shop view from the character screen), so this logs what the object
--- offers and then tries the three shapes the API could have, restoring whatever it touched.
+-- Answered on 2026-09-16, and the answer is no - kept because it is the only record of *why*, and
+-- because a future game build could change it:
 --
--- Log only; nothing is written. One line block, meant to be read once and then deleted.
+--   Managers.localization offers language(), localize(key), exists(), reset_cache(),
+--   setup_localizers() and append_backend_localizations(); its four localizers are resource-backed
+--   per package (each carries lookup, lookup_with_tag, test_font and release), not per language.
+--   Measured on the running game with the key loc_class_broker_name (巢都渣滓):
+--
+--     Localize(key, "en")            -> 巢都渣滓    (the extra argument is ignored)
+--     Localize(key, {language="en"}) -> 巢都渣滓
+--     manager:localize(key, "en")    -> 巢都渣滓
+--     manager:language(key)          -> "zh-cn"
+--     with manager._language = "en":  Localize(key) -> 巢都渣滓
+--     with manager._language = "ja":  Localize(key) -> 巢都渣滓
+--
+-- So the language is bound when the localizers are set up at launch, and one session cannot collect
+-- another language. Offline extraction was checked too: a scan of all 15,425 files in the game's
+-- bundle folder found no plain-text hit for an English string, a Chinese string, a Japanese string
+-- or a loc key name, so the strings are compressed and the runtime is the only way in. Twelve
+-- launches it is; tools/lang_round.ps1 does the language switch and waits for the export.
+--
+-- The player had already reached this conclusion from an earlier mod ("looping does not work, and
+-- even then only class names came through") - this is the measurement behind it.
 function M.probe_languages(mod, key)
     key = key or "loc_class_broker_name"
     local ok, report = pcall(function()

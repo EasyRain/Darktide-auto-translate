@@ -735,14 +735,29 @@ about the export folder, rather than copying 73 KB the game never reads.
 
 The mod writes both files for a language on its own, so a round is one launch per language:
 
-1. Steam → Darktide → Properties → Language, pick one, launch the game.
+1. Switch the game's language — `powershell -File tools\lang_round.ps1 -Language <code>` edits the
+   Steam per-game setting for Darktide and waits; the launcher needs one click, then the script stops
+   the game once the export is in. (Or do it by hand: Steam → Darktide → Properties → Language.)
 2. Wait for the "terms exported for <lang>" notice — a few seconds; the log line is
    `exported N term(s) for '<lang>'`.
 3. Open the screens whose wording a mod is likely to repeat: the talent trees of every class, the
    mission board, the inventory, the options, the penances. The export does not need this (it looks
    its key list up directly), but the *harvest* can only name keys the session has actually resolved,
    and the English round is the source column every other language is paired against.
-4. Quit, switch to the next language, repeat — twelve rounds for the twelve languages the game ships.
+4. Repeat — twelve rounds for the twelve languages the game ships.
+
+Why a round needs a launch at all, measured on 2026-09-16 (the player had already hit this making an
+earlier mod, and it is worth writing down before someone tries again):
+
+* The localization manager cannot serve another language at runtime: `Localize(key, "en")`,
+* `manager:localize(key, "en")` and setting `manager._language` all return the current language's
+  string, and the four localizers are resource-backed per package (they carry `lookup`,
+  `lookup_with_tag`, `test_font`, `release`) rather than per language.
+* The game's own settings file is not the switch either: with `language_id = "en"` in
+  `user_settings.config` the game still started in zh-cn and wrote `zh-cn` back.
+* Reading the strings off the disk is not an option: all 15,425 files in `bundle/` were scanned for
+  plain-text English, Chinese and Japanese strings and for loc key names, with no hit — they are
+  compressed.
 
 Then bring the results over and rebuild:
 
@@ -757,6 +772,13 @@ luajit tools\check_glossary.lua           # prove the result still masks what it
 older than the key list, and says which languages are still missing. A version bump makes the next
 launch collect that language again, which is the point when the key list grew; nothing has to be
 deleted by hand.
+
+One consequence worth knowing when only some rounds have been done: a term needs the **English**
+column, because that is the word the glossary masks in a mod's source text. The zh-cn round collects
+922 keys but 221 of them (the enemy names, the mission names, the keyboard labels, the Hive Scum
+talents) have no English value yet, so they sit in the export unused until an English round adds it.
+`build_glossary.py` prints what came out of the cache pairing and what it skipped, which is how that
+shows up.
 
 ### When the placeholder is dropped, and when a key is given up on
 

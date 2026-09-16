@@ -403,10 +403,9 @@ function mod.on_all_mods_loaded()
     -- term change ever needs another collection run. Log only; nothing is written.
     pcall(exporter.describe_localization, mod)
 
-    -- And one that answers whether the twelve collection rounds can be done in a single session:
-    -- if the manager can hand out a string in another language, no Steam switching is needed.
-    -- Temporary diagnostic - log only, nothing written, safe to delete once answered.
-    pcall(exporter.probe_languages, mod)
+    -- exporter.probe_languages() answered its question on 2026-09-16 and is no longer called: the
+    -- localizers are bound to the language loaded at startup, so a session cannot collect another
+    -- language. See the function's comment for the measurement.
 end
 
 -- Mod options: "Reload translation files"
