@@ -898,7 +898,10 @@ int at_http_pending(void)
 
 const char* at_version(void)
 {
-    return "0.1.0-http";
+    // Kept in step with the .mod descriptor's version. The log line that reports the loaded core
+    // is the first thing to compare when a player reports a problem, and two different numbers
+    // there cost more than the discipline of bumping both.
+    return "0.2.1-http";
 }
 
 int at_core_max_body(void)

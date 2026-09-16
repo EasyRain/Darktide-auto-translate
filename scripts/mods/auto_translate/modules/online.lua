@@ -143,7 +143,11 @@ function M.load_core(mod)
             if probed and available == 1 then
                 core = handle
                 core_state = "ok"
-                util.info(mod, "native core loaded: %s (v%s)", path, tostring(handle.at_version()))
+                -- ffi.string, not tostring: at_version() returns a `const char*`, and tostring on
+                -- a cdata pointer is what printed "[cdata (deleted)]" in the game log - in the one
+                -- line that says which core version is loaded.
+                util.info(mod, "native core loaded: %s (v%s)", path,
+                    tostring(ffi.string(handle.at_version())))
                 return core
             end
             tried[#tried + 1] = path .. " (loaded but not available)"
