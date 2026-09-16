@@ -63,6 +63,11 @@ int at_online_headers(const char*, const char*, char*, int);
 const char* at_online_content_type(const char*);
 int at_online_parse(const char*, const char*, char*, int);
 int at_online_parse_at(const char*, const char*, int, char*, int);
+int at_online_bootstrap_needed(const char*);
+int at_online_bootstrap_path(const char*, char*, int);
+int at_online_bootstrap_parse(const char*);
+int at_online_bootstrap_ready(void);
+void at_online_bootstrap_clear(void);
 const char* at_online_error(void);
 int at_online_lang_code_for(const char*, const char*, char*, int);
 int at_set_model_dir(const char*);
@@ -858,6 +863,71 @@ function M.provider_health()
     return disabled_providers, provider_failures
 end
 
+-- ---------------------------------------------------------------------------
+-- Endpoints that hand out a session on a page load (Bing)
+-- ---------------------------------------------------------------------------
+-- cn.bing.com/translator carries a key, a token and an IG in the page, and every later
+-- /ttranslatev3 request has to send them back. The page is fetched through the core's async
+-- HTTP like every other request - nothing on the game thread ever waits - so the item goes
+-- back to the head of the queue and M.update() collects the session in the meantime. One
+-- page load then serves the rest of the run: measured at 15 requests, one per second, with
+-- the same token still valid after 110 seconds.
+local BOOTSTRAP_CAP = 256
+
+-- True when this provider can send a request right now (no session needed, or one loaded).
+local function session_ready(provider)
+    if core.at_online_bootstrap_needed(provider) == 0 then
+        return true
+    end
+    return core.at_online_bootstrap_ready() == 1
+end
+
+-- Starts the page fetch. Returns true when a job is now in flight.
+local function start_bootstrap(mod, provider)
+    local ffi_lib = Mods.lua.ffi
+    local host_buf = ffi_lib.new("char[?]", BOOTSTRAP_CAP)
+    local path_buf = ffi_lib.new("char[?]", BOOTSTRAP_CAP)
+
+    if core.at_online_host(provider, nil, host_buf, BOOTSTRAP_CAP) == 0
+        or core.at_online_bootstrap_path(provider, path_buf, BOOTSTRAP_CAP) == 0 then
+        local why = cstr(core.at_online_error()) or "could not build the session request"
+        util.warn(mod, "%s: %s", tostring(provider), tostring(why))
+        note_provider_transport_failure(mod, provider, why)
+        return false
+    end
+
+    local job = core.at_http_get(host_buf, path_buf)
+    if job <= 0 then
+        local why = cstr(core.at_error()) or "the session request was rejected"
+        util.warn(mod, "%s: %s", tostring(provider), tostring(why))
+        note_provider_transport_failure(mod, provider, why)
+        return false
+    end
+
+    inflight = { kind = "bootstrap", provider = provider, job = job }
+    M.state.provider = provider
+    util.info(mod, "%s: fetching the session page", tostring(provider))
+    return true
+end
+
+-- Called by dispatch() before a request is built: true when the provider can be used now,
+-- false when the caller should put its item back and wait (a fetch is running, or has just
+-- started).
+local function ensure_session(mod, provider)
+    if session_ready(provider) then
+        return true
+    end
+    if not (inflight and inflight.kind == "bootstrap") then
+        start_bootstrap(mod, provider)
+    end
+    return false
+end
+
+-- Exposed for tools/smoke_online.lua: the gate that keeps a request from being built before
+-- the session page has been read, and the fetch that fills it in.
+M.session_ready_for_tests = session_ready
+M.start_bootstrap_for_tests = start_bootstrap
+
 -- The providers of an item, minus the ones this session has given up on.
 local function usable_providers(list)
     local out = {}
@@ -1466,6 +1536,14 @@ local function dispatch(mod)
         return false
     end
     M.state.provider = provider
+
+    -- An endpoint that needs a session first (Bing) cannot build a request yet: the item goes
+    -- back to the head and the next frames collect the session page. Nothing is counted as a
+    -- failure here - a fetch that never lands is counted when its answer is read.
+    if not ensure_session(mod, provider) then
+        q_unshift(item)
+        return false
+    end
 
     -- Everything the core knows how to build is for the services it ships. A custom
     -- endpoint is described by settings instead, so its request is built in
@@ -2351,7 +2429,42 @@ function M.update(mod, dt)
                 fail_item(mod, req, why, 0, transport, code)
             end
         end
-    elseif inflight then
+    end
+
+    if inflight and inflight.kind == "bootstrap" then
+        -- The session page for an endpoint that needs one. Fetching it is a request like any
+        -- other, so it is polled here rather than blocking the frame; a page that does not
+        -- arrive, or does not carry a session, counts against the provider (three of those and
+        -- it is skipped for the session, exactly like an unreachable host).
+        local rc = core.at_http_poll(id_buf, result_buf, code_buf, body_buf, BODY_CAP, len_buf, win_buf)
+
+        if rc == 0 then
+            return
+        end
+
+        local req = inflight
+        inflight = nil
+
+        if rc ~= 1 or result_buf[0] ~= 0 then
+            local why = cstr(core.at_error()) or "the session page could not be fetched"
+            util.warn(mod, "%s: %s", tostring(req.provider), tostring(why))
+            note_provider_transport_failure(mod, req.provider, why)
+        elseif code_buf[0] < 200 or code_buf[0] >= 300 then
+            util.warn(mod, "%s: the session page answered HTTP %d", tostring(req.provider), code_buf[0])
+            note_provider_transport_failure(mod, req.provider,
+                string.format("HTTP %d for the session page", code_buf[0]))
+        elseif core.at_online_bootstrap_parse(body_buf) == 1 then
+            util.info(mod, "%s: session ready", tostring(req.provider))
+            next_slot = elapsed
+        else
+            local why = cstr(core.at_online_error()) or "the session page carried no session"
+            util.warn(mod, "%s: %s", tostring(req.provider), tostring(why))
+            note_provider_transport_failure(mod, req.provider, why)
+        end
+        return
+    end
+
+    if inflight then
         local rc = core.at_http_poll(id_buf, result_buf, code_buf, body_buf, BODY_CAP, len_buf, win_buf)
 
         if rc == 1 then

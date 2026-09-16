@@ -87,6 +87,21 @@ if (Test-Path $coreSource) {
 # game's terminology in twelve languages, which cannot be re-collected without launching the game
 # once per language). A stale copy in the game folder is worse than none, because the exporter
 # skips a language whose file already exists at the current key-list version.
+# The descriptor itself carries the version the options screen shows, and the paths the game
+# loads the mod from. It is one line of state that goes stale silently: a version bump in the
+# repository used to reach the game folder only if someone copied it by hand, which the release
+# packaging check caught (the zip said 0.2.0 and the deployed mod said 0.1.0).
+$descriptorSource = Join-Path $RepoRoot "$name.mod"
+$descriptorDest = Join-Path $GameMods "$name\$name.mod"
+if (Test-Path $descriptorSource) {
+    Copy-Item $descriptorSource -Destination $descriptorDest -Force
+    $a = (Get-FileHash $descriptorSource -Algorithm SHA256).Hash
+    $b = (Get-FileHash $descriptorDest -Algorithm SHA256).Hash
+    $state = if ($a -eq $b) { "ok  " } else { "DIFF"; }
+    if ($a -ne $b) { $failures++ }
+    Write-Output ("{0} {1,-34} {2}" -f $state, "$name.mod", $a.Substring(0, 16))
+}
+
 $dataSource = Join-Path $RepoRoot "translations"
 $dataDest = Join-Path $GameMods "$name\translations"
 if (Test-Path $dataSource) {

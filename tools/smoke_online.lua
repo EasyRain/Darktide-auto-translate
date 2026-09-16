@@ -654,23 +654,30 @@ check("resolve(nil key, auto, no models) does the same", resolve_with(nil, "auto
 check("resolve(key, explicit free) obeys the choice",
     resolve_with("sk-test", "online_free"), "online_free")
 
--- The free tier itself: the three keyless endpoints, in the order a run tries them, and no
+-- The free tier itself: the four keyless endpoints, in the order a run tries them, and no
 -- stale language gap left over (MyMemory was listed as unable to do zh-cn; measured, it
 -- answers in Simplified, so the entry only cost the player a provider).
 check("the free engine is implemented", engines.is_implemented("online_free"), true)
-check("three free providers", #engines.providers_for("online_free", "zh-cn"), 3)
+check("four free providers", #engines.providers_for("online_free", "zh-cn"), 4)
 check("clients5 is tried first (it answered when gtx could not)",
     engines.providers_for("online_free", "zh-cn")[1], "google_clients5")
+-- Bing sits behind Google and ahead of MyMemory: the two Google hosts are filtered on many
+-- networks (China especially), where this is the one that answers, but it costs one extra
+-- request per run to pick up a session, so it does not displace the Google hosts where they
+-- work.
+check("bing is next, before the translation memory",
+    engines.providers_for("online_free", "zh-cn")[3], "bing")
 check("my memory is last (a translation memory, measured junk for some labels)",
-    engines.providers_for("online_free", "zh-cn")[3], "mymemory")
+    engines.providers_for("online_free", "zh-cn")[4], "mymemory")
 check("no provider is left out for a game language", (function()
-    for _, lang in ipairs({ "zh-cn", "zh-tw", "ja", "ko", "ru", "de", "fr", "es", "it", "pl", "pt-br" }) do
-        if #engines.providers_for("online_free", lang) ~= 3 then
+    -- Including uk: bing and MyMemory answer it, so the tier is complete for all twelve.
+    for _, lang in ipairs({ "zh-cn", "zh-tw", "ja", "ko", "ru", "de", "fr", "es", "it", "pl", "pt-br", "uk" }) do
+        if #engines.providers_for("online_free", lang) ~= 4 then
             return lang
         end
     end
-    return "all 11"
-end)(), "all 11")
+    return "all 12"
+end)(), "all 12")
 check("and therefore no language gap", engines.gap("online_free", "zh-cn"), nil)
 check("the api engine has no providers of its own here",
     #engines.providers_for("online_api", "zh-cn"), 0)
@@ -1257,6 +1264,9 @@ do
     local ready = false
     local status = 200
     local posted = nil
+    -- The session half of the stub: false until a page that carries the block is parsed.
+    local session_ready = false
+    local parsed_page = nil
     -- The named extractor is kept so the 400 case can borrow the core and hand it back.
     local function extract_translation(body, path, out)
         if path ~= "translations.0.text" then
@@ -1287,10 +1297,41 @@ do
         end,
         at_poll = function() return 0 end,
         at_error = function() return "" end,
+        at_online_error = function() return "" end,
         at_proxy_in_use = function() return "" end,
         at_proxy_hint = function() return "" end,
         at_json_string_at = function(body, path, out)
             return extract_translation(body, path, out)
+        end,
+        -- The session flow (Bing). The stub starts out needing a session and holding none, so
+        -- the gate has something to refuse; the case that exercises it flips `session_ready`.
+        at_online_bootstrap_needed = function(provider)
+            return provider == "bing" and 1 or 0
+        end,
+        at_online_host = function(provider, api_key, out, cap)
+            if provider ~= "bing" then return 0 end
+            ffi.copy(out, "https://cn.bing.com")
+            return 1
+        end,
+        at_online_bootstrap_path = function(provider, out, cap)
+            if provider ~= "bing" then return 0 end
+            ffi.copy(out, "/translator")
+            return 1
+        end,
+        at_online_bootstrap_parse = function(page)
+            -- The core passes its own body buffer here, not a Lua string.
+            parsed_page = ffi.string(page)
+            if not string.find(parsed_page, "params_AbusePreventionHelper", 1, true) then
+                return 0
+            end
+            session_ready = true
+            return 1
+        end,
+        at_online_bootstrap_ready = function()
+            return session_ready and 1 or 0
+        end,
+        at_online_bootstrap_clear = function()
+            session_ready = false
         end,
     }
 
@@ -1355,6 +1396,74 @@ do
     check("probe: a 400 shows the service's own sentence", sentences[1],
         "HTTP 400: Bad request. Reason: Value for 'source_lang' not supported.")
     fake_http_core.at_json_string_at = extract_translation
+
+    -- The session flow (Bing). Three things matter: a provider that needs a session is not
+    -- sent a request before it has one; the fetch goes to the page the core names (through the
+    -- same async GET as everything else, so the frame never waits); and a page that does not
+    -- carry the block is a failure rather than a session.
+    do
+        local gets = {}
+        local real_get = fake_http_core.at_http_get
+        local real_poll = fake_http_core.at_http_poll
+        fake_http_core.at_http_get = function(host, path)
+            -- The core hands these over as char buffers, not Lua strings.
+            gets[#gets + 1] = { host = ffi.string(host), path = ffi.string(path) }
+            ready = true
+            return 9
+        end
+
+        session_ready = false
+        parsed_page = nil
+        check("session: a provider that needs no session is ready",
+            online.session_ready_for_tests("google_clients5"), true)
+        check("session: bing is not, before its page is read",
+            online.session_ready_for_tests("bing"), false)
+
+        -- The gate starts the fetch, and the item is NOT turned into a translation request.
+        check("session: starting the fetch reports that work is in flight",
+            online.start_bootstrap_for_tests(probe_mod, "bing"), true)
+        check("session: and the fetch goes to the translator page",
+            gets[1] and gets[1].path == "/translator", true)
+        check("session: nothing is translated before the session is ready",
+            online.session_ready_for_tests("bing"), false)
+
+        -- The page arrives: update() hands it to the core and the gate opens.
+        fake_http_core.at_http_poll = function(id, result, code, body, cap, len)
+            if not ready then return 0 end
+            ready = false
+            id[0], result[0], code[0] = 9, 0, 200
+            local page = "<script>IG:\"abc\",params_AbusePreventionHelper = [1,\"tok\",3]</script>"
+            ffi.copy(body, page)
+            len[0] = #page
+            return 1
+        end
+        online.update(probe_mod, 0.016)
+        check("session: the page is parsed into a session",
+            parsed_page ~= nil and string.find(parsed_page, "params_AbusePreventionHelper", 1, true) ~= nil, true)
+        check("session: and the gate is open afterwards",
+            online.session_ready_for_tests("bing"), true)
+
+        -- A page without the block: no session, and the provider is counted against.
+        session_ready = false
+        online.start_bootstrap_for_tests(probe_mod, "bing")
+        fake_http_core.at_http_poll = function(id, result, code, body, cap, len)
+            if not ready then return 0 end
+            ready = false
+            id[0], result[0], code[0] = 9, 0, 200
+            local page = "<html>no session here</html>"
+            ffi.copy(body, page)
+            len[0] = #page
+            return 1
+        end
+        online.update(probe_mod, 0.016)
+        check("session: a page without the block leaves the gate shut",
+            online.session_ready_for_tests("bing"), false)
+
+        fake_http_core.at_http_get = real_get
+        -- Both halves go back: the probe cases further down use the reply-shaped poll this
+        -- block replaced, and leaving the session one in place made three of them fail.
+        fake_http_core.at_http_poll = real_poll
+    end
 
     -- -----------------------------------------------------------------------
     -- A sample the glossary covers entirely masks down to a bare placeholder

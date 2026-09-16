@@ -330,7 +330,7 @@ labels is eight times the headroom. On the 135-string probe corpus that put 90 l
 requests and sent all 45 longer strings on their own. Each item is masked on its own and the
 only thing the service has to do is copy the markers; measured with `tools/live_free_check.lua`,
 `[1] Reload Speed [2] Ammo [3] Damage [4] Cancel` came back with all four markers intact from
-`google_clients5`, `google_gtx`, MyMemory and DeepL alike.
+`google_clients5`, `google_gtx`, `bing`, MyMemory and DeepL alike.
 
 **DeepL does not use markers at all.** Its API accepts several `text` parameters in one request,
 so the paid provider sends the parts side by side and the answer is read position by position:
@@ -395,11 +395,12 @@ three: no key is needed, so nothing is guaranteed either.
 | --- | --- | --- |
 | **google_clients5** | `clients5.google.com` | Google's Chrome-dictionary endpoint. Tried first: measured, it answered while `translate.googleapis.com` was unreachable on the same machine. |
 | **google_gtx** | `translate.googleapis.com` | The endpoint most other tools use (`?client=gtx`). Whether it is reachable depends on the route, not on the request: measured on one machine it was TLS-reset direct and answered through a proxy that had a rule for the host. |
+| **bing** | `cn.bing.com` | Microsoft's keyless translator, and the one that answers where the Google hosts do not. Measured from a China residential IP: **all twelve targets** (including `pl` and `uk`), glossary placeholders kept, `[n]` markers kept, `%s`/`%.0f` kept, line breaks kept, and 15 requests at one per second with no refusal. It costs one extra page load per run — see below. |
 | **mymemory** | `mymemory.translated.net` | A translation *memory*, not a machine translator, so its answers can be human segments that do not fit: measured `Reload Speed` → `ユーザーのリロード速度:` (ja) and `Keystone` → `梯形` (zh-cn). Last on purpose. |
 
-Measured on the machine this was developed on, all three answered all twelve game languages and
-all three kept every marker of a batched request (`tools/live_free_check.lua` re-runs that,
-direct or with a proxy):
+Measured on the machine this was developed on, all three Google/MyMemory endpoints answered all
+twelve game languages and all three kept every marker of a batched request
+(`tools/live_free_check.lua` re-runs that, direct or with a proxy):
 
 ```
 google_clients5  zh-cn=装弹速度  zh-tw=裝彈速度  ja=リロード速度  de=Nachladegeschwindigkeit
@@ -407,6 +408,36 @@ google_gtx       zh-cn=装弹速度  zh-tw=裝彈速度  ja=リロード速度  
 mymemory         zh-cn=上弹速度  zh-tw=裝填速度  ja=ユーザーのリロード速度:  de=Nachladegeschwindigkeit
 batch [1] Reload Speed [2] Ammo [3] Damage [4] Cancel → 4/4 markers kept by all three
 ```
+
+**Bing needs a page before it will translate.** `cn.bing.com/translator` carries a key, a token and
+an `IG` in the page, and every `/ttranslatev3` request has to send them back, so a run starts by
+fetching that page through the same async HTTP path as everything else — the game thread never
+waits, the item simply goes back into the queue until the session is in hand. One page serves the
+rest of the run (measured: 110 seconds of requests on one token). `{"statusCode":205}` means the
+session expired and is treated as "fetch a new one"; a **0-byte 200 is a failure, not an empty
+translation** — `www.bing.com` answers exactly that to the request `cn.bing.com` answers with a
+translation, which is why the China host is the one configured.
+
+Two further endpoints were measured and **rejected** — for reasons that only show up by trying
+them:
+
+* **Tencent** (`transmart.qq.com/api/imt`) needs no session and batches natively (`text_list`,
+  several strings in one request), and it survived 25 requests at one per second — but its engine
+  rewrites the glossary placeholder: `⟦0⟧ unlocked` came back as a 70-digit number and `⟦0⟧, ⟦1⟧`
+  as `2010年, 2011年`. Masking is the point of the glossary, so every string containing a known term
+  would come back refusable — a provider that costs requests and returns nothing. It also cannot do
+  `pl` or `uk`, and its Western-language answers are weak (`Reload Speed` → `Velocidad Reload`).
+* **Baidu** (`/transapi`, `/v2transapi`) answers `errno 1022` without its signed token flow, from a
+  China IP and a hosting IP alike, and neither the token nor its salt is in the page or in the
+  plain bundles. Its `/sug` endpoint does answer, but a dictionary is not a translator.
+
+**Measure a provider from the network a player actually has.** Every endpoint above was first
+measured through a VPN in TUN mode, where a "direct" request still leaves from the VPN's exit — a
+datacenter IP, and exactly what anti-bot systems block. That run reported Bing as broken (`200`
+with an empty body on the international host, `401` on the China host) and Baidu as broken
+(`errno 1022`); with the VPN **off**, from a China residential IP, Bing answered and every one of
+those results changed. If you check a provider yourself, check the exit IP first
+(`https://api.ipify.org`) — and note that the game's own requests go through the same tunnel.
 
 What they are not: a service. They are rate limited, they can be blocked or reset by the network
 (Google's hosts especially), and they can disappear without notice — which is why the offline
@@ -420,7 +451,7 @@ keyless player has):
 
 | when | what the mod does |
 | --- | --- |
-| one request fails | the item moves to the next provider in the list (`clients5` → `gtx` → `MyMemory`) and is retried there |
+| one request fails | the item moves to the next provider in the list (`clients5` → `gtx` → `bing` → `MyMemory`) and is retried there |
 | one provider fails to connect **3 times** | it is dropped for the rest of the session with a log line, so every later key skips it instead of paying the timeout again; a request that succeeds resets that counter |
 | the service answers **429/403** (rate limited, quota) | translation pauses for **5 minutes** and the item is retried when the pause ends — the HUD counts it down |
 | **all three** are unreachable | the run does **not** end: it waits 5 minutes, re-arms all three providers and works through the queue again. Three such waits at most, then it stops with the usual "every provider was unreachable" message — a machine that is simply offline should not loop forever |

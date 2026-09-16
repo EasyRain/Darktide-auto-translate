@@ -158,8 +158,27 @@ end
 --                      rather than a machine translator, so answers can be human segments
 --                      that do not fit: measured "Reload Speed" -> "ユーザーのリロード速度:"
 --                      (ja) and "Keystone" -> 梯形 (zh-cn). Last on purpose.
+--
+--     bing             cn.bing.com — the one that works where the others do not: Google's
+--                      hosts are filtered on many networks (China especially) and MyMemory
+--                      answers with dictionary junk, while this endpoint answered all twelve
+--                      targets from a China residential IP. It is placed after Google and
+--                      before MyMemory because it is slower to start (one page load hands out
+--                      a key, a token and an IG, and every request carries them back — see
+--                      ensure_session() in online.lua) but far better than a translation
+--                      memory: measured, it keeps the glossary placeholders, the [n] markers,
+--                      %s specifiers and line breaks, and it survived 15 requests at one per
+--                      second without a refusal.
+--
+--                      Tencent's transmart endpoint was measured too and is *not* here: it
+--                      needs no session and batches natively, but its engine rewrites the
+--                      placeholder ("⟦0⟧ unlocked" came back as a 70-digit number, "⟦0⟧,⟦1⟧"
+--                      as "2010年,2011年"), which the masking cannot survive. Baidu answers
+--                      errno 1022 without its signed token flow, from a China IP and a hosting
+--                      IP alike. Neither is worth a provider that would refuse every string
+--                      containing a known term.
 -- ---------------------------------------------------------------------------
-M.FREE_PROVIDERS = { "google_clients5", "google_gtx", "mymemory" }
+M.FREE_PROVIDERS = { "google_clients5", "google_gtx", "bing", "mymemory" }
 
 -- Official APIs. DeepL is the default because it is reachable directly on most
 -- networks (verified without a proxy); translation.googleapis.com is not.
