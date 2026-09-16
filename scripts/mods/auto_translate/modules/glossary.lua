@@ -25,6 +25,47 @@ end
 local PLACEHOLDER_OPEN = "⟦"
 local PLACEHOLDER_CLOSE = "⟧"
 
+-- Terms that are also ordinary English words, and are therefore only masked when the whole string
+-- is that label.
+--
+-- Masking is a global replacement, so a term that doubles as prose turns a sentence into the
+-- wording of a button: measured with the full list, "back of the head" became two placeholders
+-- ("Back" and "Head") and "close range" two more. Those two were constructed - scanning the real
+-- stores (124 entries) found four cases, all of the word "show", and none of them wrong
+-- ("Show bubble health" -> 显示气泡生命值 is the label doing its job; "Choose what to show for the
+-- timer" reads slightly stiff but says the right thing). So this is insurance for text that has
+-- not been written yet, not a repair: the list is short, explicit and about words that a settings
+-- screen and a sentence both use.
+--
+-- A whole label still masks - "Back" alone, "Back:" - and every name (Melee, Armour Piercing,
+-- German, Relic) is unaffected: a name means the same thing wherever it stands.
+local LABEL_ONLY_WORDS = {}
+for _, word in ipairs({
+    -- position and direction
+    "back", "close", "front", "left", "right", "top", "bottom", "center", "up", "down", "in",
+    "out", "above", "below", "near", "far", "over", "under", "inside", "outside",
+    -- state and choice
+    "on", "off", "all", "none", "default", "done", "applied", "selected", "enabled", "disabled",
+    -- what a settings row does
+    "apply", "cancel", "reset", "save", "load", "open", "show", "hide", "select", "search",
+    "sort", "order", "add", "edit", "delete", "remove", "clear", "test", "use", "set", "toggle",
+    -- generic labels for other things
+    "name", "title", "type", "mode", "size", "value", "level", "key", "head", "range", "count",
+    "total", "amount", "number", "text", "info", "help", "unknown",
+    -- short words that are also things you do in combat
+    "charge", "guard", "block", "push", "pull", "hold", "release", "burst", "delay", "dodge",
+}) do
+    LABEL_ONLY_WORDS[word] = true
+end
+
+-- True when the string is that term and nothing else (surrounding space and one trailing colon are
+-- still a label: mods write "Relic:" as readily as "Relic").
+local function is_a_label(text, term)
+    local trimmed = text:gsub("^%s+", ""):gsub("%s+$", "")
+    trimmed = trimmed:gsub("[:：%.]+$", ""):gsub("%s+$", "")
+    return trimmed:lower() == term:lower()
+end
+
 local terms = nil
 local by_language = {}
 
@@ -165,27 +206,37 @@ function M.mask(text, lang, mask_markup)
     local list = type(lang) == "string" and by_language[lang] or nil
     if list and #list > 0 then
         for _, item in ipairs(list) do
-            -- The whole-word rule is checked on the two bytes *around* the match, not with
-            -- the %f frontier: a frontier at the end of the pattern fails for any term that
-            -- ends in punctuation ("Chinese (Simplified)", "Portuguese (Brazil)") and for
-            -- every term in a non-Latin script, because it asks the term's own last byte to
-            -- be a word byte. Measured: with the frontier, "Chinese (Simplified)" came back
-            -- as "中文 (Simplified)" - the shorter "Chinese" term matched inside it - and
-            -- "日本語" was never protected at all.
-            local pattern = "()" .. loose_pattern(item.en) .. "()"
-            local multibyte = item.en:find("[\128-\255]") ~= nil
-            local token_index = nil
-            result = result:gsub(pattern, function(from_pos, to_pos)
-                if makes_it_a_longer_word(result:sub(from_pos - 1, from_pos - 1), multibyte)
-                    or makes_it_a_longer_word(result:sub(to_pos, to_pos), multibyte) then
-                    return nil      -- part of a longer word: leave it alone
-                end
-                if not token_index then
-                    tokens[#tokens + 1] = { term = item.term, source = item.en }
-                    token_index = #tokens
-                end
-                return PLACEHOLDER_OPEN .. (token_index - 1) .. PLACEHOLDER_CLOSE
-            end)
+            -- A handful of terms are also ordinary English words, and masking is a global
+            -- replacement: "back" inside "back of the head" used to be replaced by the word a
+            -- button shows for going back. Those words are masked only where the string *is* the
+            -- label, which is where the benefit lives - a lone "Back" handed to a model is exactly
+            -- what it gets wrong. Everything else (names: "Melee", "Armour Piercing", "German")
+            -- still masks wherever it appears, because a name means the same thing in any
+            -- position. See LABEL_ONLY_WORDS for the list and why it is short.
+            local as_label_only = LABEL_ONLY_WORDS[item.en:lower()]
+            if not (as_label_only and not is_a_label(text, item.en)) then
+                -- The whole-word rule is checked on the two bytes *around* the match, not with
+                -- the %f frontier: a frontier at the end of the pattern fails for any term that
+                -- ends in punctuation ("Chinese (Simplified)", "Portuguese (Brazil)") and for
+                -- every term in a non-Latin script, because it asks the term's own last byte to
+                -- be a word byte. Measured: with the frontier, "Chinese (Simplified)" came back
+                -- as "中文 (Simplified)" - the shorter "Chinese" term matched inside it - and
+                -- "日本語" was never protected at all.
+                local pattern = "()" .. loose_pattern(item.en) .. "()"
+                local multibyte = item.en:find("[\128-\255]") ~= nil
+                local token_index = nil
+                result = result:gsub(pattern, function(from_pos, to_pos)
+                    if makes_it_a_longer_word(result:sub(from_pos - 1, from_pos - 1), multibyte)
+                        or makes_it_a_longer_word(result:sub(to_pos, to_pos), multibyte) then
+                        return nil      -- part of a longer word: leave it alone
+                    end
+                    if not token_index then
+                        tokens[#tokens + 1] = { term = item.term, source = item.en }
+                        token_index = #tokens
+                    end
+                    return PLACEHOLDER_OPEN .. (token_index - 1) .. PLACEHOLDER_CLOSE
+                end)
+            end
         end
     end
 

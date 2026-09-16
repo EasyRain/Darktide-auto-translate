@@ -245,6 +245,25 @@ do
         (glossary.unmask("⟦0⟧ Mode", { { term = "楔石" } })), "楔石 Mode")
     check("a placeholder before CJK text loses it",
         (glossary.unmask("⟦0⟧ 模式", { { term = "楔石" } })), "楔石模式")
+
+    -- A word that is also ordinary prose is masked only where it *is* the label: masking is a
+    -- global replacement, so "back" inside a sentence used to become the wording of a button.
+    check("a label word is masked on its own", (through("Back", "zh-cn")), "返回")
+    check("a label word survives a trailing colon", (through("Back:", "zh-cn")), "返回:")
+    check("but not inside a sentence", (through("back of the head", "zh-cn")), "back of the head")
+    check("and not inside a longer label", (through("Back to menu", "zh-cn")), "Back to menu")
+    check("nor is another one", (through("close range", "zh-cn")), "close range")
+    -- Names are not in that class: they mean the same thing in any position. Note that "damage" is
+    -- masked here too - it is a term and *not* a label-only word, which is right: "增加 近战 伤害"
+    -- is what the sentence wants, and the glossary is there to supply both words.
+    check("a name still masks on its own", (through("Melee", "zh-cn")), "近战")
+    check("and inside a sentence", (function()
+        local masked, tokens = glossary.mask("Increases Melee damage", "zh-cn", false)
+        return (glossary.unmask(masked, tokens):gsub("近战", "X"))
+    end)(), "Increases X 伤害")
+    -- A multi-word term that merely starts with a label-only word is a name of its own.
+    check("a multi-word name keeps masking",
+        (glossary.mask("Close Combat", "zh-cn", false)):find("^⟦%d+⟧$") ~= nil, true)
 end
 
 print("languages present: " .. table.concat((function()
