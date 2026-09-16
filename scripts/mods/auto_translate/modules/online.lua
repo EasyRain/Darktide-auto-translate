@@ -1149,6 +1149,39 @@ local function provider_needs_key(name)
     return name == "google_api" or name == "deepl"
 end
 
+-- Which entry of this item's list one attempt should use.
+--
+-- The list itself is built once per run (M.start), so its order is a starting point; the choice
+-- is made here from what the session has actually seen: the first entry this item has not passed
+-- yet that has failed the fewest times. That is the difference between the failure counting
+-- meaning something and meaning nothing - without it, an item that had never been tried started at
+-- position 1, the host another item had just spent 20 seconds timing out on, and every later item
+-- paid that timeout again until the breaker disabled it three failures later (measured in the game
+-- log: 2 min 19 s before the first translated key, on a network where the second entry answered).
+local function pick_provider(item)
+    local providers = item.providers
+    local start = item.provider_index or 1
+    local best_index = nil
+    local best_failures = nil
+
+    for i = start, #providers do
+        local name = providers[i]
+        if not disabled_providers[name] then
+            local failures = provider_failures[name] or 0
+            if best_index == nil or failures < best_failures then
+                best_index, best_failures = i, failures
+            end
+        end
+    end
+
+    if not best_index then
+        return nil
+    end
+
+    item.provider_index = best_index
+    return providers[best_index]
+end
+
 local function providers_for(mod, engine, lang)
     if engine == "online_api" then
         return { engines.api_provider(mod) }
@@ -1213,6 +1246,8 @@ M.min_interval_for_tests = min_interval
 -- The learned free-tier order, and the write that learns it.
 M.providers_for_tests = providers_for
 M.provider_answered_for_tests = provider_answered
+-- And the per-attempt choice, which is what makes the failure counting act inside a run.
+M.pick_provider_for_tests = pick_provider
 
 -- ---------------------------------------------------------------------------
 -- Pipeline control
@@ -1593,14 +1628,7 @@ local function dispatch(mod)
         return true
     end
 
-    local provider = nil
-    for i = item.provider_index or 1, #item.providers do
-        if not disabled_providers[item.providers[i]] then
-            provider = item.providers[i]
-            item.provider_index = i
-            break
-        end
-    end
+    local provider = pick_provider(item)
 
     if not provider then
         -- Every provider this language had was ruled out. For the keyless tier that is almost
@@ -2233,6 +2261,9 @@ retry_whole_tier = function(mod, item, reason)
 
     cooldown_until = elapsed + TIER_RETRY_COOLDOWN
     M.state.provider = nil
+    -- The item starts over at the top as well: the verdicts this position was based on have just
+    -- been cleared, so keeping a position past them would hide providers that are re-armed now.
+    item.provider_index = 1
     q_unshift(item)
 
     util.popup(mod, "free_tier_retry", math.floor(TIER_RETRY_COOLDOWN / 60), tier_retries, TIER_RETRY_LIMIT)

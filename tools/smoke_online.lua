@@ -1533,11 +1533,15 @@ do
         -- The failure table is module state that earlier cases have already touched, so it is
         -- cleared for these assertions and put back afterwards (the code itself mutates it in
         -- place - retry_whole_tier clears it exactly like this).
-        local _, failures = online.provider_health()
+        local disabled, failures = online.provider_health()
         local saved = {}
+        local saved_disabled = {}
         for name, count in pairs(failures) do
             saved[name] = count
             failures[name] = nil
+        end
+        for name, why in pairs(disabled) do
+            saved_disabled[name] = why
         end
 
         check("order: with nothing remembered and nothing failed, the measured order stands",
@@ -1550,6 +1554,61 @@ do
         -- trying the endpoint that just failed.
         check("order: which also beats the remembered one",
             online.providers_for_tests(remembering, "online_free", "zh-cn")[1], "google_clients5")
+
+        -- The order above is only built once per run, so the choice has to be made per attempt or
+        -- the counting would not act inside a run at all: an item with everything ahead of it
+        -- untried must skip the host that has already timed out for the items before it.
+        local function item_with(index)
+            return { mod_id = "m", key = "k", en = "k",
+                     providers = { "bing", "google_clients5", "google_gtx", "mymemory" },
+                     provider_index = index or 1 }
+        end
+
+        local fresh = item_with()
+        check("pick: a fresh item skips the host that already failed",
+            online.pick_provider_for_tests(fresh), "google_clients5")
+        check("pick: and remembers where it went", fresh.provider_index, 2)
+
+        failures["bing"] = nil
+        local again = item_with()
+        check("pick: with nothing failed it takes the first entry",
+            online.pick_provider_for_tests(again), "bing")
+
+        -- An item that has already passed a provider does not go back to it, even when the
+        -- ranking would prefer it: fail_item advanced past it for a reason.
+        local advanced = item_with(3)
+        check("pick: an item never goes back to a provider it already passed",
+            online.pick_provider_for_tests(advanced), "google_gtx")
+
+        -- Nothing usable at all is what the whole-tier wait is for; the pick reports it.
+        for _, name in ipairs({ "bing", "google_clients5", "google_gtx", "mymemory" }) do
+            disabled[name] = "unreachable"
+        end
+        check("pick: with every provider disabled there is nothing to pick",
+            online.pick_provider_for_tests(item_with()), nil)
+        -- And the wait re-arms them and puts the item back at the top of the list, so the re-armed
+        -- providers are reachable for it again. The wait budget is shared state, so a success is
+        -- reported first - the same thing that resets it after an outage.
+        local rearmed = item_with(4)
+        online.note_provider_success_for_tests("bing")
+        online.retry_whole_tier_for_tests(probe_mod, rearmed, "every provider was unreachable")
+        check("tier retry: re-arms the providers and resets the item's position",
+            disabled["bing"] == nil and rearmed.provider_index == 1, true)
+        check("tier retry: so the pick works again", online.pick_provider_for_tests(rearmed), "bing")
+
+        -- Put the provider health back the way it was found.
+        for name in pairs(failures) do
+            failures[name] = nil
+        end
+        for name, count in pairs(saved) do
+            failures[name] = count
+        end
+        for name in pairs(disabled) do
+            disabled[name] = nil
+        end
+        for name, why in pairs(saved_disabled) do
+            disabled[name] = why
+        end
 
         for name in pairs(failures) do
             failures[name] = nil

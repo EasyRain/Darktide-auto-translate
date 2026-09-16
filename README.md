@@ -423,6 +423,20 @@ Bing first fixed that for China and created the mirror image for everyone else: 
 the fastest answer from a European or American connection. Ranking by what actually answered fixes
 both, and the first run on a new network costs at most one timeout before the order corrects itself.
 
+The ranking is applied **per attempt**, not once per run: an item that has never been tried skips a
+host that has already timed out for the items before it, so one timeout demotes a provider for
+everything that follows instead of being paid again by each new item. An item still never goes back
+to a provider it has already passed for itself.
+
+**Counting failures does not weaken the all-providers-down fallback.** Disabling a provider still
+takes three failures (`PROVIDER_DISABLE_AFTER = 3`); the demotion above only changes the order, so
+the wait-and-retry path is entered on exactly the same condition as before — every provider this
+language has, disabled. That path clears `disabled_providers` *and* the failure counts in place, and
+it now also resets the item's position to the top of its list, because the verdicts that position
+was based on are the ones being cleared. It is still bounded at three waits of five minutes, after
+which the run stops with the usual "every provider was unreachable" message, so a machine that is
+simply offline ends instead of looping.
+
 Measured on the machine this was developed on, all three Google/MyMemory endpoints answered all
 twelve game languages and all three kept every marker of a batched request
 (`tools/live_free_check.lua` re-runs that, direct or with a proxy):
