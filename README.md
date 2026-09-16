@@ -606,11 +606,14 @@ answering, and batching does not change that — it only means a second buys up 
 labels instead of one.
 
 **What batching costs, measured.** A batched request carries `[n] ` markers, and a service that
-bills per character charges for those too. Over the 135 strings of the probe corpus:
-requests **135 → 57 (−58%)**, characters **3,405 → 3,855 (+13.2%)**. The extra is paid on short
-labels only, and it is why the same rule is a clear win for the free endpoints (charged per
-request) and a deliberate trade on a metered API. DeepL's API accepts several `text` parameters
-in one request, which would remove the markers entirely; that is a C-side change and is not done.
+bills per character charges for those too. Over the 135 strings of the probe corpus
+(`tools/batch_cost.lua` drives the real planner): requests **135 → 67 (−50%)**, characters
+**3,405 → 3,830 (+12.5%)**. Two details from that run are worth keeping: a long string does not
+merely sit out a batch, it *ends* the one being built (85 of the corpus's strings travelled in
+17 batches, the rest alone), and the extra characters land on short labels only — which is why
+the same rule is a clear win for the free endpoints (charged per request) and a deliberate trade
+on a metered API. DeepL's API accepts several `text` parameters in one request, which would
+remove the markers entirely; that is a C-side change and is not done.
 
 ### Custom endpoints
 
