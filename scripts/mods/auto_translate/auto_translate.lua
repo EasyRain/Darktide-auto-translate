@@ -365,12 +365,18 @@ function mod.on_all_mods_loaded()
         util.warn(mod, "startup pipeline error: %s", tostring(err))
     end
 
-    -- The whole-language terminology collection is done: translations/export/
-    -- holds all 12 languages. It used to run here and announce itself on every
-    -- launch ("already collected", "progress 12/12"), which was pure noise. The
-    -- module is kept in case the game adds terms or a language: call
-    --   exporter.run(mod, current_lang())
-    -- from here (or from a button) to collect again.
+    -- The whole-language terminology collection. Every launch looks the key list up in the CURRENT
+    -- game language and writes translations/export/<language>.lua - but only when that file is
+    -- missing or older than the key list's version, which is the first check the exporter makes. So
+    -- a normal launch does nothing (one log line), and bumping `version` in
+    -- translations/term_keys.lua collects once per language: launch, switch language in Steam,
+    -- launch again. That is how the game's own wording for equipment, slots, missions and talents
+    -- gets in - and it can only be collected from inside the game, because the strings live in the
+    -- bundles rather than on disk.
+    local collected, collect_err = pcall(exporter.run, mod, util.game_language())
+    if not collected then
+        util.warn(mod, "term export error: %s", tostring(collect_err))
+    end
 end
 
 -- Mod options: "Reload translation files"

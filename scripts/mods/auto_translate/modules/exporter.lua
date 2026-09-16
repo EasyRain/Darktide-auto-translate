@@ -135,10 +135,12 @@ function M.run(mod, lang)
     if util.file_exists(path) then
         local existing = util.load_lua_file(path)
         if type(existing) == "table" and existing.version == list.version then
-            util.log(mod, "terms for '%s' already exported (version %s)", lang, tostring(list.version))
             local count = existing_count(lang) or 0
-            notify(mod, "term_export_skipped", count, tostring(lang))
-            M.notify_progress(mod)
+            -- Log only, no popup: this path runs on every launch, and a notice that nothing
+            -- happened is the noise that got the automatic call removed in the first place. A
+            -- collection that actually writes still announces itself (term_export_done).
+            util.log(mod, "term export for '%s' is up to date (version %s, %d term(s))",
+                tostring(lang), tostring(list.version), count)
             return false
         end
     end

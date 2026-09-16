@@ -36,18 +36,27 @@ function M.hash(text)
     return string.format("djb2%08x", h)
 end
 
--- Language we translate INTO: the configured one, or the game's current language.
-function M.target_language(mod)
-    local configured = mod:get("target_language")
-    if type(configured) == "string" and configured ~= "" and configured ~= "auto" then
-        return configured
-    end
+-- The language the GAME is running in, ignoring the mod's target setting. Only the term export
+-- needs this, and it needs it exactly: the game localizes its own strings into this language, so an
+-- export labelled with anything else stores one language's words under another language's name. (A
+-- game in English with the target set to zh-cn would otherwise write a "zh-cn" export full of
+-- English.)
+function M.game_language()
     local app = rawget(_G, "Application")
     local current = app and app.user_setting and app.user_setting("language_id")
     if type(current) == "string" and current ~= "" then
         return current
     end
     return "en"
+end
+
+-- Language we translate INTO: the configured one, or the game's current language.
+function M.target_language(mod)
+    local configured = mod:get("target_language")
+    if type(configured) == "string" and configured ~= "" and configured ~= "auto" then
+        return configured
+    end
+    return M.game_language()
 end
 
 local function io_lib()
