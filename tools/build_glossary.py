@@ -190,6 +190,29 @@ HAND = [
     ("Skitarii", {"zh-cn": "护教军士兵", "zh-tw": "護教軍士兵", "uk": "Скітарій"}),
 ]
 
+# ---- game terms whose loc key is not in the collected key list (yet) ----
+#
+# These ARE the game's own terms - the game localises them - but under key names the export has
+# never resolved, and a key nobody guessed cannot be looked up (the export resolves 701 of the 1459
+# names in translations/term_keys.lua and reports the other 758 as unknown). Machine translation
+# then invents a wording: "Rampage!" (the Hive Scum ability, key `broker_ability_punk_rage` in
+# ability_timer) came back as "大闹天宫!". Values below are the game's own client wording, taken
+# from mods that record it and checked where the export can check them:
+#
+#   * Enhanced_descriptions/Colors_Keywords_Numbers/COLORS_KWords_zh_cn.lua (_tw.lua) - a keyword
+#     table whose entries agree with the export on the ones the export has: Rending = 撕裂,
+#     Desperado = 亡命之徒, Momentum = 动量
+#   * vfx_swapper's zh-cn localisation ("禁用狂暴状态屏幕特效" for the scum_rampage_screen setting)
+#
+# Ordered before the exported section but shadowed by it: as soon as an export really resolves the
+# key, the game's wording wins and this entry disappears from the file on its own. Only languages
+# with a verified wording are listed - for the others the term is simply not masked, which leaves
+# the engine's own translation in place rather than an invented one.
+MISSING_LOC = [
+    # Hive Scum (Broker) combat ability, "punk_rage" in the game's own placeholder syntax
+    ("Rampage", {"zh-cn": "狂暴", "zh-tw": "狂暴"}),
+]
+
 # ---- hand written interface labels, all 16 languages ----
 #
 # General interface wording rather than game lore: the meaning in each language is
@@ -329,7 +352,7 @@ AUTONYMS = [
 # well is how every one of them ended up in the file twice - the committed glossary had two
 # copies of all ten mechanics terms, and each re-run added a copy of every hand-written term.
 hand_keys = set()
-for en, _ in HAND + UI + LANGS:
+for en, _ in HAND + MISSING_LOC + UI + LANGS:
     hand_keys.add(en.lower())
 for text in AUTONYMS:
     hand_keys.add(text.lower())
@@ -380,6 +403,25 @@ lines.append('        -- hand verified core mechanics (no game loc key exists fo
 # a duplicate of every hand-written term, and one more after every re-run.
 emitted = set()
 for en, vals in HAND:
+    emitted.add(en.lower())
+    parts = ['en = ' + quote(en)]
+    for lang in LANG_ORDER:
+        if lang in vals:
+            parts.append((LANG_KEY.get(lang, lang)) + ' = ' + quote(vals[lang]))
+    lines.append('        { ' + ', '.join(parts) + ' },')
+lines.append('')
+lines.append('        -- game terms whose own loc key is not in the collected key list (yet); the game\'s')
+lines.append('        -- wording, checked against the export where the export has the term')
+# Same rule as the UI labels below: once an export really resolves the key that carries this term,
+# the game's wording is authoritative and this entry steps aside - the block is only a stand-in for
+# a key the key list is missing, so it has to disappear by itself when the key arrives.
+missing_used = 0
+missing_shadowed = []
+for en, vals in MISSING_LOC:
+    if en.lower() in exported_keys:
+        missing_shadowed.append(en)
+        continue
+    missing_used += 1
     emitted.add(en.lower())
     parts = ['en = ' + quote(en)]
     for lang in LANG_ORDER:
@@ -451,8 +493,11 @@ lines.append('')
 
 io.open(OUT, 'w', encoding='utf-8', newline='\n').write('\n'.join(lines))
 
-print('generated %d terms (%d hand verified mechanics + %d hand written UI labels + %d language names + %d autonyms), skipped %d keys'
-      % (len(terms), len(HAND), ui_used, langs_used, len(AUTONYMS), len(skipped)))
+print('generated %d terms (%d hand verified mechanics + %d uncollected game terms + %d hand written UI labels + %d language names + %d autonyms), skipped %d keys'
+      % (len(terms), len(HAND), missing_used, ui_used, langs_used, len(AUTONYMS), len(skipped)))
+if missing_shadowed:
+    print('uncollected game terms the export now has (kept the game wording): %s'
+          % ', '.join(missing_shadowed))
 if ui_shadowed:
     print('UI labels the game already localises (kept the game wording): %s'
           % ', '.join(ui_shadowed))

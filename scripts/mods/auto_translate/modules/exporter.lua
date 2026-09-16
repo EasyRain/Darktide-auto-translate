@@ -231,6 +231,90 @@ function M.run(mod, lang)
     return true
 end
 
+-- ---- string cache harvest ----
+--
+-- The export above can only ask for key names somebody wrote down, and the game answers with the
+-- ones it has: 701 of the 1459 names in translations/term_keys.lua resolve and the rest do not exist
+-- (the log line says "skipped 758 unknown keys"). A term whose key nobody guessed therefore stays
+-- invisible - the abilities of a class added after the key list was written, for instance, which is
+-- why "Rampage" (Hive Scum) had no official wording protecting it.
+--
+-- The manager's string cache points the other way: it is a memo of every string this session has
+-- resolved, keyed by its loc key, so it contains key names no key list has. Reading it while the
+-- player browses the talent tree or the menus is how those names are found. Only term-shaped values
+-- are kept (one short line) and keys the key list already has are dropped, so what is written is a
+-- list of NEW candidate keys, ready to be merged into translations/term_keys.lua and collected
+-- properly for all twelve languages by the usual round.
+--
+-- Output: translations/export/cache_<language>.lua (same shape as the term export).
+local CACHE_TERM_CHARS = 48   -- a value longer than this is a sentence, not a term
+
+local function cache_path(lang)
+    return util.MOD_DIR .. "/translations/export/cache_" .. tostring(lang) .. ".lua"
+end
+
+-- LuaJIT has no utf8 library and #s counts bytes, so count characters by UTF-8 lead bytes.
+local function char_len(s)
+    local n, i = 0, 1
+    while i <= #s do
+        local b = s:byte(i)
+        i = i + ((b >= 0xF0 and 4) or (b >= 0xE0 and 3) or (b >= 0xC0 and 2) or 1)
+        n = n + 1
+    end
+    return n
+end
+
+local function known_key_set(list)
+    local set = {}
+    if type(list) == "table" and type(list.keys) == "table" then
+        for _, key in ipairs(list.keys) do
+            set[key] = true
+        end
+    end
+    return set
+end
+
+-- Returns the number of new candidate keys written; 0 means there was nothing new to write.
+function M.harvest_cache(mod, lang, list)
+    local manager = Managers and Managers.localization
+    local cache = (type(manager) == "table") and rawget(manager, "_string_cache") or nil
+    if type(cache) ~= "table" then
+        return 0
+    end
+
+    if not M._known_keys then
+        M._known_keys = known_key_set(list or load_key_list())
+    end
+
+    local terms, count = {}, 0
+    for key, text in pairs(cache) do
+        if type(key) == "string" and type(text) == "string"
+            and key:match("^loc_[%w_]+$") and not M._known_keys[key]
+            and text ~= "" and text ~= key and text:sub(1, 1) ~= "<"
+            and not text:find("\n", 1, true) and char_len(text) <= CACHE_TERM_CHARS
+        then
+            terms[key] = text
+            count = count + 1
+        end
+    end
+
+    -- The cache only grows, so an unchanged count means a previous look already wrote this.
+    if count == 0 or count <= (M._harvested or 0) then
+        return 0
+    end
+    M._harvested = count
+
+    util.ensure_dir(util.MOD_DIR .. "/translations/export")
+    if not util.write_file_atomic(cache_path(lang), serialize(lang, 1, terms)) then
+        util.warn(mod, "cache harvest: could not write %s", cache_path(lang))
+        return 0
+    end
+
+    util.info(mod, "cache harvest: %d candidate key(s) the key list does not have -> translations/export/cache_%s.lua",
+        count, tostring(lang))
+    return count
+end
+
 -- Tells the player how many languages are collected and which ones are still missing.
 function M.notify_progress(mod)
     local _, missing, done, total = M.progress()

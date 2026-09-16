@@ -670,6 +670,26 @@ and `check_glossary.lua` is what proves the result still masks what it should �
 term in another script is not matched inside a longer run of that script, and that a term ending
 in punctuation ("Chinese (Simplified)") is not eaten by its shorter prefix.
 
+A term can be missing even though the game has a wording for it, because the export only answers
+for key names somebody wrote down: 701 of the 1459 names in `translations/term_keys.lua` resolve and
+the other 758 are reported as unknown. A term whose key nobody guessed is therefore invisible. The
+`MISSING_LOC` block in the script is for those: the game's own wording, checked against the export
+where the export has the term, and *shadowed* by it — as soon as an export really resolves the key
+the game's value wins and the entry drops out of the generated file by itself. The first entry is
+`Rampage` (the Hive Scum ability): its key was never collected, so every engine translated the word
+as 大闹天宫, which is the name of a well-known story rather than the ability.
+
+The key names themselves come from the game's string cache. `exporter.harvest_cache` reads
+`Managers.localization._string_cache` — the memo of every string the session has resolved — keeps the
+term-shaped values whose keys the list does not have, and writes them to
+`translations/export/cache_<lang>.lua` (the same shape as an export). It runs once at startup and
+then every 60 seconds, and writes only when it found something new, so browsing the talent tree once
+is what names the keys no key list guessed. Note that a *stored* translation is never redone because
+the glossary changed — a stored entry is only re-translated when its source text changes — so
+correcting wording that is already stored means editing that one entry, which
+`python tools\fix_store_entry.py` does in place (dry run by default, `--write` to apply) instead of
+paying for a re-translation.
+
 ### Where `translations/export/` belongs
 
 | | |
@@ -832,6 +852,7 @@ python tools\lua_syntax_check.py                 # parses all 15 files, runs not
 python tools\check_exports.py                    # every at_* name in the Lua CDEF exists in the DLL
 python tools\check_localization.py               # 131 keys × 12 languages
 luajit tools\smoke_online.lua                    # loads modules/online.lua with stubs, runs 262 assertions
+luajit tools\smoke_export.lua                    # the string-cache harvest: what it keeps, drops and rewrites
 luajit tools\check_options_layout.lua [custom]   # what the options screen will actually show
 luajit tools\live_bing_check.lua                 # the whole Bing flow live, through the real DLL
 luajit tools\check_zh_variants.lua <translations/zh-tw>   # simplified characters in a traditional store

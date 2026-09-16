@@ -320,6 +320,12 @@ local function reinject_finished()
     util.info(mod, "re-injected %d newly translated key(s); no restart needed", report.stats.ready)
 end
 
+-- How often update() looks at the game's string cache (see exporter.harvest_cache). It only
+-- writes when the cache has produced key names the key list does not have, which a browsing
+-- player does a handful of times per session, so a minute is often enough and never noisy.
+local CACHE_HARVEST_INTERVAL = 60
+local harvest_timer = 0
+
 function mod.update(dt)
     local ok, err = pcall(online.update, mod, dt)
     if not ok then
@@ -356,6 +362,15 @@ function mod.update(dt)
             util.info(mod, "%d option string(s) refreshed; close and reopen the options screen to see them", refreshed)
         end
     end
+
+    -- The game's string cache grows as the player opens talent trees and menus; looking at it
+    -- now and then is what names the keys no key list guessed. Writing only happens when there
+    -- is something new, so a session that changes nothing costs one table walk a minute.
+    harvest_timer = harvest_timer + (dt or 0)
+    if harvest_timer >= CACHE_HARVEST_INTERVAL then
+        harvest_timer = 0
+        pcall(exporter.harvest_cache, mod, util.game_language())
+    end
 end
 
 -- DMF calls this once every mod has finished loading (localization registry ready).
@@ -377,6 +392,11 @@ function mod.on_all_mods_loaded()
     if not collected then
         util.warn(mod, "term export error: %s", tostring(collect_err))
     end
+
+    -- Key names the key list does not have, read from the strings this session has already
+    -- resolved. At this point that is mostly what the launch itself did; the timer in update()
+    -- picks up the rest as the player opens menus. See exporter.harvest_cache.
+    pcall(exporter.harvest_cache, mod, util.game_language())
 
     -- One line in the log that answers whether a *full* dump is possible: if the game's
     -- localization manager keeps its table reachable, the key list stops mattering and no future

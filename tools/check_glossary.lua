@@ -263,6 +263,17 @@ do
         -- service leaves beside a placeholder, because Chinese does not separate words with spaces.
         return (glossary.unmask(masked, tokens):gsub("近战", "X"))
     end)(), "Increases X伤害")
+    -- A game term whose loc key is not in the collected key list yet: its wording comes from the
+    -- hand checked block in i18n/build_glossary.py, and the bug it fixes was this exact string -
+    -- "Rampage!" (the Hive Scum ability) was translated as "大闹天宫!" by every engine.
+    check("a term with an uncollected loc key still masks", (through("Rampage", "zh-cn")), "狂暴")
+    check("and keeps the punctuation around it", (through("Rampage!", "zh-cn")), "狂暴!")
+    check("and does not touch a longer word", (through("Rampaged", "zh-cn")), "Rampaged")
+    -- Only Chinese has a verified wording, so anywhere else the term stays out of the way instead
+    -- of forcing an invented one.
+    check("and is left alone where it has no verified wording",
+        (through("Rampage", "ru")), "Rampage")
+
     -- A multi-word term that merely starts with a label-only word is a name of its own.
     check("a multi-word name keeps masking",
         (glossary.mask("Close Combat", "zh-cn", false)):find("^⟦%d+⟧$") ~= nil, true)

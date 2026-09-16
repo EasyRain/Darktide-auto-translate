@@ -30,6 +30,10 @@ return {
         { en = "Arbites", ["zh-cn"] = "法务官", ["zh-tw"] = "法務官", uk = "Арбітр" },
         { en = "Skitarii", ["zh-cn"] = "护教军士兵", ["zh-tw"] = "護教軍士兵", uk = "Скітарій" },
 
+        -- game terms whose own loc key is not in the collected key list (yet); the game's
+        -- wording, checked against the export where the export has the term
+        { en = "Rampage", ["zh-cn"] = "狂暴", ["zh-tw"] = "狂暴" },
+
         -- hand written interface labels (general UI words, 16 languages)
         { en = "Right", ["zh-cn"] = "右侧", ["zh-tw"] = "右側", ja = "右", ko = "오른쪽", ru = "справа", de = "rechts", fr = "droite", es = "derecha", it = "destra", pl = "prawo", ["pt-br"] = "direita", uk = "праворуч", nl = "rechts", sv = "höger", tr = "sağ", ar = "يمين" },
         { en = "Left", ["zh-cn"] = "左侧", ["zh-tw"] = "左側", ja = "左", ko = "왼쪽", ru = "слева", de = "links", fr = "gauche", es = "izquierda", it = "sinistra", pl = "lewo", ["pt-br"] = "esquerda", uk = "ліворуч", nl = "links", sv = "vänster", tr = "sol", ar = "يسار" },
