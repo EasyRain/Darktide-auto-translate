@@ -35,37 +35,42 @@ typedef struct {
     const char* internal;
     const char* google;
     const char* deepl;
+    const char* bing;
 } LangMap;
 
 static const LangMap LANG_MAP[] = {
-    { "en",    "en",    "EN" },
-    { "zh-cn", "zh-CN", "ZH-HANS" },
-    { "zh-tw", "zh-TW", "ZH-HANT" },
-    { "ja",    "ja",    "JA" },
-    { "ko",    "ko",    "KO" },
-    { "ru",    "ru",    "RU" },
-    { "de",    "de",    "DE" },
-    { "fr",    "fr",    "FR" },
-    { "es",    "es",    "ES" },
-    { "it",    "it",    "IT" },
-    { "pl",    "pl",    "PL" },
-    { "pt-br", "pt-BR", "PT-BR" },
-    { "uk",    "uk",    "UK" },
+    { "en",    "en",    "EN",      "en" },
+    { "zh-cn", "zh-CN", "ZH-HANS", "zh-Hans" },
+    { "zh-tw", "zh-TW", "ZH-HANT", "zh-Hant" },
+    { "ja",    "ja",    "JA",      "ja" },
+    { "ko",    "ko",    "KO",      "ko" },
+    { "ru",    "ru",    "RU",      "ru" },
+    { "de",    "de",    "DE",      "de" },
+    { "fr",    "fr",    "FR",      "fr" },
+    { "es",    "es",    "ES",      "es" },
+    { "it",    "it",    "IT",      "it" },
+    { "pl",    "pl",    "PL",      "pl" },
+    { "pt-br", "pt-BR", "PT-BR",   "pt" },
+    { "uk",    "uk",    "UK",      "uk" },
 };
 
 int at_online_lang_code_for(const char* provider, const char* internal_lang, char* out, int cap)
 {
     size_t i;
     int deepl;
+    int bing;
 
     if (!internal_lang || !out || cap <= 0) {
         return 0;
     }
     deepl = provider && _stricmp(provider, "deepl") == 0;
+    bing = provider && _stricmp(provider, "bing") == 0;
 
     for (i = 0; i < sizeof(LANG_MAP) / sizeof(LANG_MAP[0]); i++) {
         if (_stricmp(LANG_MAP[i].internal, internal_lang) == 0) {
-            strncpy_s(out, (size_t)cap, deepl ? LANG_MAP[i].deepl : LANG_MAP[i].google, _TRUNCATE);
+            const char* code = bing ? LANG_MAP[i].bing
+                                    : (deepl ? LANG_MAP[i].deepl : LANG_MAP[i].google);
+            strncpy_s(out, (size_t)cap, code, _TRUNCATE);
             return 1;
         }
     }
@@ -255,6 +260,7 @@ int at_online_provider_known(const char* provider)
            _stricmp(provider, "google_api") == 0 ||
            _stricmp(provider, "google_clients5") == 0 ||
            _stricmp(provider, "google_gtx") == 0 ||
+           _stricmp(provider, "bing") == 0 ||
            _stricmp(provider, "mymemory") == 0;
 }
 
@@ -265,7 +271,131 @@ int at_online_needs_key(const char* provider)
 
 int at_online_uses_post(const char* provider)
 {
-    return provider && _stricmp(provider, "deepl") == 0;
+    return provider && (_stricmp(provider, "deepl") == 0 || _stricmp(provider, "bing") == 0);
+}
+
+// ---------------------------------------------------------------------------
+// Bing: a session token first, then the translation
+// ---------------------------------------------------------------------------
+// The keyless Microsoft endpoint is a two-step flow. https://cn.bing.com/translator carries
+//
+//     params_AbusePreventionHelper = [1789537836335,"GBaGdJt6oY...",3600000]
+//     IG:"810EA0129C0F4C1E9A2E4B6D8F0A1B2C"
+//
+// and /ttranslatev3 wants the first two back as form fields and the IG in the query. One page
+// load serves many translations - measured from a China residential IP: 15 requests at one per
+// second, all accepted, with the same token still valid after 110 seconds - so the values are
+// kept here and the Lua layer only asks for a refresh when a reply says the session expired.
+//
+// Which host matters: www.bing.com answered HTTP 200 with a 0-byte body for the very same
+// request, from a China IP and from a hosting IP alike, while cn.bing.com answered with a
+// translation. A hosting IP (a VPN exit) gets a 401 from cn.bing.com, which is why this flow
+// is only worth testing from the network a player actually has.
+static char g_bing_key[64];
+static char g_bing_token[192];
+static char g_bing_ig[64];
+
+int at_online_bootstrap_needed(const char* provider)
+{
+    return provider && _stricmp(provider, "bing") == 0;
+}
+
+int at_online_bootstrap_ready(void)
+{
+    return g_bing_key[0] != 0 && g_bing_token[0] != 0 && g_bing_ig[0] != 0;
+}
+
+void at_online_bootstrap_clear(void)
+{
+    g_bing_key[0] = 0;
+    g_bing_token[0] = 0;
+    g_bing_ig[0] = 0;
+}
+
+// Copies [begin, end) into out, trimming the spaces and quotes the page wraps values in.
+static int copy_span(const char* begin, const char* end, char* out, int cap)
+{
+    int n;
+
+    if (!begin || !end || !out || cap <= 0 || end <= begin) {
+        return 0;
+    }
+    while (begin < end && (*begin == ' ' || *begin == '\t' || *begin == '"')) {
+        begin++;
+    }
+    while (end > begin && (end[-1] == ' ' || end[-1] == '\t' || end[-1] == '"')) {
+        end--;
+    }
+    n = (int)(end - begin);
+    if (n <= 0 || n >= cap) {
+        return 0;
+    }
+    memcpy(out, begin, (size_t)n);
+    out[n] = 0;
+    return 1;
+}
+
+int at_online_bootstrap_path(const char* provider, char* out, int cap)
+{
+    if (!at_online_bootstrap_needed(provider)) {
+        set_errorf("provider '%s' needs no session%s", provider ? provider : "(null)", "");
+        return 0;
+    }
+    if (!out || cap <= 0) {
+        set_error("missing argument");
+        return 0;
+    }
+    strncpy_s(out, (size_t)cap, "/translator", _TRUNCATE);
+    return 1;
+}
+
+int at_online_bootstrap_parse(const char* page_utf8)
+{
+    const char* abuse;
+    const char* open;
+    const char* comma;
+    const char* first_quote;
+    const char* second_quote;
+    const char* ig;
+    const char* ig_end;
+
+    if (!page_utf8 || !*page_utf8) {
+        set_error("bing's translator page was empty");
+        return 0;
+    }
+
+    at_online_bootstrap_clear();
+
+    abuse = strstr(page_utf8, "params_AbusePreventionHelper");
+    if (!abuse) {
+        set_error("bing's page carried no session block (params_AbusePreventionHelper)");
+        return 0;
+    }
+    open = strchr(abuse, '[');
+    comma = open ? strchr(open, ',') : NULL;
+    if (!comma || !copy_span(open + 1, comma, g_bing_key, (int)sizeof(g_bing_key))) {
+        set_error("bing's session key could not be read");
+        return 0;
+    }
+    first_quote = strchr(comma + 1, '"');
+    second_quote = first_quote ? strchr(first_quote + 1, '"') : NULL;
+    if (!second_quote ||
+        !copy_span(first_quote + 1, second_quote, g_bing_token, (int)sizeof(g_bing_token))) {
+        set_error("bing's session token could not be read");
+        at_online_bootstrap_clear();
+        return 0;
+    }
+    ig = strstr(abuse, "IG:\"");
+    if (!ig) {
+        ig = strstr(page_utf8, "IG:\"");
+    }
+    ig_end = ig ? strchr(ig + 4, '"') : NULL;
+    if (!ig_end || !copy_span(ig + 4, ig_end, g_bing_ig, (int)sizeof(g_bing_ig))) {
+        set_error("bing's session id (IG) could not be read");
+        at_online_bootstrap_clear();
+        return 0;
+    }
+    return 1;
 }
 
 // DeepL serves free and paid keys from different hosts. Free keys end in ":fx",
@@ -298,6 +428,10 @@ int at_online_host(const char* provider, const char* api_key, char* out, int cap
         host = "translate.googleapis.com";
     } else if (_stricmp(provider, "mymemory") == 0) {
         host = "api.mymemory.translated.net";
+    } else if (_stricmp(provider, "bing") == 0) {
+        // cn.bing.com, not www.bing.com: the same request answered a 0-byte 200 on the
+        // international host and a translation here (both measured, same machine).
+        host = "cn.bing.com";
     } else if (_stricmp(provider, "google_api") == 0) {
         host = "translation.googleapis.com";
     } else {
@@ -366,6 +500,17 @@ int at_online_path(const char* provider, const char* api_key, const char* source
     } else if (_stricmp(provider, "mymemory") == 0) {
         written = _snprintf_s(out, (size_t)cap, _TRUNCATE,
                               "/get?q=%s&langpair=%s%%7C%s", encoded, src, dst);
+    } else if (_stricmp(provider, "bing") == 0) {
+        // The text and both languages travel in the body; the query carries the session id
+        // and the vertical flag. `&&` is not a typo - it is what the web client sends.
+        if (!at_online_bootstrap_ready()) {
+            free(encoded);
+            set_error("bing needs a session token before the first request");
+            return 0;
+        }
+        written = _snprintf_s(out, (size_t)cap, _TRUNCATE,
+                              "/ttranslatev3?isVertical=1&&IG=%s&IID=translator.5024.1",
+                              g_bing_ig);
     } else if (_stricmp(provider, "google_api") == 0) {
         if (!api_key || !*api_key) {
             free(encoded);
@@ -694,7 +839,7 @@ int at_online_body(const char* provider, const char* source_lang, const char* ta
         set_error("missing argument");
         return 0;
     }
-    if (_stricmp(provider, "deepl") != 0) {
+    if (_stricmp(provider, "deepl") != 0 && _stricmp(provider, "bing") != 0) {
         set_errorf("provider '%s' does not use a request body%s", provider, "");
         return 0;
     }
@@ -719,8 +864,21 @@ int at_online_body(const char* provider, const char* source_lang, const char* ta
         return 0;
     }
 
-    written = _snprintf_s(out, (size_t)cap, _TRUNCATE,
-                          "text=%s&source_lang=%s&target_lang=%s", encoded, src, dst);
+    if (_stricmp(provider, "bing") == 0) {
+        if (!at_online_bootstrap_ready()) {
+            free(encoded);
+            set_error("bing needs a session token before the first request");
+            return 0;
+        }
+        // Bing spells the source as fromLang (empty means "detect"), and it is happy to be
+        // told the language rather than guess.
+        written = _snprintf_s(out, (size_t)cap, _TRUNCATE,
+                              "text=%s&fromLang=%s&to=%s&token=%s&key=%s",
+                              encoded, src, dst, g_bing_token, g_bing_key);
+    } else {
+        written = _snprintf_s(out, (size_t)cap, _TRUNCATE,
+                              "text=%s&source_lang=%s&target_lang=%s", encoded, src, dst);
+    }
     free(encoded);
 
     if (written < 0) {
@@ -840,7 +998,7 @@ int at_online_headers(const char* provider, const char* api_key, char* out, int 
 
 const char* at_online_content_type(const char* provider)
 {
-    if (provider && _stricmp(provider, "deepl") == 0) {
+    if (provider && (_stricmp(provider, "deepl") == 0 || _stricmp(provider, "bing") == 0)) {
         return "application/x-www-form-urlencoded";
     }
     return NULL;
@@ -934,6 +1092,64 @@ int at_online_parse_at(const char* provider, const char* body_utf8, int index, c
     return n;
 }
 
+// Bing answers with one object per text:
+//   [{"translations":[{"text":"重新装填速度","to":"zh-Hans"}],"usedLLM":true,...}]
+// and reports a refusal *inside* an HTTP 200 as well:
+//   {"statusCode":400,"errorMessage":""}    unsupported language
+//   {"statusCode":205,"errorMessage":""}    session expired
+// A 0-byte body is what the international host answers when it does not like the caller, so an
+// empty reply is a failure here rather than an empty translation.
+static int parse_bing(const char* body, char* out, int cap)
+{
+    JVal* root;
+    JVal* node;
+    const char* text;
+    int status;
+    int n;
+
+    if (!body || !*body) {
+        set_error("bing returned an empty reply (no session, or the host refused)");
+        return -1;
+    }
+
+    root = json_parse(body);
+    if (!root) {
+        set_error("response was not valid JSON");
+        return -1;
+    }
+
+    node = json_path(root, "0.translations.0.text");
+    text = json_str(node);
+    if (text && *text) {
+        n = (int)strlen(text);
+        if (n >= cap) {
+            json_free(root);
+            set_error("translated text does not fit the output buffer");
+            return -1;
+        }
+        memcpy(out, text, (size_t)n + 1);
+        json_free(root);
+        return n;
+    }
+
+    status = json_int(json_get(root, "statusCode"), 0);
+    json_free(root);
+    if (status == 205) {
+        // The session went stale. Forgetting it here means the next attempt bootstraps a new
+        // one instead of replaying a token the service has already rejected.
+        at_online_bootstrap_clear();
+        set_error("bing's session expired (statusCode 205); a new session is needed");
+        return -1;
+    }
+    if (status) {
+        _snprintf_s(g_error, sizeof(g_error), _TRUNCATE,
+                    "bing refused the request (statusCode %d)", status);
+        return -1;
+    }
+    set_error("response contained no translated text");
+    return -1;
+}
+
 int at_online_parse(const char* provider, const char* body_utf8, char* out, int cap)
 {
     if (!provider || !body_utf8 || !out || cap <= 0) {
@@ -953,6 +1169,9 @@ int at_online_parse(const char* provider, const char* body_utf8, char* out, int 
     }
     if (_stricmp(provider, "mymemory") == 0) {
         return parse_mymemory(body_utf8, out, cap);
+    }
+    if (_stricmp(provider, "bing") == 0) {
+        return parse_bing(body_utf8, out, cap);
     }
     if (_stricmp(provider, "google_api") == 0) {
         return parse_google_api(body_utf8, out, cap);

@@ -18,9 +18,13 @@ call :check mymemory       tests\fixtures\mymemory_entity.json
 REM Real DeepL responses, captured with a free-tier key (no key in the fixtures).
 call :check deepl          tests\fixtures\deepl_zhcn.json
 call :check deepl          tests\fixtures\deepl_ja.json
+REM Bing's keyless endpoint: captured from cn.bing.com (2026-09-16, China IP). It answers with
+REM an array of objects, and reports a refusal *inside* a 200 the way MyMemory does.
+call :check bing           tests\fixtures\bing_zhcn.json
 
 REM These must be *rejected*: the service reports a refusal with status 200.
 call :expect_fail mymemory tests\fixtures\mymemory_quota.json
+call :expect_fail bing     tests\fixtures\bing_badlang.json
 REM DeepL sends errors as {"message":...} with a 4xx status.
 call :expect_fail deepl    tests\fixtures\deepl_badlang.json
 

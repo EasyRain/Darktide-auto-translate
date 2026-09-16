@@ -389,6 +389,84 @@ static int cmd_selftest(void)
                                 "\"responseStatus\":200}",
                                 out, (int)sizeof(out)) > 0);
 
+    printf("\n== bing: a session token first, then the request ==\n");
+    {
+        // The keyless Microsoft endpoint hands out a key, a token and an IG on one page load and
+        // wants them back afterwards. The page text below is the shape the real page carried
+        // (captured from cn.bing.com on 2026-09-16, values shortened); what the test pins is that
+        // a missing block is refused rather than sent as a broken request, and that an expired
+        // session is forgotten so the next attempt bootstraps a new one.
+        const char* page =
+            "<html><head><script>var _G={};IG:\"810EA0129C0F4C1E9A2E4B6D8F0A1B2C\","
+            "params_AbusePreventionHelper = [1789537836335,\"GBaGdJt6oYKQ1Zz9Tk4m\",3600000];"
+            "</script></head><body>translator</body></html>";
+        char path[512];
+        char body[1024];
+        char out[256];
+
+        at_online_bootstrap_clear();
+        expect_true("bing reports that it needs a session", at_online_bootstrap_needed("bing") == 1);
+        expect_true("another provider does not", at_online_bootstrap_needed("google_clients5") == 0);
+        expect_true("a request without a session is refused",
+                    at_online_path("bing", "", "en", "zh-cn", "Reload Speed", path,
+                                   (int)sizeof(path)) == 0);
+        expect_true("the bootstrap path is the translator page",
+                    at_online_bootstrap_path("bing", path, (int)sizeof(path)) == 1 &&
+                        strcmp(path, "/translator") == 0);
+        expect_true("the page is parsed into a session",
+                    at_online_bootstrap_parse(page) == 1 && at_online_bootstrap_ready() == 1);
+        expect_true("a page without the block is refused",
+                    at_online_bootstrap_parse("<html>nothing here</html>") == 0);
+        expect_true("and a refused page leaves no session behind", at_online_bootstrap_ready() == 0);
+        expect_true("so a good page is parsed again", at_online_bootstrap_parse(page) == 1);
+
+        expect_true("bing spells the languages its own way",
+                    at_online_lang_code_for("bing", "zh-cn", out, (int)sizeof(out)) == 1 &&
+                        strcmp(out, "zh-Hans") == 0 &&
+                        at_online_lang_code_for("bing", "zh-tw", out, (int)sizeof(out)) == 1 &&
+                        strcmp(out, "zh-Hant") == 0 &&
+                        at_online_lang_code_for("bing", "pt-br", out, (int)sizeof(out)) == 1 &&
+                        strcmp(out, "pt") == 0);
+        expect_true("it needs no API key", at_online_needs_key("bing") == 0);
+        expect_true("it posts a form",
+                    at_online_uses_post("bing") == 1 &&
+                        strcmp(at_online_content_type("bing"), "application/x-www-form-urlencoded") == 0);
+        expect_true("the query carries the session id",
+                    at_online_path("bing", "", "en", "zh-cn", "Reload Speed", path,
+                                   (int)sizeof(path)) == 1 &&
+                        strstr(path, "/ttranslatev3") != NULL &&
+                        strstr(path, "IG=810EA0129C0F4C1E9A2E4B6D8F0A1B2C") != NULL);
+        expect_true("the body carries the text, the pair and the token",
+                    at_online_body("bing", "en", "zh-cn", "Reload Speed", body,
+                                   (int)sizeof(body)) == 1 &&
+                        strstr(body, "text=Reload%20Speed") != NULL &&
+                        strstr(body, "fromLang=en") != NULL &&
+                        strstr(body, "to=zh-Hans") != NULL &&
+                        strstr(body, "token=GBaGdJt6oYKQ1Zz9Tk4m") != NULL &&
+                        strstr(body, "key=1789537836335") != NULL);
+        expect_true("it keeps the marker path (no multi-text form)",
+                    at_online_supports_multi_text("bing") == 0);
+
+        expect_true("a translation is read from translations[0].text",
+                    at_online_parse("bing",
+                                    "[{\"translations\":[{\"text\":\"\xE9\x87\x8D\xE6\x96\xB0\xE8\xA3\x85"
+                                    "\xE5\xA1\xAB\xE9\x80\x9F\xE5\xBA\xA6\",\"to\":\"zh-Hans\"}],"
+                                    "\"usedLLM\":true}]",
+                                    out, (int)sizeof(out)) > 0 &&
+                        strcmp(out, "\xE9\x87\x8D\xE6\x96\xB0\xE8\xA3\x85\xE5\xA1\xAB\xE9\x80\x9F\xE5\xBA\xA6") == 0);
+        expect_true("an unsupported language is refused",
+                    at_online_parse("bing", "{\"statusCode\":400,\"errorMessage\":\"\"}", out,
+                                    (int)sizeof(out)) < 0);
+        expect_true("an empty reply is refused (this is what the international host answers)",
+                    at_online_parse("bing", "", out, (int)sizeof(out)) < 0);
+        at_online_bootstrap_parse(page);
+        expect_true("an expired session is refused and forgotten",
+                    at_online_parse("bing", "{\"statusCode\":205,\"errorMessage\":\"\"}", out,
+                                    (int)sizeof(out)) < 0 &&
+                        at_online_bootstrap_ready() == 0);
+        at_online_bootstrap_clear();
+    }
+
     printf("\n== multi-text batches (DeepL's own form) ==\n");
     {
         // The Lua layer joins short labels with [n] markers; DeepL takes `text=` repeatedly

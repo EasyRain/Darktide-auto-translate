@@ -61,6 +61,18 @@ AT_API int at_online_supports_multi_text(const char* provider);
 // Authorization line. Returns 1 on success (empty string when none is needed).
 AT_API int at_online_headers(const char* provider, const char* api_key, char* out, int cap);
 
+// --- Session bootstrap (Bing) -------------------------------------------------
+// Some keyless endpoints hand out a token on one page load and want it back on every
+// request. The flow: 1 when this provider needs one, 2 where to GET it, 3 parse the page
+// into the core's session state, 4 whether that state is usable.
+AT_API int at_online_bootstrap_needed(const char* provider);
+AT_API int at_online_bootstrap_path(const char* provider, char* out, int cap);
+AT_API int at_online_bootstrap_parse(const char* page_utf8);
+AT_API int at_online_bootstrap_ready(void);
+// Forgets the session, so the next request bootstraps again (called when a reply reports an
+// expired session, and by the tests).
+AT_API void at_online_bootstrap_clear(void);
+
 // Content-Type for this provider's POST, or NULL when it does not POST.
 AT_API const char* at_online_content_type(const char* provider);
 
