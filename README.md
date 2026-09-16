@@ -799,6 +799,26 @@ looking at the root copy.) The script writes to the nested path, verifies it, an
 stray Lua left at the root. Lua is read at startup, so a change needs a restart; reloading mods
 is not enough.
 
+## Releasing
+
+`tools/package_release.py` builds the player-facing archive from an **explicit include list** —
+descriptor, README, `bin/at_core.dll`, the Lua (including `modules/`), and `translations/glossary.lua`
+plus `translations/term_keys.lua`:
+
+```
+python tools\package_release.py                                    # what would go in
+python tools\package_release.py --out D:\ --verify-deployed "<game>\mods\auto_translate"
+```
+
+Everything else stays out on purpose, and the list is closed so that a hand-made zip cannot
+quietly add it: `models/` (1.4 GB, the player's own download), `translations/export/` (the
+glossary's input, and a stale copy in the game folder blocks re-collection), any
+`translations/<language>/` store (the player's own translations, not the mod's), and `src/`,
+`tools/`, `tests/`, `build.bat` and `bin/at_cli.exe`. The archive holds one top-level
+`auto_translate/` folder, so it unpacks straight into the game's `mods` directory, and
+`--verify-deployed` compares every runtime file against the copy the game is loading — the
+release is then the build that was actually tested.
+
 ## Roadmap
 
 Shipped: the injector and the hand-editable library, the offline NLLB-200 1.3B engine with its
