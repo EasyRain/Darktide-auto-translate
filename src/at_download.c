@@ -47,11 +47,12 @@ static volatile LONG g_running = 0;      // a worker thread exists
 
 // -1 = decide per host (default), 0 = never use the proxy, 1 = use it when one is set.
 //
-// The mirror and the proxy are alternatives, not allies: hf-mirror.com exists for players
-// inside China and only serves a Chinese IP, so sending it through a VPN (whose exit is
-// abroad) is the one way to make it fail. huggingface.co is the other way round - from
-// China it is unreachable without the proxy. So the route follows the host, and the
-// fallback between the two hosts is then a fallback between two different routes.
+// The mirror and the proxy are alternatives, not allies: hf-mirror.com is a mirror for
+// networks that cannot reach huggingface.co, and it serves the regions it is intended for,
+// so sending it through a proxy (whose exit is somewhere else) is the one way to make it
+// fail. huggingface.co is the other way round - on those networks it is unreachable
+// without the proxy. So the route follows the host, and the fallback between the two hosts
+// is then a fallback between two different routes.
 static volatile LONG g_proxy_mode = -1;
 static char g_error[512] = { 0 };
 static char g_path[1024] = { 0 };

@@ -134,8 +134,8 @@ return {
         ["zh-cn"] = "API 服务商",
     },
     api_provider_description = {
-        en = "Which translation service the 'Online API' engine talks to. DeepL has a free tier (500,000 characters per month) and is reachable from mainland China. Custom is any translation service you describe yourself (a self-hosted engine, another provider, a service behind your own gateway): URL, key, request template and where the reply keeps the translation are all settings - and they ship pre-filled with DeepL's parameters, so switching to Custom against DeepL needs nothing but the key.",
-        ["zh-cn"] = "「在线（正式 API）」引擎要连哪家翻译服务。DeepL 有免费额度（每月 50 万字符）且国内可直连。自定义＝你自己描述的任意翻译服务（自建引擎、其他供应商、走自己网关的服务）：网址、密钥、请求模板、响应里译文的位置都由你填写——而且默认已预填 DeepL 的参数，所以用「自定义」接 DeepL 只需填密钥。",
+        en = "Which translation service the 'Online API' engine talks to. DeepL has a free tier (500,000 characters per month) and is reachable directly on most networks - if yours cannot reach it, set the proxy below. Custom is any translation service you describe yourself (a self-hosted engine, another provider, a service behind your own gateway): URL, key, request template and where the reply keeps the translation are all settings - and they ship pre-filled with DeepL's parameters, so switching to Custom against DeepL needs nothing but the key.",
+        ["zh-cn"] = "「在线（正式 API）」引擎要连哪家翻译服务。DeepL 有免费额度（每月 50 万字符），在多数网络下可直连——如果你的网络连不上，在下面设置代理。自定义＝你自己描述的任意翻译服务（自建引擎、其他供应商、走自己网关的服务）：网址、密钥、请求模板、响应里译文的位置都由你填写——而且默认已预填 DeepL 的参数，所以用「自定义」接 DeepL 只需填密钥。",
     },
     api_deepl = {
         en = "DeepL (recommended)",
@@ -285,6 +285,22 @@ return {
         en = "Auto Translate [test]: failed - %s",
         ["zh-cn"] = "Auto Translate【测试】：失败——%s",
     },
+    custom_test_busy = {
+        en = "Auto Translate [test]: another request is still in flight - wait a moment and press again.",
+        ["zh-cn"] = "Auto Translate【测试】：上一个请求还没结束——稍等一下再按。",
+    },
+    custom_test_transport = {
+        en = "Auto Translate [test]: the request could not be completed (network error %s). Check the URL and the proxy, then try again.",
+        ["zh-cn"] = "Auto Translate【测试】：请求没能完成（网络错误 %s）。检查网址与代理后重试。",
+    },
+    custom_test_no_module = {
+        en = "Auto Translate [test]: the custom API module did not load, so nothing could be sent. The game log says why.",
+        ["zh-cn"] = "Auto Translate【测试】：自定义 API 模块没有加载，因此什么都没发出。原因见游戏日志。",
+    },
+    custom_test_placeholder_lost = {
+        en = "%s (%d glossary placeholder(s) missing from the reply)",
+        ["zh-cn"] = "%s（回复中缺少 %d 个术语占位符）",
+    },
     api_custom = {
         en = "Custom (any HTTP API)",
         ["zh-cn"] = "自定义（任意 HTTP 接口）",
@@ -400,8 +416,8 @@ return {
         ["zh-cn"] = "优先使用 Hugging Face 镜像",
     },
     model_mirror_description = {
-        en = "Download from hf-mirror.com instead of huggingface.co. Mainland China usually needs this. The mirror is fetched DIRECTLY (it only serves a Chinese IP, so having it go out through a VPN that exits abroad is the one reliable way to break it), while huggingface.co is fetched through the proxy set above. If the chosen host cannot be reached the other one is tried once, so a wrong choice costs seconds rather than the download.",
-        ["zh-cn"] = "从 hf-mirror.com 而不是 huggingface.co 下载。国内通常需要打开。**镜像站走直连**（它只接受国内 IP，经过落地在境外的代理反而会失败），而 huggingface.co 走上面设置的代理。所选主机连不上时会自动改用另一个重试一次，所以选错只浪费几秒。",
+        en = "Download from hf-mirror.com instead of huggingface.co. The mirror is meant for networks that cannot reach huggingface.co (or reach it very slowly). It is fetched DIRECTLY: it serves the regions it is intended for, so routing it through a proxy whose exit is somewhere else is the one reliable way to break it - while huggingface.co is fetched through the proxy set above. If the chosen host cannot be reached the other one is tried once, so a wrong choice costs seconds rather than the download.",
+        ["zh-cn"] = "从 hf-mirror.com 而不是 huggingface.co 下载。镜像站面向连不上（或很慢）huggingface.co 的网络。**镜像站走直连**：它只服务它面向的地区，用落地在其他地区的代理反而一定会失败；而 huggingface.co 走上面设置的代理。所选主机连不上时会自动改用另一个重试一次，所以选错只浪费几秒，不会毁掉整次下载。",
     },
     delete_model = {
         en = "Delete the model files",

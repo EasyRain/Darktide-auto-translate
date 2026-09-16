@@ -1,6 +1,6 @@
 -- download.lua — fetching the offline model, one file at a time.
 --
--- The files are 1.4 GB together, they come from a host that mainland China cannot reach
+-- The files are 1.4 GB together, they come from a host that some networks cannot reach
 -- without the mirror, and a transfer has to survive a cancelled game and a dropped
 -- connection. The transfer itself (streaming, Range resume, cancel, checksum) lives in
 -- the native core (src/at_download.c); this module owns the *sequence*: which file, where
@@ -171,10 +171,11 @@ local function next_file(core)
                 if core.at_download_start(url, path, file.sha256) == 1 then
                     M.state.active = true
                     -- One visible line per event, and this is the one for "it started":
-                    -- it names the file and the route (the mirror direct - it only serves a
-                    -- Chinese IP, so a VPN exit abroad breaks it - or huggingface.co through
-                    -- the proxy). The outcome gets a notification of its own; no message is
-                    -- sent to two channels, which is what made DMF print everything twice.
+                    -- it names the file and the route (the mirror direct - it serves the
+                    -- regions it is intended for, so a proxy exit somewhere else breaks it -
+                    -- or huggingface.co through the proxy). The outcome gets a notification of
+                    -- its own; no message is sent to two channels, which is what made DMF
+                    -- print everything twice.
                     util.info(mod, "downloading %s (%d of %d, %.0f MB)%s from %s", file.name, i, #FILES,
                         file.size / (1024 * 1024),
                         M.state.received > 0

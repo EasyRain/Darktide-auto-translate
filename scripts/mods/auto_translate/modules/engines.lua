@@ -141,25 +141,25 @@ end
 -- offline tests, and they can still be selected by hand, but they are no longer
 -- offered in the options and 'auto' never falls back to them: they get rate
 -- limited and blocked too easily to build on. Google's translate.* hosts in
--- particular are reset during the TLS handshake in mainland China.
+-- particular have their TLS handshake reset by network filtering on many networks.
 --
 -- Kept here rather than deleted because they are the only zero-setup path and are
 -- handy for testing; see src/at_online.c for the reachability notes.
 --
---   google_clients5  clients5.google.com — reachable from mainland China, and the
---                    only free endpoint verified to answer zh-CN in Simplified.
---   google_gtx       translate.googleapis.com — reset during the TLS handshake in
---                    China (SNI filtering).
+--   google_clients5  clients5.google.com — reachable directly on most networks, and
+--                    the only free endpoint verified to answer zh-CN in Simplified.
+--   google_gtx       translate.googleapis.com — its TLS handshake is reset by
+--                    network filtering (SNI based) on many networks.
 --   mymemory         reachable, but always answers in Traditional Chinese whatever
 --                    you ask for — a MyMemory limitation, not a caller bug.
 -- ---------------------------------------------------------------------------
 M.FREE_PROVIDERS = { "google_clients5", "google_gtx", "mymemory" }
 
--- Official APIs. DeepL is the default because it is reachable from mainland
--- China (verified); translation.googleapis.com is not.
+-- Official APIs. DeepL is the default because it is reachable directly on most
+-- networks (verified without a proxy); translation.googleapis.com is not.
 -- The services the "Online API" engine can talk to. Google Cloud is *not* offered: it is
--- blocked from mainland China (the TLS handshake to translation.googleapis.com is reset,
--- verified) and its sign-up is the most involved of the three. Its code is still in
+-- unreachable on many networks (the TLS handshake to translation.googleapis.com is reset
+-- there, verified) and its sign-up is the most involved of the three. Its code is still in
 -- at_online.c and passes its offline tests, so it can be brought back by adding one line
 -- here - but it is not a setting any more.
 M.API_PROVIDERS = {

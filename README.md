@@ -182,15 +182,16 @@ leaving something that looks like a model.
 
 **Prefer the Hugging Face mirror** starts from `hf-mirror.com` instead of
 `huggingface.co`; whatever is chosen, a failed connection is retried once against the
-other host, because which one is reachable depends on where the player is.
+other host, because which one is reachable depends on the player's network.
 
 The route follows the host, and that is deliberate: **the mirror is fetched directly, and
-`huggingface.co` goes through the proxy**. hf-mirror.com exists for players inside China
-and only serves a Chinese IP, so sending it out through a VPN whose exit is abroad is the
-one reliable way to break it — while huggingface.co is exactly the host a player in China
-cannot reach without one. The log line names the route ("from hf-mirror.com, direct"), so
-a download that will not start says which of the two things to change.
-`at_cli.exe fetch … --proxy-mode auto|direct|proxy` overrides it for measuring.
+`huggingface.co` goes through the proxy**. hf-mirror.com is a mirror for networks that cannot
+reach `huggingface.co` (or reach it very slowly); it serves the regions it is intended for, so
+sending it out through a proxy whose exit is somewhere else is the one reliable way to break
+it — while `huggingface.co` is exactly the host that needs one on those networks. The log line
+names the route ("from hf-mirror.com, direct"), so a download that will not start says which
+of the two things to change. `at_cli.exe fetch … --proxy-mode auto|direct|proxy` overrides it
+for measuring.
 
 Measured with `at_cli.exe fetch` against the mirror: a full 4,852,054-byte file downloaded
 and verified (`checksum: ok`), a deliberately truncated 1,000,000-byte file resumed
@@ -486,11 +487,11 @@ carry each form, which is what to check before trusting a claim about line break
 
 **API service** — why DeepL is the default:
 
-| service | reachable from mainland China | note |
+| service | reachable without a proxy | note |
 | --- | --- | --- |
-| **DeepL** | yes | 1,000,000 characters/month on the free tier; keys ending in `:fx` use `api-free.deepl.com` automatically. |
+| **DeepL** | yes, on most networks | 1,000,000 characters/month on the free tier; keys ending in `:fx` use `api-free.deepl.com` automatically. |
 | **Custom** | whatever you point it at | Any HTTP endpoint: an OpenAI-compatible chat API, a self-hosted service, or a DeepL-style form endpoint. See below. |
-| Google Cloud Translation | **no** | `translation.googleapis.com` is reset during the TLS handshake, exactly like `translate.googleapis.com`. Works only behind a proxy. The code is still in `at_online.c` and still passes its offline tests, but it is no longer offered: sign-up is the most involved of the three and it needs a proxy to work at all. A settings file that still says `api_provider = "google"` maps to DeepL. |
+| Google Cloud Translation | **no, on many networks** | `translation.googleapis.com` is unreachable there — the TLS handshake is reset by network filtering, exactly like `translate.googleapis.com`. Works behind a proxy. The code is still in `at_online.c` and still passes its offline tests, but it is no longer offered: sign-up is the most involved of the three and it needs a proxy to work at all. A settings file that still says `api_provider = "google"` maps to DeepL. |
 
 ### Custom endpoints
 
@@ -612,9 +613,10 @@ cause of "nothing translates" on a machine where the browser works fine, so the 
   fix for a VPN in TUN mode or with its system proxy switched off.
 * **Otherwise the Windows proxy setting is used automatically** when it is enabled.
 * If Windows has a proxy address configured but switched off, the log says so and names the address.
-* **Google's `translate.*` hosts are blocked in mainland China** (the TLS handshake is reset), which
-  is why the free tier now starts with `clients5.google.com` — that host works. If every Google host
-  is unreachable for you, MyMemory still covers every language except `zh-cn`.
+* **Google's `translate.*` hosts are unreachable on many networks** (the TLS handshake is reset by
+  network filtering), which is why the free tier now starts with `clients5.google.com` — that host
+  works. If every Google host is unreachable for you, MyMemory still covers every language except
+  `zh-cn`.
 * Plaintext `http://` is supported (used for local testing), but every real endpoint is `https://`.
 
 `at_cli.exe proxy` prints what would be used, and any command accepts `--proxy host:port` to

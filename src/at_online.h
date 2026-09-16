@@ -7,11 +7,12 @@
 // ordinary functions that at_cli.exe can call with no game and no network.
 //
 // Providers currently declared:
-//   deepl        official API, POST, needs a key. Reachable from mainland China
-//                (verified), which is why it is the default API provider.
+//   deepl        official API, POST, needs a key. Reachable directly on most
+//                networks (verified without a proxy), which is why it is the
+//                default API provider.
 //   google_api   official Cloud Translation v2, needs a key. Implemented, but
-//                translation.googleapis.com is reset during the TLS handshake in
-//                China (verified), so it only works behind a proxy.
+//                translation.googleapis.com has its TLS handshake reset by network
+//                filtering (verified), so it only works behind a proxy.
 //   google_clients5 / google_gtx / mymemory
 //                the free public endpoints. Kept working for testing and for
 //                anyone who wants them, but no longer offered in the options:

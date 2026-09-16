@@ -783,11 +783,11 @@ end
 -- ---------------------------------------------------------------------------
 -- Provider health
 --
--- Some providers are simply unreachable from some networks (Google is blocked in
--- mainland China, so google_gtx fails on every single key while mymemory works
--- fine). Retrying a dead provider for every queued key would double the runtime
--- and hide the real problem, so a provider that fails to connect repeatedly is
--- dropped for the rest of the session and the log says so once.
+-- Some providers are simply unreachable from some networks (Google's translate hosts
+-- have their TLS handshake reset by network filtering, so google_gtx fails on every
+-- single key while mymemory works fine). Retrying a dead provider for every queued key
+-- would double the runtime and hide the real problem, so a provider that fails to
+-- connect repeatedly is dropped for the rest of the session and the log says so once.
 -- ---------------------------------------------------------------------------
 local PROVIDER_DISABLE_AFTER = 3
 
@@ -2072,7 +2072,7 @@ function M.update(mod, dt)
                 local body = len > 0 and ffi.string(body_buf, len) or ""
                 util.info(mod, "test reply (%d bytes) from %s: %s", #body, tostring(req.describe), body)
                 if result ~= 0 then
-                    util.popup(mod, "custom_test_failed", string.format("transport error %d", result))
+                    util.popup(mod, "custom_test_transport", tostring(result))
                 elseif http_code < 200 or http_code >= 300 then
                     local key = custom and custom.error_key(http_code)
                     -- The service's own sentence, when it wrote one: DeepL answers a bad
@@ -2100,7 +2100,7 @@ function M.update(mod, dt)
                             local restored, missing = glossary.unmask(answer, req.tokens)
                             answer = restored
                             if missing and missing > 0 then
-                                answer = answer .. string.format(" (%d placeholder(s) lost)", missing)
+                                answer = mod:localize("custom_test_placeholder_lost", answer, missing)
                             end
                         end
                         util.popup(mod, "custom_test_ok", req.item.en, answer)
@@ -2200,7 +2200,7 @@ function M.probe(mod, lang)
         end
     end
     if inflight then
-        util.popup(mod, "custom_test_failed", "a request is already in flight")
+        util.popup(mod, "custom_test_busy")
         return false
     end
 
@@ -2225,7 +2225,7 @@ function M.probe(mod, lang)
 
     if provider == "custom" then
         if not custom then
-            util.popup(mod, "custom_test_failed", "the custom API module is not loaded")
+            util.popup(mod, "custom_test_no_module")
             return false
         end
         local spec = custom.spec(mod)
