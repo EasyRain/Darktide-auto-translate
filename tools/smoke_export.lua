@@ -130,6 +130,57 @@ exporter._harvested = nil
 count = exporter.harvest_cache(nil, "zh-cn", KEY_LIST)
 check("a fresh key list still filters", count, 1)
 
+-- ---- 6) the language probe ---------------------------------------------------------------------
+-- A stand-in for a localization manager that *can* answer per language, so the probe has to find it:
+-- through the method table, through a language argument, and through a temporary language swap. The
+-- point of the probe is to decide whether twelve collection rounds can happen in one session, so a
+-- miss here would cost eleven launches.
+local VALUES = {
+    ["zh-cn"] = { loc_class_broker_name = "巢都渣滓" },
+    en = { loc_class_broker_name = "Hive Scum" },
+    ja = { loc_class_broker_name = "ハイヴスカム" },
+}
+local probe_manager = {
+    _language = "zh-cn",
+    _original_language = "en",
+    _status = "ready",
+    _localizers = { { name = "base" } },
+}
+setmetatable(probe_manager, {
+    __index = {
+        language = function(self) return self._language end,
+        get_string = function(self, key, lang)
+            local table_for_lang = VALUES[lang or self._language]
+            return table_for_lang and table_for_lang[key]
+        end,
+    },
+})
+Managers.localization = probe_manager
+Localize = function(key, lang)
+    local table_for_lang = VALUES[lang or Managers.localization._language]
+    return (table_for_lang and table_for_lang[key]) or key
+end
+
+infos = {}
+check("the probe reports success", exporter.probe_languages(nil, "loc_class_broker_name"), true)
+local report = infos[#infos] or ""
+local function has(fragment)
+    return report:find(fragment, 1, true) ~= nil
+end
+check_true("names the current language", has("current language 'zh-cn'"))
+check_true("lists the methods it found", has("get_string(function)") and has("language(function)"))
+check_true("reads the key in the current language", has("in the current language = '巢都渣滓'"))
+check_true("finds the language argument", has([[Localize(key, "en")]]) and has("'Hive Scum'"))
+check_true("finds the swap to en", has("with _language = 'en': 'loc_class_broker_name' = 'Hive Scum'"))
+check_true("and to ja", has("with _language = 'ja': 'loc_class_broker_name' = 'ハイヴスカム'"))
+check("the current language is put back", Managers.localization._language, "zh-cn")
+
+-- A manager that cannot do it must not blow up either: the probe is a diagnostic.
+Managers.localization = { _language = "zh-cn" }
+infos = {}
+check("a bare manager does not break the probe", exporter.probe_languages(nil, "loc_class_broker_name"), true)
+check_true("and it still reports", (infos[#infos] or ""):find("current language", 1, true) ~= nil)
+
 print("")
 if failures > 0 then
     print(string.format("%d FAILURE(S)", failures))

@@ -402,6 +402,11 @@ function mod.on_all_mods_loaded()
     -- localization manager keeps its table reachable, the key list stops mattering and no future
     -- term change ever needs another collection run. Log only; nothing is written.
     pcall(exporter.describe_localization, mod)
+
+    -- And one that answers whether the twelve collection rounds can be done in a single session:
+    -- if the manager can hand out a string in another language, no Steam switching is needed.
+    -- Temporary diagnostic - log only, nothing written, safe to delete once answered.
+    pcall(exporter.probe_languages, mod)
 end
 
 -- Mod options: "Reload translation files"

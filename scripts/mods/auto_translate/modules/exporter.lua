@@ -315,6 +315,122 @@ function M.harvest_cache(mod, lang, list)
     return count
 end
 
+-- ---- can another language be read without restarting the game? ----
+--
+-- The export above needs one launch per language, because the game runs in one language at a time and
+-- switching it means quitting through Steam: twelve launches for twelve languages. Whether that can
+-- be avoided depends on the localization manager - if it can hand out a string in a language other
+-- than the current one (a language argument, a setter, a per-language localizer, or a backend that
+-- loads the package on demand), one session collects every language. Calling into the game from a mod
+-- is normal (CuriosChecker opens a shop view from the character screen), so this logs what the object
+-- offers and then tries the three shapes the API could have, restoring whatever it touched.
+--
+-- Log only; nothing is written. One line block, meant to be read once and then deleted.
+function M.probe_languages(mod, key)
+    key = key or "loc_class_broker_name"
+    local ok, report = pcall(function()
+        local manager = Managers and Managers.localization
+        if type(manager) ~= "table" then
+            return "Managers.localization is " .. type(manager)
+        end
+        local lines = {}
+        local function add(fmt, ...)
+            lines[#lines + 1] = string.format(fmt, ...)
+        end
+        local function try(label, fn)
+            local done, value = pcall(fn)
+            add("  %-42s -> %s", label,
+                done and ("'" .. tostring(value) .. "'") or ("error: " .. tostring(value)))
+        end
+        local function names_of(tbl)
+            local out = {}
+            for name, value in pairs(tbl) do
+                out[#out + 1] = name .. "(" .. type(value) .. ")"
+            end
+            table.sort(out)
+            return table.concat(out, ", ")
+        end
+
+        add("current language '%s', original '%s', status '%s'",
+            tostring(manager._language), tostring(manager._original_language), tostring(manager._status))
+
+        local mt = getmetatable(manager)
+        add("metatable: %s", type(mt))
+        if type(mt) == "table" then
+            add("  metatable fields: %s", names_of(mt))
+            if type(mt.__index) == "table" then
+                add("  method table: %s", names_of(mt.__index))
+            else
+                add("  __index is %s", type(mt.__index))
+            end
+        end
+
+        local localizers = rawget(manager, "_localizers")
+        if type(localizers) == "table" then
+            for i, localizer in pairs(localizers) do
+                add("localizer[%s] = %s", tostring(i), type(localizer))
+                local lmt = getmetatable(localizer)
+                if type(lmt) == "table" and type(lmt.__index) == "table" then
+                    add("    methods: %s", names_of(lmt.__index))
+                elseif type(lmt) == "table" then
+                    add("    metatable fields: %s", names_of(lmt))
+                end
+            end
+        end
+
+        -- 1) a language argument
+        local localize = rawget(_G, "Localize")
+        add("Localize('%s') in the current language = '%s'", key,
+            tostring(type(localize) == "function" and localize(key) or nil))
+        if type(localize) == "function" then
+            try('Localize(key, "en")', function() return localize(key, "en") end)
+            try('Localize(key, {language="en"})', function() return localize(key, { language = "en" }) end)
+        end
+
+        -- 2) a method on the manager
+        for _, name in ipairs({ "localize", "get", "get_string", "translate", "set_language",
+                                "language", "get_localizer", "get_language" }) do
+            local fn = manager[name]
+            if fn == nil and type(mt) == "table" and type(mt.__index) == "table" then
+                fn = mt.__index[name]
+            end
+            if type(fn) == "function" then
+                try(string.format("manager:%s(key, \"en\")", name),
+                    function() return manager[name](manager, key, "en") end)
+                try(string.format("manager:%s(key)", name),
+                    function() return manager[name](manager, key) end)
+            end
+        end
+
+        -- 3) the decisive one: ask for the same key with another language selected
+        local original = rawget(manager, "_language")
+        if type(original) == "string" then
+            for _, lang in ipairs({ "en", "ja" }) do
+                local set, err = pcall(function() manager._language = lang end)
+                if not set then
+                    add("  _language = '%s' refused: %s", lang, tostring(err))
+                else
+                    add("  with _language = '%s': '%s' = '%s'", lang, key,
+                        tostring(type(localize) == "function" and localize(key) or nil))
+                    local restored = pcall(function() manager._language = original end)
+                    if not restored then
+                        add("  !! could not restore _language = '%s'", tostring(original))
+                    end
+                end
+            end
+        end
+
+        return table.concat(lines, "\n")
+    end)
+
+    if ok and type(report) == "string" then
+        util.info(mod, "language probe:\n%s", report)
+    else
+        util.log(mod, "language probe failed: %s", tostring(report))
+    end
+    return ok
+end
+
 -- Tells the player how many languages are collected and which ones are still missing.
 function M.notify_progress(mod)
     local _, missing, done, total = M.progress()
