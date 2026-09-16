@@ -60,31 +60,34 @@ foreach ($file in (Get-ChildItem -Path $source -Recurse -File)) {
     Write-Output ("{0} {1,-34} {2}" -f $state, $relative, $a.Substring(0, 16))
 }
 
-# The data the Lua loads at runtime lives at the mod *root*, not next to the code: the
-# glossary, the term exports and the hand-editable translation files. Those change as often
-# as the code does (the glossary did, when language names were added), so they are synced and
-# verified here too - "the file did not land" is otherwise invisible until a player notices
-# the old data. bin/ and models/ are deliberately left alone: the DLL is built, the models are
-# 1.4 GB, and neither belongs in a routine deploy.
+# The data the Lua loads at runtime lives at the mod *root*, not next to the code: the glossary
+# and the term key list. Those change as often as the code does (the glossary did, when language
+# names were added), so they are synced and verified here too - "the file did not land" is
+# otherwise invisible until a player notices the old data. bin/ and models/ are deliberately left
+# alone: the DLL is built, the models are 1.4 GB, and neither belongs in a routine deploy.
+#
+# translations/export/ is not deployed either. Nothing reads it at runtime: it is the input to
+# tools/build_glossary.py, it is 73 KB, and it lives in the repository (the only record of the
+# game's terminology in twelve languages, which cannot be re-collected without launching the game
+# once per language). A stale copy in the game folder is worse than none, because the exporter
+# skips a language whose file already exists at the current key-list version.
 $dataSource = Join-Path $RepoRoot "translations"
 $dataDest = Join-Path $GameMods "$name\translations"
 if (Test-Path $dataSource) {
     New-Item -ItemType Directory -Force -Path $dataDest | Out-Null
-    Copy-Item -Path (Join-Path $dataSource '*') -Destination $dataDest -Recurse -Force
     Write-Output ""
-    foreach ($file in (Get-ChildItem -Path $dataSource -Recurse -File)) {
-        $relative = $file.FullName.Substring($dataSource.Length + 1)
-        $target = Join-Path $dataDest $relative
-        if (-not (Test-Path $target)) {
-            Write-Output ("MISSING  translations\{0}" -f $relative)
-            $failures++
-            continue
-        }
+    foreach ($file in (Get-ChildItem -Path $dataSource -File)) {
+        Copy-Item $file.FullName -Destination $dataDest -Force
+        $target = Join-Path $dataDest $file.Name
         $a = (Get-FileHash $file.FullName -Algorithm SHA256).Hash
         $b = (Get-FileHash $target -Algorithm SHA256).Hash
         $state = if ($a -eq $b) { "ok  " } else { "DIFF"; }
         if ($a -ne $b) { $failures++ }
-        Write-Output ("{0} translations\{1,-23} {2}" -f $state, $relative, $a.Substring(0, 16))
+        Write-Output ("{0} translations\{1,-23} {2}" -f $state, $file.Name, $a.Substring(0, 16))
+    }
+    $skipped = Get-ChildItem -Path $dataSource -Directory | Where-Object { $_.Name -eq "export" }
+    if ($skipped) {
+        Write-Output "note: translations\export\ is not deployed - the game never reads it, and a stale copy blocks re-collection."
     }
 }
 

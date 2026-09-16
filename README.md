@@ -178,6 +178,17 @@ language names and autonyms. Editing the generated file by hand is lost on the n
 another script is not matched inside a longer run of that script, and that a term ending in
 punctuation ("Chinese (Simplified)") is not eaten by its shorter prefix.
 
+### Where `translations/export/` belongs
+
+| | |
+| --- | --- |
+| **the repository** | yes. It is the input the glossary is built from, and the only record of the game's own terminology in all twelve languages — re-collecting it means launching the game once per language, because the strings only exist at runtime. The files say "safe to delete" because they are; the *repository's* copies are what keep the glossary reproducible. |
+| **the game/mod folder** | no. Nothing reads them at runtime: `glossary.lua` is the data the mod loads, and `term_keys.lua` is the key list the exporter reads. The mod only *writes* an export, and only when the exporter is invoked (the automatic call was removed — it announced "already collected" on every launch). |
+| **re-collecting** | delete the file for the language in question (or bump `version` in `term_keys.lua`), then invoke `exporter.run(mod, current_lang())`. The exporter skips a language whose file already exists at the current key-list version, so a stale copy in the game folder does not merely sit there — it blocks the refresh. |
+
+`tools/deploy_to_game.ps1` therefore syncs `glossary.lua` and `term_keys.lua` and prints a note
+about the export folder, rather than copying 73 KB the game never reads.
+
 ### When the placeholder is dropped, and when a key is given up on
 
 Masking is a protection, not a translation strategy: a model can lose a placeholder, and the string
