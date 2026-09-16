@@ -398,15 +398,30 @@ three: no key is needed, so nothing is guaranteed either.
 | **google_gtx** | `translate.googleapis.com` | The endpoint most other tools use (`?client=gtx`). Whether it is reachable depends on the route, not on the request: measured on one machine it was TLS-reset direct and answered through a proxy that had a rule for the host. |
 | **mymemory** | `mymemory.translated.net` | A translation *memory*, not a machine translator, so its answers can be human segments that do not fit: measured `Reload Speed` → `ユーザーのリロード速度:` (ja) and `Keystone` → `梯形` (zh-cn). Last on purpose. |
 
-**Order is not "best quality first" — it is "the one that answers first".** The list used to start
-with the Google hosts, on the reasoning that they are the fastest when they work. Then a China
-session was read out of the game log: with a blocked host every attempt costs the full 20-second
-timeout and a provider is only skipped after three of them, so the run spent **2 min 19 s** timing
-out (3 x 20 s on `clients5`, then 45 s on `gtx`) before its first translated key — the player's
-report was "it sat there, then moved one key". The endpoint that answers on that network is now the
-first one tried, and the Google hosts are only reached if it fails. The same log line is why the
-"skipping provider X for the rest of this session" message stays a warning: on a filtered network
-it is the expected path, not a fault.
+**The order is learned, not fixed — a fixed one cannot fit both networks.** The list below is the
+starting order; what a run actually tries is ranked at dispatch time:
+
+1. the endpoint that **last answered**, remembered in the settings (so it survives a restart);
+2. then the endpoints this session has **not tried or failed on**;
+3. then anything that has already failed, worst first — **one timeout is enough to demote a host
+   here**, where the provider breaker needs three.
+
+That is not a preference, it is what a measurement forced. The list used to start with the Google
+hosts and then Bing; in a China session the log read:
+
+```
+06:06:42  queued 124 keys
+06:07:46  provider 'google_clients5' is unreachable (network error -13); skipping it
+06:08:06  bing: fetching the session page
+06:08:51  provider 'google_gtx' is unreachable (network error -13); skipping it
+06:09:01  first progress line
+```
+
+**2 min 19 s** between queueing and the first translated key, because a blocked host costs the full
+20-second timeout per attempt and each of the two Google hosts was tried three times first. Putting
+Bing first fixed that for China and created the mirror image for everyone else: `cn.bing.com` is not
+the fastest answer from a European or American connection. Ranking by what actually answered fixes
+both, and the first run on a new network costs at most one timeout before the order corrects itself.
 
 Measured on the machine this was developed on, all three Google/MyMemory endpoints answered all
 twelve game languages and all three kept every marker of a batched request

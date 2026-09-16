@@ -159,17 +159,16 @@ end
 --                      that do not fit: measured "Reload Speed" -> "ユーザーのリロード速度:"
 --                      (ja) and "Keystone" -> 梯形 (zh-cn). Last on purpose.
 --
---     bing             cn.bing.com — the one that works where the others do not, and therefore
---                      *first*. Google's hosts are filtered on many networks (China especially)
---                      and MyMemory answers with dictionary junk, while this endpoint answered
---                      all twelve targets from a China residential IP. Order matters more than
---                      it looks: a provider is only skipped after three failed requests, and a
---                      blocked host costs a full timeout each time, so putting the Google hosts
---                      first meant a China session spent about two minutes timing out (2 hosts x
---                      3 attempts x 20 s) before it reached the endpoint that answers - measured
---                      in the game log as "it sat there, then moved one key". It costs one extra
---                      page load per run (a key, a token and an IG are handed out by
---                      cn.bing.com/translator; see ensure_session() in online.lua).
+--     bing             cn.bing.com — the one that works where the others do not: Google's hosts
+--                      are filtered on many networks (China especially) and MyMemory answers with
+--                      dictionary junk, while this endpoint answered all twelve targets from a
+--                      China residential IP. It heads this list, but the run does not simply
+--                      follow the list: providers_for() in online.lua ranks by what actually
+--                      answered (remembered across sessions) and by this session's failures, so
+--                      the order corrects itself on either kind of network. The list here is
+--                      where that ranking starts from, and it costs bing one extra page load per
+--                      run (a key, a token and an IG from cn.bing.com/translator; see
+--                      ensure_session() in online.lua).
 --
 --                      Tencent's transmart endpoint was measured too and is *not* here: it
 --                      needs no session and batches natively, but its engine rewrites the

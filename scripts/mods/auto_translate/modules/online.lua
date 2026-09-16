@@ -862,6 +862,36 @@ local function note_provider_success(name)
     tier_retries = 0
 end
 
+-- Which endpoint to try first is learned, because a fixed order cannot be right for both
+-- networks: the Google hosts are faster and reachable in most of the world and blocked in China,
+-- where Bing answers - and the reverse for a VPN exit. Measured in the game log with a fixed
+-- order: 2 min 19 s of timeouts before the first translated key. So the endpoint that last
+-- answered is tried first (remembered in the settings, so it survives the restart), and within a
+-- session a single timeout demotes a host below the untried ones - the provider breaker needs
+-- three, which is too slow when each attempt costs a full timeout.
+local FIRST_PROVIDER_SETTING = "free_provider_first"
+
+local function provider_answered(mod, name)
+    if type(name) ~= "string" or name == "" then
+        return
+    end
+    if type(mod) ~= "table" or type(mod.get) ~= "function" or type(mod.set) ~= "function" then
+        return
+    end
+    if mod:get(FIRST_PROVIDER_SETTING) ~= name then
+        mod:set(FIRST_PROVIDER_SETTING, name)
+        util.log(mod, "%s answered; trying it first from now on", name)
+    end
+end
+
+-- A stored translation, from whichever provider produced it.
+local function note_success(mod, req)
+    engines.note_success()
+    if req then
+        provider_answered(mod, req.provider)
+    end
+end
+
 function M.provider_health()
     return disabled_providers, provider_failures
 end
@@ -1124,10 +1154,50 @@ local function providers_for(mod, engine, lang)
         return { engines.api_provider(mod) }
     end
     if engine == "online_free" then
-        -- The keyless public endpoints, in preference order. Reachable through the proxy
-        -- setting when the player's network needs one; a provider that fails repeatedly is
-        -- dropped for the rest of the session, so the next one in the list gets its turn.
-        return engines.providers_for(engine, lang)
+        -- The keyless public endpoints. Reachable through the proxy setting when the player's
+        -- network needs one; a provider that fails repeatedly is dropped for the rest of the
+        -- session, so the next one in the list gets its turn.
+        local list = engines.providers_for(engine, lang)
+
+        if #list < 2 then
+            return list
+        end
+
+        -- Ranked rather than fixed: the remembered endpoint first, then the ones this session has
+        -- not failed on, then the rest in the order modules/engines.lua lists them. Ties keep
+        -- that order (table.sort is not stable, so the original index is part of the key).
+        local remembered = type(mod) == "table" and type(mod.get) == "function"
+            and mod:get(FIRST_PROVIDER_SETTING) or nil
+        local ranked = {}
+
+        for index, name in ipairs(list) do
+            local failed = provider_failures[name] or 0
+            local rank
+
+            if failed > 0 then
+                -- This session's evidence outranks last session's memory: a remembered endpoint
+                -- that has just timed out goes behind the ones nobody has tried yet.
+                rank = 2 + failed
+            elseif name == remembered then
+                rank = 0
+            else
+                rank = 1
+            end
+            ranked[#ranked + 1] = { name = name, rank = rank, index = index }
+        end
+
+        table.sort(ranked, function(a, b)
+            if a.rank ~= b.rank then
+                return a.rank < b.rank
+            end
+            return a.index < b.index
+        end)
+
+        local out = {}
+        for i = 1, #ranked do
+            out[i] = ranked[i].name
+        end
+        return out
     end
     return {}
 end
@@ -1139,6 +1209,10 @@ end
 -- Exposed because the two numbers encode a rule, not a preference: the free endpoints are the
 -- ones that get cut off by a burst, so they must be the slower of the two.
 M.min_interval_for_tests = min_interval
+
+-- The learned free-tier order, and the write that learns it.
+M.providers_for_tests = providers_for
+M.provider_answered_for_tests = provider_answered
 
 -- ---------------------------------------------------------------------------
 -- Pipeline control
@@ -1444,7 +1518,7 @@ local function dispatch(mod)
             local req = { kind = "local", item = item, masked = pre_masked, tokens = pre_tokens }
             local ok, why = accept_translation(mod, req, pre_masked, M.state.engine)
             if ok then
-                engines.note_success()
+                note_success(mod, req)
             else
                 fail_item(mod, req, why, 0, false, "unsafe")
             end
@@ -2266,7 +2340,7 @@ local function handle_local_batch(mod, req, raw)
     end
 
     if stored > 0 then
-        engines.note_success()
+        note_success(mod, req)
     end
     if #retry > 0 then
         requeue_no_batch(retry)
@@ -2353,7 +2427,7 @@ handle_online_batch = function(mod, req, body)
     end
 
     if stored > 0 then
-        engines.note_success()
+        note_success(mod, req)
     end
     if #retry > 0 then
         requeue_no_batch(retry)
@@ -2444,7 +2518,7 @@ function dispatch_lines(mod, item)
         }
         local ok, why, transport, code = accept_translation(mod, req, assemble_lines(state), req.src)
         if ok then
-            engines.note_success()
+            note_success(mod, req)
         else
             fail_item(mod, req, why, 0, transport, code)
         end
@@ -2531,7 +2605,7 @@ function M.update(mod, dt)
         else
             local ok, why, transport, code = accept_translation(mod, req, ffi.string(out_buf, n), req.src or M.state.engine)
             if ok then
-                engines.note_success()
+                note_success(mod, req)
             else
                 fail_item(mod, req, why, 0, transport, code)
             end
@@ -2648,7 +2722,7 @@ function M.update(mod, dt)
                 local body = len > 0 and ffi.string(body_buf, len) or ""
                 local ok, why, transport = handle_response(mod, req, body)
                 if ok then
-                    engines.note_success()
+                    note_success(mod, req)
                 else
                     fail_item(mod, req, why, 0, transport)
                 end

@@ -1491,6 +1491,77 @@ do
     end
 
     -- -----------------------------------------------------------------------
+    -- The learned free-tier order
+    -- -----------------------------------------------------------------------
+    -- A fixed order cannot be right for both networks (Google's hosts are blocked in China, where
+    -- cn.bing.com answers, and the reverse behind a VPN exit), and the game log measured what a
+    -- wrong guess costs: 2 min 19 s of timeouts before the first key. So the order is ranked -
+    -- the endpoint that last answered first, then the untried ones, then anything that has
+    -- already failed in this session.
+    do
+        local stored = {}
+        local writes = 0
+        local remembering = {
+            get = function(_, key) return stored[key] end,
+            set = function(_, key, value) stored[key] = value; writes = writes + 1 end,
+        }
+        local blank = { get = function() return nil end }
+
+        -- The probe stub's engines module returns no providers at all, so the tier's own order
+        -- is supplied here (the same list modules/engines.lua ships).
+        online.init(probe_util, nil, probe_glossary, {
+            providers_for = function()
+                return { "bing", "google_clients5", "google_gtx", "mymemory" }
+            end,
+        }, nil, cu)
+
+        check("order: an endpoint that answers is remembered",
+            (function()
+                online.provider_answered_for_tests(remembering, "google_clients5")
+                return stored.free_provider_first
+            end)(), "google_clients5")
+        check("order: and written once, not on every later success",
+            (function()
+                local first = writes
+                online.provider_answered_for_tests(remembering, "google_clients5")
+                return writes - first
+            end)(), 0)
+
+        check("order: the remembered endpoint is tried first",
+            online.providers_for_tests(remembering, "online_free", "zh-cn")[1], "google_clients5")
+
+        -- The failure table is module state that earlier cases have already touched, so it is
+        -- cleared for these assertions and put back afterwards (the code itself mutates it in
+        -- place - retry_whole_tier clears it exactly like this).
+        local _, failures = online.provider_health()
+        local saved = {}
+        for name, count in pairs(failures) do
+            saved[name] = count
+            failures[name] = nil
+        end
+
+        check("order: with nothing remembered and nothing failed, the measured order stands",
+            online.providers_for_tests(blank, "online_free", "zh-cn")[1], "bing")
+
+        failures["bing"] = 1
+        check("order: one failure demotes it below the untried ones",
+            online.providers_for_tests(blank, "online_free", "zh-cn")[1], "google_clients5")
+        -- And the session's evidence outranks the memory, or a network that changed would keep
+        -- trying the endpoint that just failed.
+        check("order: which also beats the remembered one",
+            online.providers_for_tests(remembering, "online_free", "zh-cn")[1], "google_clients5")
+
+        for name in pairs(failures) do
+            failures[name] = nil
+        end
+        for name, count in pairs(saved) do
+            failures[name] = count
+        end
+
+        online.init(probe_util, nil, probe_glossary, probe_engines, nil, cu)
+    end
+
+    -- -----------------------------------------------------------------------
     -- A failed *batch* (this crashed inside update() in the game)
     -- -----------------------------------------------------------------------
     -- The planner pops several short labels into one request, so that inflight has `items` and
