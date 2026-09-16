@@ -101,6 +101,13 @@ local function strip_markers(data)
     return stripped
 end
 
+-- Told about a store whose `manual = true` instruction was carried out (see load). Set by the mod so
+-- the player hears about it from whichever caller happened to read the file first.
+local notifier = nil
+function M.set_notifier(fn)
+    notifier = fn
+end
+
 function M.load(mod_id, lang)
     local path = M.path_for(mod_id, lang)
     if not util.file_exists(path) then
@@ -122,6 +129,9 @@ function M.load(mod_id, lang)
         data.manual_stripped = stripped
         if stripped > 0 then
             M.save(mod_id, lang, data)
+            if notifier then
+                pcall(notifier, mod_id, lang, stripped)
+            end
         end
     end
     return data

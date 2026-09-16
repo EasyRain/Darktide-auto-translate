@@ -111,9 +111,17 @@ check_true("the file we start from has markers",
 check_true("and the flag the player set", contains(files[file], "    manual = true,"))
 
 writes = {}
+local notified = {}
+store.set_notifier(function(mod_id, lang, stripped)
+    notified[#notified + 1] = string.format("%s/%s/%d", mod_id, lang, stripped)
+end)
 local loaded = store.load("some_mod", "zh-cn")
 check("one rewrite happened", #writes, 1)
 check("both markers were counted", loaded.manual_stripped, 2)
+-- The notice belongs to the store rather than to a caller: whoever reads the file first (the merge
+-- hook, the scanner or the queue) still reports it.
+check("the notifier fired once", #notified, 1)
+check("with the file, the language and the count", notified[1], "some_mod/zh-cn/2")
 check("the flag went back to false", loaded.manual, false)
 check_true("the rewritten file says manual = false", contains(files[file], "    manual = false,"))
 check_true("and no longer carries a marker", not contains(files[file], "src ="))

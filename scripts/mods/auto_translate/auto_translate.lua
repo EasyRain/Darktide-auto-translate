@@ -19,6 +19,15 @@ scanner.init(util, store)
 local injector = mod:io_dofile(BASE .. "injector")
 injector.init(util, store)
 
+-- "manual = true" is carried out where a store is read, and a store is read from three places (the
+-- injector's merge, the scanner and the translation queue). Whoever gets there first does the work,
+-- so the notice belongs to the store itself rather than to one of its callers - the first version
+-- hung it on the injector and stayed silent when the scanner was the one that read the file.
+store.set_notifier(function(mod_id, lang, stripped)
+    util.info(mod, "%s [%s]: %d hand checked entr%s - engine markers removed, the file now says manual = false",
+        mod_id, lang, stripped, stripped == 1 and "y" or "ies")
+end)
+
 local engines = mod:io_dofile(BASE .. "engines")
 engines.init(util, store)
 
