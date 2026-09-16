@@ -14,8 +14,19 @@ files are never modified. Translations are cached locally in editable text files
 ## Install
 
 1. Copy the `auto_translate` folder into your game's `mods` folder.
-2. Add `auto_translate` to `mods\mod_load_order.txt` (last line is fine).
+2. Add `auto_translate` to `mods\mod_load_order.txt`, **as early as possible — the line directly
+   after `dmf`**. (The descriptor already declares `load_after = { "dmf" }`, so the loader keeps it
+   behind DMF; what the order decides is whether it comes before the other mods.)
 3. Launch the game and check the log for `[MOD][auto_translate]` lines.
+
+**Why early, and what happens if it is not.** DMF loads each mod as localization → data → script,
+and localizes the option titles and tooltips while initializing `data`, caching them as plain
+strings. This mod merges its translations into that table first, through a hook it installs when
+*its own* script runs — so it only covers **mods loaded after it**. A mod placed above it still gets
+translated (its runtime text is injected by the scan, and the option widgets are re-localized), but
+its option texts then appear in the source language until the options screen is closed and reopened
+once. That is the whole difference: a late position costs one reopen of the options screen, not a
+failure. DMF itself must stay first — this mod is built on it.
 
 ## How it works
 

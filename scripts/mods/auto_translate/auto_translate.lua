@@ -58,7 +58,15 @@ end
 -- the option titles/tooltips while initializing `data` (caching them as plain
 -- strings). So we merge our translations into the table right before DMF stores
 -- it — otherwise option texts would stay in the source language forever.
--- This is why auto_translate must be the FIRST entry in mod_load_order.txt.
+--
+-- The hook exists from the moment OUR script runs, which is why the load order
+-- matters: mods loaded *after* us are covered, mods loaded *before* us are not
+-- (their option texts were already localized and cached by the time this line
+-- runs). They are still translated - the scan injects their runtime text and
+-- options_refresh re-localizes the widgets - but the options screen has to be
+-- reopened once to show it. So the right place is as early as possible, which
+-- means the line directly after `dmf`: DMF has to come first (this mod is built
+-- on it), and every entry below it is one this mod can translate cleanly.
 -- ---------------------------------------------------------------------------
 local hooked = false
 
