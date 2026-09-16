@@ -28,7 +28,10 @@ from check_localization import LANGUAGES, PATH, SPEC_RE, parse  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 SHIPPED = ["en", "zh-cn"]          # the two the file already carries
+# Language lines inside the table (what we merge into) ...
 ENTRY_RE = re.compile(r'^\s*(?:\["([a-z]{2}(?:-[a-z]{2})?)"\]|([a-z]{2}(?:-[a-z]{2})?))\s*=\s*"(.*?)",?\s*$')
+# ... and the setting ids of a fragment file (what we merge from), which carry underscores.
+FRAGMENT_RE = re.compile(r'^\s*\["([A-Za-z_][A-Za-z0-9_]*)"\]\s*=\s*"(.*)",?\s*$')
 KEY_RE = re.compile(r"^    ([A-Za-z_][A-Za-z0-9_]*) = \{$")
 
 
@@ -55,13 +58,13 @@ def read_fragment(path: Path):
         stripped = line.strip()
         if stripped.startswith("--") or stripped in ("return {", "}", ""):
             continue
-        match = ENTRY_RE.match(line)
+        match = FRAGMENT_RE.match(line)
         if not match:
-            raise SystemExit(f"{path}:{number}: expected a `key = \"value\",` line, got: {stripped[:60]}")
-        key = match.group(1) or match.group(2)
+            raise SystemExit(f"{path}:{number}: expected a `[\"key\"] = \"value\",` line, got: {stripped[:60]}")
+        key = match.group(1)
         if key in values:
             raise SystemExit(f"{path}:{number}: duplicate key '{key}'")
-        values[key] = lua_unescape(match.group(3))
+        values[key] = lua_unescape(match.group(2))
     return values
 
 
@@ -114,8 +117,6 @@ def main() -> int:
                 continue
             if text == "":
                 problems.append(f"{language}: '{key}' is empty")
-            elif "\n" in text:
-                problems.append(f"{language}: '{key}' contains a newline")
             source = sorted(SPEC_RE.findall(entries[key].get("en", "")))
             found = sorted(SPEC_RE.findall(text))
             if source != found:

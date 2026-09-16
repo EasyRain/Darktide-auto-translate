@@ -54,12 +54,39 @@ in the native core `bin/at_core.dll` — see *Testing without launching the game
 | --- | --- |
 | Apply translations | Master switch. Off = nothing is injected (library files are kept). |
 | Continue translating | Off = no new keys are translated; already translated keys still apply. |
-| Translation engine | `Automatic` / `Online (free)` / `Online (official API)` / `Local model (small)` / `Local model (large)`. |
-| Download small / large model | Turn on to download, off to delete. Both may be kept at once. *(not implemented yet)* |
-| Show progress | Bottom-right progress display. *(not implemented yet)* |
+| Translation engine | `Automatic` / `Online (official API)` / `Local model (1.3B)`. |
+| API service | `DeepL` or `Custom` (any translation service you describe yourself). |
+| Download the offline model | Turn on to download, off to cancel; the part that arrived is kept for the next attempt. |
+| Show progress | Bottom-right progress line for the translation run. |
 | Reload translation files | Re-scan and re-inject without restarting. |
 | Clear local translations | Deletes the local library files. |
 | Debug logging | Verbose `[AT]` logging. |
+
+## Languages (the mod's own interface)
+
+The interface follows the game's language, and it ships in every language Darktide itself
+ships: English, Simplified Chinese (`zh-cn`), Traditional Chinese (`zh-tw`), Japanese, Korean,
+Russian, German, French, Spanish, Italian, Polish and Brazilian Portuguese. A language with a
+missing string falls back to English — DMF's behaviour, so a half-translated language shows
+English for the gaps rather than an empty label.
+
+`tools/check_localization.py` reports what a language is missing and, more importantly, whether
+a translation kept the English's `%`-specifiers: DMF runs every string through
+`string.format`, so a dropped `%s` is an error in the options menu, not slightly wrong text.
+
+Adding or updating a language takes a fragment, not 127 hand edits:
+
+```
+# <language>.lua is  return { ["key"] = "translation", ... }  for every key of
+# scripts/mods/auto_translate/auto_translate_localization.lua  (the English entry is the source)
+python tools\add_localization_languages.py path\to\fragments     # refuses on any mismatch
+python tools\check_localization.py
+```
+
+The fragments are checked — same key set, non-empty values, same specifiers — before anything
+is written; `--dry-run` says what would change. The languages a *translation* can target are a
+different list: see [Engines and language support](#engines-and-language-support), and the
+glossary carries the game's own wording for those, not just Chinese.
 
 ## Translation files (hand editable)
 
