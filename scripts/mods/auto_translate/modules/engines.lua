@@ -159,16 +159,17 @@ end
 --                      that do not fit: measured "Reload Speed" -> "ユーザーのリロード速度:"
 --                      (ja) and "Keystone" -> 梯形 (zh-cn). Last on purpose.
 --
---     bing             cn.bing.com — the one that works where the others do not: Google's
---                      hosts are filtered on many networks (China especially) and MyMemory
---                      answers with dictionary junk, while this endpoint answered all twelve
---                      targets from a China residential IP. It is placed after Google and
---                      before MyMemory because it is slower to start (one page load hands out
---                      a key, a token and an IG, and every request carries them back — see
---                      ensure_session() in online.lua) but far better than a translation
---                      memory: measured, it keeps the glossary placeholders, the [n] markers,
---                      %s specifiers and line breaks, and it survived 15 requests at one per
---                      second without a refusal.
+--     bing             cn.bing.com — the one that works where the others do not, and therefore
+--                      *first*. Google's hosts are filtered on many networks (China especially)
+--                      and MyMemory answers with dictionary junk, while this endpoint answered
+--                      all twelve targets from a China residential IP. Order matters more than
+--                      it looks: a provider is only skipped after three failed requests, and a
+--                      blocked host costs a full timeout each time, so putting the Google hosts
+--                      first meant a China session spent about two minutes timing out (2 hosts x
+--                      3 attempts x 20 s) before it reached the endpoint that answers - measured
+--                      in the game log as "it sat there, then moved one key". It costs one extra
+--                      page load per run (a key, a token and an IG are handed out by
+--                      cn.bing.com/translator; see ensure_session() in online.lua).
 --
 --                      Tencent's transmart endpoint was measured too and is *not* here: it
 --                      needs no session and batches natively, but its engine rewrites the
@@ -178,7 +179,7 @@ end
 --                      IP alike. Neither is worth a provider that would refuse every string
 --                      containing a known term.
 -- ---------------------------------------------------------------------------
-M.FREE_PROVIDERS = { "google_clients5", "google_gtx", "bing", "mymemory" }
+M.FREE_PROVIDERS = { "bing", "google_clients5", "google_gtx", "mymemory" }
 
 -- Official APIs. DeepL is the default because it is reachable directly on most
 -- networks (verified without a proxy); translation.googleapis.com is not.

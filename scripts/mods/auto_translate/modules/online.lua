@@ -909,7 +909,10 @@ local function start_bootstrap(mod, provider)
 
     inflight = { kind = "bootstrap", provider = provider, job = job }
     M.state.provider = provider
-    util.info(mod, "%s: fetching the session page", tostring(provider))
+    -- Log only, no on-screen notification: this is bookkeeping the player cannot act on, and a
+    -- notification that appears and vanishes during a run reads as a problem (reported, with the
+    -- "session ready" line, as "a bing message that disappeared too fast to read").
+    util.log(mod, "%s: fetching the session page", tostring(provider))
     return true
 end
 
@@ -2567,7 +2570,7 @@ function M.update(mod, dt)
             note_provider_transport_failure(mod, req.provider,
                 string.format("HTTP %d for the session page", code_buf[0]))
         elseif core.at_online_bootstrap_parse(body_buf) == 1 then
-            util.info(mod, "%s: session ready", tostring(req.provider))
+            util.log(mod, "%s: session ready", tostring(req.provider))
             next_slot = elapsed
         else
             local why = cstr(core.at_online_error()) or "the session page carried no session"

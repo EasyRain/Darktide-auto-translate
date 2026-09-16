@@ -659,14 +659,14 @@ check("resolve(key, explicit free) obeys the choice",
 -- answers in Simplified, so the entry only cost the player a provider).
 check("the free engine is implemented", engines.is_implemented("online_free"), true)
 check("four free providers", #engines.providers_for("online_free", "zh-cn"), 4)
-check("clients5 is tried first (it answered when gtx could not)",
-    engines.providers_for("online_free", "zh-cn")[1], "google_clients5")
--- Bing sits behind Google and ahead of MyMemory: the two Google hosts are filtered on many
--- networks (China especially), where this is the one that answers, but it costs one extra
--- request per run to pick up a session, so it does not displace the Google hosts where they
--- work.
-check("bing is next, before the translation memory",
-    engines.providers_for("online_free", "zh-cn")[3], "bing")
+-- Bing is first because it is the one that answers on the networks the others are blocked on
+-- (measured in the game log: with the Google hosts first, a China session spent 2 min 19 s
+-- timing out - 3 x 20 s per host - before reaching this one). The game log's own numbers are the
+-- reason the order is not "best quality first".
+check("bing is tried first (the one that answers where the others are blocked)",
+    engines.providers_for("online_free", "zh-cn")[1], "bing")
+check("then Google's dictionary host",
+    engines.providers_for("online_free", "zh-cn")[2], "google_clients5")
 check("my memory is last (a translation memory, measured junk for some labels)",
     engines.providers_for("online_free", "zh-cn")[4], "mymemory")
 check("no provider is left out for a game language", (function()

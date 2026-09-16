@@ -393,10 +393,20 @@ three: no key is needed, so nothing is guaranteed either.
 
 | endpoint | host | what it is |
 | --- | --- | --- |
-| **google_clients5** | `clients5.google.com` | Google's Chrome-dictionary endpoint. Tried first: measured, it answered while `translate.googleapis.com` was unreachable on the same machine. |
+| **bing** | `cn.bing.com` | Microsoft's keyless translator, tried **first**. Measured from a China residential IP: **all twelve targets** (including `pl` and `uk`), glossary placeholders kept, `[n]` markers kept, `%s`/`%.0f` kept, line breaks kept, and 15 requests at one per second with no refusal. It costs one extra page load per run — see below. |
+| **google_clients5** | `clients5.google.com` | Google's Chrome-dictionary endpoint. Second: measured, it answered while `translate.googleapis.com` was unreachable on the same machine, but on a filtered network it is the first thing to time out. |
 | **google_gtx** | `translate.googleapis.com` | The endpoint most other tools use (`?client=gtx`). Whether it is reachable depends on the route, not on the request: measured on one machine it was TLS-reset direct and answered through a proxy that had a rule for the host. |
-| **bing** | `cn.bing.com` | Microsoft's keyless translator, and the one that answers where the Google hosts do not. Measured from a China residential IP: **all twelve targets** (including `pl` and `uk`), glossary placeholders kept, `[n]` markers kept, `%s`/`%.0f` kept, line breaks kept, and 15 requests at one per second with no refusal. It costs one extra page load per run — see below. |
 | **mymemory** | `mymemory.translated.net` | A translation *memory*, not a machine translator, so its answers can be human segments that do not fit: measured `Reload Speed` → `ユーザーのリロード速度:` (ja) and `Keystone` → `梯形` (zh-cn). Last on purpose. |
+
+**Order is not "best quality first" — it is "the one that answers first".** The list used to start
+with the Google hosts, on the reasoning that they are the fastest when they work. Then a China
+session was read out of the game log: with a blocked host every attempt costs the full 20-second
+timeout and a provider is only skipped after three of them, so the run spent **2 min 19 s** timing
+out (3 x 20 s on `clients5`, then 45 s on `gtx`) before its first translated key — the player's
+report was "it sat there, then moved one key". The endpoint that answers on that network is now the
+first one tried, and the Google hosts are only reached if it fails. The same log line is why the
+"skipping provider X for the rest of this session" message stays a warning: on a filtered network
+it is the expected path, not a fault.
 
 Measured on the machine this was developed on, all three Google/MyMemory endpoints answered all
 twelve game languages and all three kept every marker of a batched request
@@ -451,7 +461,7 @@ keyless player has):
 
 | when | what the mod does |
 | --- | --- |
-| one request fails | the item moves to the next provider in the list (`clients5` → `gtx` → `bing` → `MyMemory`) and is retried there |
+| one request fails | the item moves to the next provider in the list (`bing` → `clients5` → `gtx` → `MyMemory`) and is retried there |
 | one provider fails to connect **3 times** | it is dropped for the rest of the session with a log line, so every later key skips it instead of paying the timeout again; a request that succeeds resets that counter |
 | the service answers **429/403** (rate limited, quota) | translation pauses for **5 minutes** and the item is retried when the pause ends — the HUD counts it down |
 | **all three** are unreachable | the run does **not** end: it waits 5 minutes, re-arms all three providers and works through the queue again. Three such waits at most, then it stops with the usual "every provider was unreachable" message — a machine that is simply offline should not loop forever |
