@@ -41,16 +41,18 @@ return {
             {
                 setting_id = "engine",
                 type = "dropdown",
-                -- "auto" resolves to: keyed API -> large model -> small model. The API
-                -- comes first because the offline models are measurably weaker on
-                -- longer text (the small one truncated a 102 character description to
-                -- 13); with no key the models are the offline fallback.
+                -- "auto" resolves to: keyed API -> downloaded offline model -> free public
+                -- endpoints. The API comes first because the offline model is measurably
+                -- weaker on long text; the model beats the free endpoints because it needs
+                -- no network; the free tier is last and exists so that a player with no key
+                -- and no download still translates.
                 -- (Selecting a local engine explicitly still pauses with a notice
                 -- when its model has not been downloaded.)
                 default_value = "auto",
                 options = {
                     { text = "engine_auto",        value = "auto" },
                     { text = "engine_online_api",  value = "online_api" },
+                    { text = "engine_online_free", value = "online_free" },
                     { text = "engine_local_base",  value = "local_base" },
                 },
             },

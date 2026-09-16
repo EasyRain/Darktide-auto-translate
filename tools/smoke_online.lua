@@ -214,6 +214,38 @@ check("batch part: placeholder kept -> usable",
 check("batch part: format specifier lost -> refused",
     refusal({ en = "Mastery %s" }, "Mastery %s", "掌握", {}) ~= nil, true)
 
+-- What a batched *online* request says. The free endpoints are rate limited and easily cut
+-- off, so one request per several short labels is the difference between finishing a run and
+-- being throttled out of it; the trade is that the service has to copy the markers back.
+-- Measured on all four endpoints (clients5, gtx, MyMemory, DeepL): "[1] Reload Speed [2] Ammo
+-- [3] Damage [4] Cancel" came back with every marker intact and each part translated.
+do
+    online.state.lang = "zh-cn"
+    -- masks one known term, leaves the rest alone: the point is that each item is masked on
+    -- its own, so its placeholder numbers belong to its own token list
+    online.init(nil, nil, {
+        mask = function(text)
+            if text == "Reload Speed" then
+                return "\226\159\1660\226\159\167", { { term = "裝彈速度" } }
+            end
+            return text, {}
+        end,
+    }, nil, nil)
+
+    local items = { { en = "Reload Speed" }, { en = "Ammo" }, { en = "Damage" } }
+    local text, parts, tokens = online.join_batch_for_tests(items, "google_clients5")
+    check("batch request: numbered, one part per item",
+        text, "[1] \226\159\1660\226\159\167 [2] Ammo [3] Damage")
+    check("batch request: three parts", #parts, 3)
+    check("batch request: each part is masked on its own", parts[1], "\226\159\1660\226\159\167")
+    check("batch request: and its own token list comes with it", #tokens[1], 1)
+    check("batch request: an unmasked item keeps its text", parts[2], "Ammo")
+
+    local single, single_parts = online.join_batch_for_tests({ { en = "Ammo" } }, "google_clients5")
+    check("batch request: one item has no marker", single, "Ammo")
+    check("batch request: and one part", #single_parts, 1)
+end
+
 -- ---------------------------------------------------------------------------
 -- Multi-line strings (the mask-once, translate-each-line, join-back-verbatim path)
 --
@@ -447,7 +479,34 @@ check("resolve(key, legacy local_large) maps to the 1.3B",
     resolve_with("sk-test", "local_large"), "local_base")
 available = {}
 check("resolve(key, auto, no models)", resolve_with("sk-test", "auto"), "online_api")
-check("resolve(no key, auto, no models)", resolve_with("", "auto"), nil)
+-- With no key and no model there is still the free tier: that is the whole reason it is back
+-- in the options, and it makes "nothing configured" nearly impossible.
+check("resolve(no key, auto, no models) falls back to the free endpoints",
+    resolve_with("", "auto"), "online_free")
+check("resolve(nil key, auto, no models) does the same", resolve_with(nil, "auto"), "online_free")
+check("resolve(key, explicit free) obeys the choice",
+    resolve_with("sk-test", "online_free"), "online_free")
+
+-- The free tier itself: the three keyless endpoints, in the order a run tries them, and no
+-- stale language gap left over (MyMemory was listed as unable to do zh-cn; measured, it
+-- answers in Simplified, so the entry only cost the player a provider).
+check("the free engine is implemented", engines.is_implemented("online_free"), true)
+check("three free providers", #engines.providers_for("online_free", "zh-cn"), 3)
+check("clients5 is tried first (it answered when gtx could not)",
+    engines.providers_for("online_free", "zh-cn")[1], "google_clients5")
+check("my memory is last (a translation memory, measured junk for some labels)",
+    engines.providers_for("online_free", "zh-cn")[3], "mymemory")
+check("no provider is left out for a game language", (function()
+    for _, lang in ipairs({ "zh-cn", "zh-tw", "ja", "ko", "ru", "de", "fr", "es", "it", "pl", "pt-br" }) do
+        if #engines.providers_for("online_free", lang) ~= 3 then
+            return lang
+        end
+    end
+    return "all 11"
+end)(), "all 11")
+check("and therefore no language gap", engines.gap("online_free", "zh-cn"), nil)
+check("the api engine has no providers of its own here",
+    #engines.providers_for("online_api", "zh-cn"), 0)
 
 -- A settings file written before the 600M tier was removed still says "local_small".
 -- It has to keep working (as the 1.3B), or the saved choice selects an engine that no
@@ -937,7 +996,9 @@ do
     }
     local probe_glossary = { mask = function(text) return text, {} end }
     local probe_engines = { api_provider = function() return "custom" end,
-                            model_dir = function() return "." end }
+                            model_dir = function() return "." end,
+                            resolve = function() return "custom" end,
+                            providers_for = function() return {} end }
 
     local reply_text = "\233\135\141\232\163\133\233\128\159\229\186\166"    -- 重装速度
     local ready = false

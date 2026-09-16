@@ -1,12 +1,10 @@
 -- engines.lua — translation engines.
 --
--- This framework build only ships the "library" path: translations that already
--- exist in the local files are injected by the injector. The actual machine
--- translation engines are registered here in a later step:
+-- The engines a player can pick, in the order 'auto' prefers them:
 --   manual      - hand written entries (always used, never overwritten)
---   local_base  - NLLB-200 1.3B, CTranslate2 int8, ~1.4 GB  (the offline fallback)
---   online_free - free public endpoints (Google gtx / MyMemory), rate limited
---   online_api  - official API with a user supplied key
+--   online_api  - official API with a user supplied key (best quality)
+--   local_base  - NLLB-200 1.3B, CTranslate2 int8, ~1.4 GB (needs no network)
+--   online_free - the keyless public endpoints (Google's translate hosts, MyMemory)
 --
 -- Only *one* offline model is shipped, and both bigger and smaller ones were tried:
 --
@@ -37,7 +35,11 @@ M.ENGINES = {
     -- same queue, same pacing, same anti-misalignment guards - and differs only in
     -- transport: a submit/poll pair in the core instead of an HTTP job.
     local_base = { name = "local_base", implemented = true },
-    online_free = { name = "online_free", implemented = false },
+    -- The free public endpoints (no key, no download). They were implemented from the start
+    -- and taken out of the options because they are rate limited and blocked easily - but they
+    -- are the only thing left for a player with no key and no model, so they are a real
+    -- choice again, and 'auto' falls back to them after the other two.
+    online_free = { name = "online_free", implemented = true },
     online_api = { name = "online_api", implemented = true },
 }
 
@@ -136,22 +138,26 @@ end
 -- ---------------------------------------------------------------------------
 -- Online providers.
 --
--- The mod offers two engines now: the official API (with a key) and the local
--- model. The free public endpoints are still implemented and still pass their
--- offline tests, and they can still be selected by hand, but they are no longer
--- offered in the options and 'auto' never falls back to them: they get rate
--- limited and blocked too easily to build on. Google's translate.* hosts in
--- particular have their TLS handshake reset by network filtering on many networks.
+-- Two kinds, and they answer different needs:
 --
--- Kept here rather than deleted because they are the only zero-setup path and are
--- handy for testing; see src/at_online.c for the reachability notes.
+--   * the official API (needs a key) - best quality, and what 'auto' picks when a key is set
+--   * the free public endpoints (no key, no download) - the only thing left for a player who
+--     has neither a key nor a model, so they are a selectable engine again and the last tier
+--     of 'auto'. They are rate limited and easily blocked, which is why they are not the
+--     first choice; see src/at_online.c for the request shapes.
 --
---   google_clients5  clients5.google.com — reachable directly on most networks, and
---                    the only free endpoint verified to answer zh-CN in Simplified.
---   google_gtx       translate.googleapis.com — its TLS handshake is reset by
---                    network filtering (SNI based) on many networks.
---   mymemory         reachable, but always answers in Traditional Chinese whatever
---                    you ask for — a MyMemory limitation, not a caller bug.
+--     google_clients5  clients5.google.com — measured reachable (and answering correctly)
+--                      when translate.googleapis.com was not, so it is tried first. It was
+--                      also the only free endpoint that answered zh-CN in Simplified at the
+--                      time; MyMemory does that too now (see PROVIDER_GAPS).
+--     google_gtx       translate.googleapis.com — the endpoint most other tools use. Its TLS
+--                      handshake is reset by network filtering on many networks, and whether
+--                      it is reachable depends on the route taken (measured on one machine:
+--                      direct = reset, through a proxy with a rule for the host = answers).
+--     mymemory         mymemory.translated.net — reachable, but it is a translation *memory*
+--                      rather than a machine translator, so answers can be human segments
+--                      that do not fit: measured "Reload Speed" -> "ユーザーのリロード速度:"
+--                      (ja) and "Keystone" -> 梯形 (zh-cn). Last on purpose.
 -- ---------------------------------------------------------------------------
 M.FREE_PROVIDERS = { "google_clients5", "google_gtx", "mymemory" }
 
@@ -175,11 +181,14 @@ local LEGACY_PROVIDERS = {
 }
 
 -- provider -> { requested language = language it returns instead }
-local PROVIDER_GAPS = {
-    mymemory = {
-        ["zh-cn"] = "zh-tw",
-    },
-}
+--
+-- Empty on purpose now. MyMemory used to be listed here for zh-cn ("always answers in
+-- Traditional Chinese"), which excluded the only free provider that worked on networks where
+-- Google's hosts were filtered. Measured again: it answers zh-cn in Simplified (库存 / 设置 /
+-- 伤害 / 装弹速度), so the entry was stale and cost the player a provider. The mechanism stays:
+-- a provider that really cannot produce a language belongs here, and it is enforced in one
+-- place (providers_for).
+local PROVIDER_GAPS = {}
 
 -- Language a provider cannot produce, or nil when it is fine.
 function M.provider_gap(provider, lang)
@@ -208,18 +217,27 @@ function M.providers_for(engine, lang)
 end
 
 -- Reason the engine cannot serve `lang`, or nil when it can.
+--
+-- A gap means *every* free provider is known to answer in another language for this target,
+-- so there is nothing to try; the language it would hand back comes from the last such
+-- provider instead of naming one by hand (the old version assumed MyMemory, which is only one
+-- of three).
 function M.gap(engine, lang)
-    if engine ~= "online_free" or lang == nil then
+    if engine ~= "online_free" or lang == nil or #M.FREE_PROVIDERS == 0 then
         return nil
     end
-    if #M.providers_for(engine, lang) > 0 then
-        return nil
+    local actual = nil
+    for _, provider in ipairs(M.FREE_PROVIDERS) do
+        local gap = M.provider_gap(provider, lang)
+        if not gap then
+            return nil          -- at least one provider can produce this language
+        end
+        actual = gap
     end
     return {
         engine = engine,
         target = lang,
-        -- the language it would hand back instead, if any provider is known to differ
-        actual = M.provider_gap("mymemory", lang),
+        actual = actual,
     }
 end
 
@@ -299,11 +317,18 @@ end
 -- Resolves the engine to use. Returns nil when nothing is usable, so the caller
 -- can say so instead of quietly picking something the player did not ask for.
 --
--- A key wins over a downloaded model, which is the opposite of the first version of
--- this rule. Measured on the real models: the 600M conversion truncated a 102
--- character description to 13 characters and read "curios" as "curiosity", while
--- DeepL gets the same string right - so a player who has a key should get the better
--- engine by default. The model stays as the fallback for players who do not.
+-- 'auto' is a preference order, not a guess:
+--
+--   1. the official API, when a key is set. A key wins over a downloaded model, which is the
+--      opposite of the first version of this rule. Measured on the real models: the 600M
+--      conversion truncated a 102 character description to 13 characters and read "curios" as
+--      "curiosity", while DeepL gets the same string right - so a player who has a key should
+--      get the better engine by default.
+--   2. the offline model, when it is downloaded. It needs no network at all, so it beats the
+--      free endpoints for anyone who has it (those are rate limited and can be filtered).
+--   3. the free public endpoints - no key, no 1.4 GB download. This is the tier that makes
+--      "no key and no model" translate at all, which is why it is in this chain and in the
+--      options again; it is last because it is the least reliable of the three.
 --
 -- There is exactly one offline model to fall back to now (see the note at the top of the
 -- file): a bigger model was measured and did not earn its cost, and a smaller one was
@@ -321,6 +346,10 @@ function M.resolve(mod, lang)
 
     if M.model_available("local_base") then
         return "local_base"
+    end
+
+    if #M.providers_for("online_free", lang) > 0 then
+        return "online_free"
     end
 
     return nil

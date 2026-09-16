@@ -1005,7 +1005,9 @@ local function providers_for(mod, engine, lang)
         return { engines.api_provider(mod) }
     end
     if engine == "online_free" then
-        -- not offered in the options any more; still usable if selected by hand
+        -- The keyless public endpoints, in preference order. Reachable through the proxy
+        -- setting when the player's network needs one; a provider that fails repeatedly is
+        -- dropped for the rest of the session, so the next one in the list gets its turn.
         return engines.providers_for(engine, lang)
     end
     return {}
@@ -1030,7 +1032,7 @@ function M.start(mod, report, lang)
     M.stop(mod)
 
     if engine == nil then
-        util.warn(mod, "no translation engine is available (no downloaded model and no API key)")
+        util.warn(mod, "no translation engine is available (no API key, no downloaded model, and no free provider for this language)")
         M.state.finished = true
         util.popup(mod, "no_engine_available")
         return false
@@ -1269,6 +1271,8 @@ end
 local accept_translation
 local fail_item
 local dispatch_custom     -- defined below, next to handle_response()
+local handle_online_batch -- defined below, next to handle_local_batch()
+local join_batch          -- defined below, next to dispatch_lines()
 
 -- Starts a request for one queued item. Returns false when nothing was started.
 -- dispatch_lines() is defined further down, next to the accept path it has to use.
@@ -1430,21 +1434,44 @@ local function dispatch(mod)
         end
     end
 
+    -- Several short labels in one request.
+    --
+    -- The request count is the budget that matters for the free endpoints: they are rate
+    -- limited and easily cut off, so one request per eight labels is eight times the headroom
+    -- (and the same saving on a metered API). Eligibility is the local batch's rule - short
+    -- labels, one line, not already refused as part of a batch - and each item is masked on
+    -- its own so its placeholders restore independently; the only thing the service has to do
+    -- is copy the markers. Measured: "[1] Reload Speed [2] Ammo [3] Damage [4] Cancel" came
+    -- back with every marker intact and every part translated from clients5, gtx, MyMemory and
+    -- DeepL alike, which is why this is not provider-specific.
+    local batch = take_batch(item)
+
     -- Glossary masking: official terms become placeholders so a service cannot
     -- paraphrase them; they are restored from the token list afterwards. Rich-text
     -- markup is masked too, but only for providers that cannot handle it.
-    local masked, tokens = glossary.mask(item.en, M.state.lang, not MARKUP_SAFE[provider])
+    local masked, batch_parts, batch_tokens = join_batch(batch, provider)
+    local tokens = batch_tokens[1]
+
+    -- The extra items were taken out of the queue for this attempt, so any failure before the
+    -- request is in flight has to put them back in order (the local batch does the same).
+    local function put_batch_tail_back()
+        for i = #batch, 2, -1 do
+            q_unshift(batch[i])
+        end
+    end
 
     if core.at_online_host(provider, api_key, host_buf, 512) == 0 then
         M.state.last_error = cstr(core.at_online_error())
         M.state.failed = M.state.failed + 1
         util.warn(mod, "could not build request for %s: %s", provider, tostring(M.state.last_error))
+        put_batch_tail_back()
         return false
     end
     if core.at_online_path(provider, api_key, "en", M.state.lang, masked, path_buf, PATH_CAP) == 0 then
         M.state.last_error = cstr(core.at_online_error())
         M.state.failed = M.state.failed + 1
         util.warn(mod, "could not build request path for %s: %s", provider, tostring(M.state.last_error))
+        put_batch_tail_back()
         return false
     end
 
@@ -1455,12 +1482,14 @@ local function dispatch(mod)
             M.state.last_error = cstr(core.at_online_error())
             M.state.failed = M.state.failed + 1
             util.warn(mod, "could not build the request body for %s: %s", provider, tostring(M.state.last_error))
+            put_batch_tail_back()
             return false
         end
         if core.at_online_headers(provider, api_key, headers_buf, 1024) == 0 then
             M.state.last_error = cstr(core.at_online_error())
             M.state.failed = M.state.failed + 1
             util.warn(mod, "could not build the request headers for %s: %s", provider, tostring(M.state.last_error))
+            put_batch_tail_back()
             return false
         end
         job = core.at_http_post(host_buf, path_buf, core.at_online_content_type(provider),
@@ -1473,16 +1502,29 @@ local function dispatch(mod)
         M.state.last_error = cstr(core.at_error())
         M.state.failed = M.state.failed + 1
         util.warn(mod, "request rejected by the native core: %s", tostring(M.state.last_error))
+        put_batch_tail_back()
         return false
     end
 
-    inflight = {
-        item = item,
-        provider = provider,
-        job = job,
-        masked = masked,
-        tokens = tokens,
-    }
+    if #batch > 1 then
+        inflight = {
+            kind = "online_batch",
+            items = batch,
+            parts = batch_parts,
+            tokens = batch_tokens,
+            provider = provider,
+            job = job,
+            masked = masked,
+        }
+    else
+        inflight = {
+            item = item,
+            provider = provider,
+            job = job,
+            masked = masked,
+            tokens = tokens,
+        }
+    end
     next_slot = elapsed + min_interval(M.state.engine)
     return true
 end
@@ -1653,6 +1695,15 @@ end
 local function handle_response(mod, req, body)
     local ffi = Mods.lua.ffi
     local item = req.item
+
+    -- A batch reply carries several answers, so it is attributed per item instead of being
+    -- accepted or failed as a whole (see handle_online_batch). Returning true here means "the
+    -- round trip worked": whether each part was usable is decided inside, and the parts that
+    -- were not go back into the queue on their own.
+    if req.kind == "online_batch" and handle_online_batch then
+        handle_online_batch(mod, req, body)
+        return true
+    end
 
     if req.provider == "custom" then
         local parse_error
@@ -1908,6 +1959,67 @@ local function handle_local_batch(mod, req, raw)
     end
 end
 
+-- Stores the answer to a batched *online* request.
+--
+-- The same rules as the local batch, one transport over: the parts are split on the markers
+-- the service copied back, each part is restored and checked on its own, and a part that
+-- cannot be trusted is retried on its own (never guessed at, never dropped). A reply whose
+-- markers are gone sends the whole batch through singly, because there is no way to tell which
+-- text belongs to which key - and that is the one failure this module must not make.
+handle_online_batch = function(mod, req, body)
+    local ffi = Mods.lua.ffi
+
+    local parse_error
+    local n = read_response(req, body, function(_, message) parse_error = message end)
+    if n == 0 then
+        util.warn(mod, "a batch reply from %s could not be read (%s); %d item(s) go through one at a time",
+            tostring(req.provider), tostring(parse_error), #req.items)
+        requeue_no_batch(req.items)
+        return
+    end
+
+    local parts = split_batch(ffi.string(out_buf, n), #req.items)
+    if not parts then
+        util.info(mod, "%s did not keep the batch markers; %d item(s) go through one at a time",
+            tostring(req.provider), #req.items)
+        requeue_no_batch(req.items)
+        return
+    end
+
+    local stored, retry = 0, {}
+    for i, item in ipairs(req.items) do
+        local why = batch_part_refusal(item, req.parts[i], parts[i], req.tokens[i])
+
+        if not why then
+            local ok, failed = accept_translation(mod, {
+                kind = "online",
+                item = item,
+                masked = req.parts[i],
+                tokens = req.tokens[i],
+                provider = req.provider,
+            }, parts[i], req.provider)
+            if ok then
+                stored = stored + 1
+            else
+                why = failed
+            end
+        end
+
+        if why then
+            retry[#retry + 1] = item
+            util.log(mod, "%s:%s came back unusable from a batch (%s); retrying it on its own",
+                item.mod_id, item.key, tostring(why))
+        end
+    end
+
+    if stored > 0 then
+        engines.note_success()
+    end
+    if #retry > 0 then
+        requeue_no_batch(retry)
+    end
+end
+
 -- The loaded native library, for modules that need the same DLL (the model downloader).
 function M.core()
     return core
@@ -1920,6 +2032,32 @@ local function is_local_request(kind)
     return kind == "local" or kind == "local_batch" or kind == "local_line"
 end
 
+
+-- Turns a batch of items into the text one request carries, plus the per-item masked text
+-- and token lists (one entry per item, so each part restores on its own).
+--
+-- Masking is per item, not per batch: an item's placeholder numbers refer to its own token
+-- list, which is what lets a part be restored and checked without knowing anything about its
+-- neighbours. The markers are the only thing added, and the service only has to copy them.
+--
+-- Extracted (and exposed below) because this is the rule that decides what a batched request
+-- says: the rest of the path is transport, and the smoke test can only check what it can call.
+local function join_batch_impl(items, provider)
+    local parts, tokens, lines = {}, {}, {}
+    for i, one in ipairs(items) do
+        local masked, item_tokens = glossary.mask(one.en, M.state.lang, not MARKUP_SAFE[provider])
+        parts[i], tokens[i] = masked, item_tokens
+        lines[i] = string.format("[%d] %s", i, masked)
+    end
+    local text = #items > 1 and table.concat(lines, " ") or parts[1]
+    return text, parts, tokens
+end
+
+join_batch = join_batch_impl
+
+M.join_batch_for_tests = function(items, provider)
+    return join_batch(items, provider)
+end
 
 -- Sends the next line of a multi-line item, or stores the item once every line is in.
 -- The state lives on the item (item.line), so an item can go back into the queue between
@@ -2206,7 +2344,16 @@ function M.probe(mod, lang)
 
     M.stop(mod)
 
+    -- Which provider the button tests is the engine's business, not the API setting's: with
+    -- "Online (free)" selected (or 'auto' falling back to it because there is no key and no
+    -- model), testing DeepL would ask for a key the player does not have and miss the point of
+    -- the button. The free tier has up to three providers, and the first is the one a run
+    -- would try first.
+    local engine = engines.resolve(mod, lang)
     local provider = engines.api_provider(mod)
+    if engine == "online_free" then
+        provider = engines.providers_for("online_free", lang)[1] or provider
+    end
     local sample = "Reload Speed"
     -- The same masking rule the run uses for this provider (a service that passes the game's
     -- rich-text markup through gets it unmasked; a custom endpoint is assumed not to).

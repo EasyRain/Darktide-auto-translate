@@ -127,7 +127,10 @@ local function scan_opts(lang)
 end
 
 -- Pauses translation and tells the player when the selected engine is not usable
--- yet: tripped circuit breaker, missing local model, or missing API key.
+-- Nothing usable yet: tripped circuit breaker, missing local model, or missing API key.
+-- (The free endpoints mean "nothing configured at all" is almost impossible now - they need
+-- neither a key nor a download - so the no-engine notice only appears when even they are
+-- unavailable for the target language.)
 local function check_engine_settings(lang)
     -- tripped circuit breaker: stop hammering a failing service
     if engines.is_paused() then
@@ -138,9 +141,9 @@ local function check_engine_settings(lang)
 
     local engine = engines.resolve(mod, lang)
 
-    -- Nothing configured at all: no downloaded model and no API key.
+    -- Nothing configured and no free provider either.
     if engine == nil then
-        util.log(mod, "no translation engine is available (no model downloaded, no API key set)")
+        util.log(mod, "no translation engine is available (no model downloaded, no API key set, no free provider for this language)")
         util.popup(mod, "no_engine_available")
         return false
     end
@@ -148,8 +151,8 @@ local function check_engine_settings(lang)
     -- local model selected but its files are not downloaded yet
     if engines.is_local_engine(engine) and not engines.model_available(engine) then
         util.log(mod, "engine '%s' is selected but its model is not downloaded", engine)
-        -- The path is part of the message: with no automatic download yet, copying the
-        -- files there is the only thing the player can do.
+        -- The path is part of the message, and the message now names the two ways out: the
+        -- download this mod can do, or the free endpoints that need no download at all.
         util.popup(mod, "model_missing", tostring(engines.model_dir_in_use(engine)))
         return false
     end

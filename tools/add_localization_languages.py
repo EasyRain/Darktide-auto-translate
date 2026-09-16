@@ -19,6 +19,10 @@ dropped %s is a runtime error in the options menu, not a cosmetic problem).
     python tools/add_localization_languages.py path/to/fragments
     python tools/add_localization_languages.py path/to/fragments --dry-run
     python tools/add_localization_languages.py path/to/fragments --verify    # table vs fragments
+    python tools/add_localization_languages.py path/to/fragments --partial   # only the keys given
+
+`--partial` is for updating a few strings (a changed tooltip) without re-supplying every key:
+a fragment may then cover a subset, and only those keys are touched.
 """
 import re
 import sys
@@ -104,11 +108,12 @@ def main() -> int:
         return 2
 
     # ---- every check first: nothing is written unless all of them pass
+    partial = "--partial" in sys.argv
     problems = []
     for language, values in fragments.items():
         missing = [key for key in order if key not in values]
         extra = [key for key in values if key not in entries]
-        if missing:
+        if missing and not partial:
             problems.append(f"{language}: {len(missing)} key(s) missing ({', '.join(missing[:5])} ...)")
         if extra:
             problems.append(f"{language}: {len(extra)} key(s) not in the table ({', '.join(extra[:5])})")
@@ -171,15 +176,18 @@ def main() -> int:
             language = language_of(text)
             if language:
                 last_language = len(keep)
-                if language in fragments:
+                # Replace only when this fragment actually has a value for this key: a partial
+                # fragment leaves every other string exactly as it was.
+                if language in fragments and block in fragments[language]:
                     keep.append(rendered(language))
-                    written.add(language)
                 else:
                     keep.append(text)
+                written.add(language)
             else:
                 keep.append(text)
         extra = [rendered(language) for language in wanted
-                 if language in fragments and language not in written]
+                 if language in fragments and language not in written
+                 and block in fragments[language]]
         if extra:
             keep[last_language + 1:last_language + 1] = extra
         out.extend(keep)

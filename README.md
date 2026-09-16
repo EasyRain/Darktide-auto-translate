@@ -54,7 +54,7 @@ in the native core `bin/at_core.dll` — see *Testing without launching the game
 | --- | --- |
 | Apply translations | Master switch. Off = nothing is injected (library files are kept). |
 | Continue translating | Off = no new keys are translated; already translated keys still apply. |
-| Translation engine | `Automatic` / `Online (official API)` / `Local model (1.3B)`. |
+| Translation engine | `Automatic` (key → downloaded model → free endpoints) / `Online (official API)` / `Online (free endpoints)` / `Local model (1.3B)`. |
 | API service | `DeepL` or `Custom` (any translation service you describe yourself). |
 | Download the offline model | Turn on to download, off to cancel; the part that arrived is kept for the next attempt. |
 | Show progress | Bottom-right progress line for the translation run. |
@@ -517,6 +517,17 @@ powershell -File tools\batch_probe.ps1 -Store <translations store> -ModelDir <mo
 It drives the real planner, the real model and the real split/restore code and prints
 one line per key (solo answer next to the batched one) plus a summary.
 
+**The online engines batch the same way**, for a different reason: the free endpoints are rate
+limited and easily cut off, so the *number of requests* is the budget, and one request per
+eight labels is eight times the headroom (a metered API saves the same). Each item is masked
+on its own — its placeholder numbers belong to its own token list — and the only thing the
+service has to do is copy the markers. Measured with `tools/live_free_check.lua`:
+`[1] Reload Speed [2] Ammo [3] Damage [4] Cancel` came back with all four markers intact from
+`google_clients5`, `google_gtx`, `MyMemory` and DeepL alike, which is why the batching is not
+provider-specific. The same rules apply as for the local batch: a part that cannot be trusted
+is retried on its own, and a reply whose markers are gone sends the whole batch through
+singly rather than guessing which text belongs to which key.
+
 ### Multi-line strings
 
 Real mod text is full of line breaks — `Enhanced_descriptions` joins its descriptions
@@ -554,6 +565,35 @@ carry each form, which is what to check before trusting a claim about line break
 | **DeepL** | yes, on most networks | 1,000,000 characters/month on the free tier; keys ending in `:fx` use `api-free.deepl.com` automatically. |
 | **Custom** | whatever you point it at | Any HTTP endpoint: an OpenAI-compatible chat API, a self-hosted service, or a DeepL-style form endpoint. See below. |
 | Google Cloud Translation | **no, on many networks** | `translation.googleapis.com` is unreachable there — the TLS handshake is reset by network filtering, exactly like `translate.googleapis.com`. Works behind a proxy. The code is still in `at_online.c` and still passes its offline tests, but it is no longer offered: sign-up is the most involved of the three and it needs a proxy to work at all. A settings file that still says `api_provider = "google"` maps to DeepL. |
+
+### Free endpoints (no key, nothing to download)
+
+The third tier, and the one that makes "no key and no model" translate at all. It is a
+selectable engine (`Online (free endpoints)`) and the last step of `Automatic`
+(key → downloaded model → free), because it is the least reliable of the three: no key is
+needed, so nothing is guaranteed either.
+
+| endpoint | host | what it is |
+| --- | --- | --- |
+| **google_clients5** | `clients5.google.com` | Google's Chrome-dictionary endpoint. Tried first: measured, it answered while `translate.googleapis.com` was unreachable on the same machine. |
+| **google_gtx** | `translate.googleapis.com` | The endpoint most other tools use (`?client=gtx`). Whether it is reachable depends on the route, not on the request: measured on one machine it was TLS-reset direct and answered through a proxy that had a rule for the host. |
+| **mymemory** | `mymemory.translated.net` | A translation *memory*, not a machine translator, so its answers can be human segments that do not fit: measured `Reload Speed` → `ユーザーのリロード速度:` (ja) and `Keystone` → `梯形` (zh-cn). Last on purpose. |
+
+Measured on the machine this was developed on, all three answered all twelve game languages
+and all three kept every marker of a batched request (`tools/live_free_check.lua` re-runs
+that, direct or with a proxy):
+
+```
+google_clients5  zh-cn=装弹速度  zh-tw=裝彈速度  ja=リロード速度  de=Nachladegeschwindigkeit
+google_gtx       zh-cn=装弹速度  zh-tw=裝彈速度  ja=リロード速度  de=Nachladegeschwindigkeit
+mymemory         zh-cn=上弹速度  zh-tw=裝填速度  ja=ユーザーのリロード速度:  de=Nachladegeschwindigkeit
+batch [1] Reload Speed [2] Ammo [3] Damage [4] Cancel → 4/4 markers kept by all three
+```
+
+What they are not: a service. They are rate limited, they can be blocked or reset by the
+network (Google's hosts especially — a proxy rule for the host is what fixed it here), and
+they can disappear without notice. That is why the option's tooltip says so, and why the
+offline model stays above them in `Automatic`.
 
 ### Custom endpoints
 
