@@ -64,9 +64,10 @@ end
 -- (their option texts were already localized and cached by the time this line
 -- runs). They are still translated - the scan injects their runtime text and
 -- options_refresh re-localizes the widgets - but the options screen has to be
--- reopened once to show it. So the right place is as early as possible, which
--- means the line directly after `dmf`: DMF has to come first (this mod is built
--- on it), and every entry below it is one this mod can translate cleanly.
+-- reopened once to show it. So the right place is the top of mod_load_order.txt,
+-- above every other mod. `dmf` and `base` are loaded by the game itself and must
+-- not be listed there at all (the file's own header says listing them errors);
+-- the descriptor declares load_after = { "dmf" } so that dependency is on record.
 -- ---------------------------------------------------------------------------
 local hooked = false
 

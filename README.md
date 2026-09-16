@@ -14,19 +14,22 @@ files are never modified. Translations are cached locally in editable text files
 ## Install
 
 1. Copy the `auto_translate` folder into your game's `mods` folder.
-2. Add `auto_translate` to `mods\mod_load_order.txt`, **as early as possible — the line directly
-   after `dmf`**. (The descriptor already declares `load_after = { "dmf" }`, so the loader keeps it
-   behind DMF; what the order decides is whether it comes before the other mods.)
+2. Add `auto_translate` to `mods\mod_load_order.txt` as the **first entry** — above every other mod.
+   `dmf` and `base` are loaded by the game itself and must **not** appear in that list at all (the
+   file says so in its own header: listing them makes the game error). The descriptor declares
+   `load_after = { "dmf" }` on top of that, so the dependency is on record as well.
 3. Launch the game and check the log for `[MOD][auto_translate]` lines.
 
-**Why early, and what happens if it is not.** DMF loads each mod as localization → data → script,
+**Why first, and what happens if it is not.** DMF loads each mod as localization → data → script,
 and localizes the option titles and tooltips while initializing `data`, caching them as plain
 strings. This mod merges its translations into that table first, through a hook it installs when
-*its own* script runs — so it only covers **mods loaded after it**. A mod placed above it still gets
-translated (its runtime text is injected by the scan, and the option widgets are re-localized), but
-its option texts then appear in the source language until the options screen is closed and reopened
-once. That is the whole difference: a late position costs one reopen of the options screen, not a
-failure. DMF itself must stay first — this mod is built on it.
+*its own* script runs — so it only covers **mods loaded after it**, i.e. the ones listed below it.
+(The list's order *is* the load order: in a real log the first listed mod is initialized right after
+`dmf`. A mod's position further down is about overriding conflicts, which is a different axis and
+does not delay its loading.) A mod placed above this one still gets translated — the scan injects
+its runtime text and the option widgets are re-localized — but its option texts then show the source
+language until the options screen is closed and reopened once. That is the whole difference: a late
+position costs one reopen of the options screen, not a failure.
 
 ## How it works
 

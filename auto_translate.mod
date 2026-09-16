@@ -2,11 +2,12 @@
 -- Automatically translates installed mods' texts in memory (never touches the
 -- original mod files) and caches the result locally.
 return {
-    -- DMF provides new_mod() and the localization hook this mod injects through, so it has to be
-    -- loaded first. Declared here rather than left to mod_load_order.txt: a player who put this
-    -- entry above dmf would otherwise get an assert instead of a working mod. Where this mod sits
-    -- *among the other mods* stays the player's choice - the README asks for "as early as
-    -- possible", so the option texts of the mods below it are translated before DMF caches them.
+    -- DMF provides new_mod() and the localization hook this mod injects through. It is loaded by
+    -- the game itself and must not be listed in mod_load_order.txt (that file's header says so:
+    -- listing "dmf" or "base" makes the game error), so the dependency is declared here instead.
+    -- Where this mod sits among the *listed* mods is the player's choice - the README asks for the
+    -- top of the list, so the option texts of every mod below it are translated before DMF caches
+    -- them.
     load_after = {
         "dmf",
     },
