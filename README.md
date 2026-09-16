@@ -721,6 +721,14 @@ editing that one entry. `python tools\fix_store_entry.py` does it in place — d
 store. (A manual "translate again" run does pick the new wording up: the glossary is what the engine
 sees, so the stored text is rewritten to the official one.)
 
+The same tool writes **hand translations** into a store: an entry marked `hand = True` gets the new
+text *and* loses its `src` line, which is what makes it hand written from then on (the mod never
+overwrites it while the source text is unchanged, and `tools\check_stores.lua` shows it without a
+marker). A file whose every entry has been read through can be listed in `CHECKED_FILES` instead: it
+is marked `manual = true`, and the mod carries that instruction out on the next start — every marker
+in the file is stripped and the flag returns to `false`, so a checked file looks exactly like a hand
+written one.
+
 ### Where `translations/export/` belongs
 
 | | |
