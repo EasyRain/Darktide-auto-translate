@@ -198,8 +198,28 @@ check("split: single part needs no marker", split("彈藥", 1), "彈藥")
 check("split: single empty part", split("   ", 1), "nil")
 check("split: no text", split("", 2), "nil")
 
--- The rule that keeps a batch from ever being worse than a solo request. Measured: the
--- batch left "EXIT" and "BUY" in English while the same strings, alone, came back as
+-- Does a long string get split before a trailing unit, so the unit is translated on its own
+-- and the meaning changes? No, and this is the pair of rules that says so:
+--   * split_lines() breaks *only* at line breaks, so a single-line string is one piece however
+--     long it is - "Increases damage by 15% per stack" goes to the engine whole;
+--   * a piece that carries no letters is not translated at all (translatable() -> false) and is
+--     kept verbatim, so a multi-line string whose last line is just a counter word (个) or a
+--     number does not have that piece sent off on its own.
+local long_line = "Increases damage by 15% per stack, up to a maximum of 5 stacks"
+local pieces = online.split_lines_for_tests(long_line)
+check("split: a long single-line string is one piece", #pieces, 1)
+check("split: and it is that string, unbroken", pieces[1], long_line)
+
+pieces = online.split_lines_for_tests("Increases damage by 15%\n个")
+check("split: only the line break splits", #pieces, 2)
+check("split: the second piece is the unit", pieces[2], "个")
+check("split: a lone unit is never translated on its own",
+    online.is_translatable("个", "zh-cn"), false)
+check("split: nor is a unit with its number", online.is_translatable("5 个", "zh-cn"), false)
+check("split: while the sentence before it still is",
+    online.is_translatable("Increases damage by 15%", "zh-cn"), true)
+
+-- The rule that keeps a batch from ever being worse than a solo request. Measured: the-- batch left "EXIT" and "BUY" in English while the same strings, alone, came back as
 -- "退出" and "購買" - so an unchanged part has to be refused, not stored as "unchanged".
 local refusal = online.batch_part_refusal_for_tests
 check("batch part: translated -> usable",

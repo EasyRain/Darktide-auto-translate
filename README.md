@@ -558,6 +558,15 @@ Three break forms are handled, and they are rebuilt byte for byte: a real newlin
 which therefore has to survive translation exactly as written. Multi-line strings never
 take part in batching — the line is the unit of work there.
 
+**Nothing else in the source is ever split.** A single-line string is one piece however long
+it is — `Increases damage by 15% per stack, up to a maximum of 5 stacks` reaches the engine
+whole, so a number, a `%` and the unit around it stay in one context — and a piece with no
+letters (a lone counter word or number, e.g. `个`) is not translated at all but kept verbatim,
+which is what stops a multi-line string's last line from being sent off on its own. Only the
+offline model splits at line breaks in the first place: the online engines send a multi-line
+string as one request. `tools/smoke_online.lua` pins both rules (one piece for a long
+single-line string; `is_translatable("个") == false`).
+
 `tools/scan_line_breaks.lua <translations-dir>` counts how many stored English sources
 carry each form, which is what to check before trusting a claim about line breaks.
 
