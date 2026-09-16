@@ -377,6 +377,11 @@ function mod.on_all_mods_loaded()
     if not collected then
         util.warn(mod, "term export error: %s", tostring(collect_err))
     end
+
+    -- One line in the log that answers whether a *full* dump is possible: if the game's
+    -- localization manager keeps its table reachable, the key list stops mattering and no future
+    -- term change ever needs another collection run. Log only; nothing is written.
+    pcall(exporter.describe_localization, mod)
 end
 
 -- Mod options: "Reload translation files"

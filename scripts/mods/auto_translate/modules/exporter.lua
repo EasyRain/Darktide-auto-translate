@@ -122,6 +122,54 @@ local function serialize(lang, version, terms)
 end
 
 -- Returns true when this run exported something.
+-- Is there a way to dump *everything* instead of a key list?
+--
+-- The strings live in the game's bundles, so a key list is the only handle we have - unless the
+-- localization manager keeps its table somewhere reachable, in which case one launch per language
+-- would collect every string the game has and no later key list would ever need another collection.
+-- This logs the shape of that object (field names, types, and how many entries a table field
+-- holds), once, at most fifteen fields, wrapped in pcall. It writes nothing and changes nothing:
+-- the point is to answer the question from a log instead of guessing at field names.
+function M.describe_localization(mod)
+    local ok, report = pcall(function()
+        local manager = Managers and Managers.localization
+        if type(manager) ~= "table" then
+            return "Managers.localization is " .. type(manager)
+        end
+
+        local fields = {}
+        for name, value in pairs(manager) do
+            fields[#fields + 1] = { name = tostring(name), kind = type(value), value = value }
+        end
+        table.sort(fields, function(a, b) return a.name < b.name end)
+
+        local lines = { string.format("%d field(s) on Managers.localization", #fields) }
+        for i = 1, math.min(#fields, 15) do
+            local field = fields[i]
+            local detail = field.kind
+            if field.kind == "table" then
+                local count = 0
+                for _ in pairs(field.value) do count = count + 1 end
+                detail = string.format("table(%d entry/entries)", count)
+                -- One sample key, so a table of translations can be told from a table of settings.
+                for key, sample in pairs(field.value) do
+                    detail = detail .. string.format(", e.g. %s = %s", tostring(key),
+                        type(sample) == "string" and ("\"" .. sample:sub(1, 24) .. "\"") or type(sample))
+                    break
+                end
+            end
+            lines[#lines + 1] = string.format("  %s = %s", field.name, detail)
+        end
+        return table.concat(lines, "\n")
+    end)
+
+    if ok and type(report) == "string" then
+        util.info(mod, "localization manager shape:\n%s", report)
+    else
+        util.log(mod, "could not describe Managers.localization: %s", tostring(report))
+    end
+end
+
 function M.run(mod, lang)
     local list, err = load_key_list()
     if not list then

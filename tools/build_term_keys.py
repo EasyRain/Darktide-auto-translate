@@ -137,6 +137,10 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("mods", type=Path, help="the game's mods directory")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--keep-version", action="store_true",
+                        help="do not bump the version: use when the key set changes but the "
+                             "existing exports already carry every key (a repaired list, say), "
+                             "because a bump makes the game collect all over again")
     args = parser.parse_args()
 
     if not args.mods.is_dir():
@@ -144,8 +148,10 @@ def main() -> int:
         return 1
 
     keep_old = existing_keys(TARGET)
-    next_version = existing_version(TARGET) + 1
-    print(f"the list already had {len(keep_old)} key(s) at version {next_version - 1}")
+    current_version = existing_version(TARGET)
+    next_version = current_version if args.keep_version else current_version + 1
+    print(f"the list already had {len(keep_old)} key(s) at version {current_version}"
+          + (" (version kept)" if args.keep_version else ""))
     mined = mine(args.mods)
     print(f"mined {len(mined)} unique loc_* key(s) from {args.mods}")
 
@@ -214,9 +220,16 @@ def main() -> int:
         lines.append(f"        -- interface words, guessed from the settings/menu names ({len(ui_missing)};"
                      " same rule - a missing key costs nothing)")
         emit(ui_missing)
-    if dropped:
-        lines.append(f"        -- kept from the hand-written list ({len(dropped)})")
-        emit(dropped)
+
+    # Keys the file already had and nothing above covers: emit them explicitly. The first version of
+    # this script counted them as "kept" while never writing them out, and because the exporter only
+    # collects what the list asks for, 69 curated keys (Armour Piercing, Range, Burn, the class
+    # titles...) silently disappeared from the collected exports - and their terms from the glossary.
+    leftover = sorted(k for k in keep_old if k not in written)
+    if leftover:
+        lines.append(f"        -- kept from the hand-written list ({len(leftover)})")
+        emit(leftover)
+
     lines += ["    },", "}", ""]
 
     text = "\n".join(lines)

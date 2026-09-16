@@ -99,6 +99,41 @@ for k, v in uk.items():
     if k in data:
         data[k]['uk'] = strip_rich(v)
 
+# Words that must never become terms, however often the game uses them.
+#
+# Masking replaces a term everywhere it appears, which is right for a name - "Relic" is 圣物 in every
+# context - and wrong for a word that carries grammar or has a second, ordinary meaning. The settings
+# export this project just collected offered On, Off, All, None, Back, Save, Close, In, Out, More,
+# Name, Type, Value..., and a glossary built from those would rewrite "on the ground" as the word a
+# UI shows for a switch, or "close range" as the word a menu shows for a button. That corruption is
+# silent: the placeholder and format-specifier guards cannot see meaning.
+#
+# So this list is about *function*: state words, prepositions, verbs that double as directions, and
+# generic nouns that are labels for other things. Nouns and names are the point of the glossary and
+# stay - "filters" was reported as mistranslated and is deliberately not here.
+STOP_WORDS = {
+    # state and choice
+    'on', 'off', 'all', 'none', 'auto', 'automatic', 'default', 'yes', 'no', 'ok', 'true', 'false',
+    'enabled', 'disabled', 'unavailable', 'available', 'always', 'never', 'optional', 'required',
+    'selected', 'unselected', 'unknown', 'mixed', 'custom',
+    # actions a label performs (verbs, and several of them are also directions)
+    'apply', 'cancel', 'close', 'back', 'next', 'previous', 'open', 'save', 'load', 'delete',
+    'add', 'edit', 'remove', 'reset', 'clear', 'confirm', 'continue', 'retry', 'skip', 'start',
+    'stop', 'exit', 'quit', 'search', 'sort', 'order', 'select', 'choose', 'show', 'hide',
+    'toggle', 'enable', 'disable', 'set', 'change', 'use', 'copy', 'paste', 'move',
+    # place and direction
+    'left', 'right', 'top', 'bottom', 'up', 'down', 'in', 'out', 'inside', 'outside', 'above',
+    'below', 'front', 'rear', 'near', 'far', 'here', 'there', 'over', 'under',
+    # quantity and degree
+    'more', 'less', 'max', 'min', 'maximum', 'minimum', 'low', 'medium', 'high', 'normal',
+    'small', 'large', 'big', 'short', 'long', 'fast', 'slow', 'new', 'old', 'first', 'last',
+    # generic nouns that exist to label other things
+    'name', 'title', 'text', 'value', 'values', 'type', 'types', 'size', 'mode', 'modes', 'level',
+    'amount', 'number', 'count', 'total', 'info', 'information', 'help', 'about', 'other', 'others',
+    'option', 'options', 'setting', 'settings', 'button', 'buttons', 'key', 'keys', 'test',
+}
+
+
 def is_term(text):
     if not text or len(text) < 2 or len(text) > 30:
         return False
@@ -107,6 +142,8 @@ def is_term(text):
     if re.search(r'[{}%<>|]', text):
         return False
     if re.fullmatch(r'[\d\s.,%+-]+', text):
+        return False
+    if text.strip().lower() in STOP_WORDS:
         return False
     return True
 
