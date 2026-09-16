@@ -901,6 +901,11 @@ const char* at_version(void)
     return "0.1.0-http";
 }
 
+int at_core_max_body(void)
+{
+    return AT_MAX_BODY;
+}
+
 // Turns a WinHTTP/Win32 code into readable text.
 //
 // WinHTTP's own messages (12000+) live in winhttp.dll's message table, not the

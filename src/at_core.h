@@ -18,6 +18,12 @@ AT_API int  at_available(void);
 AT_API const char* at_error(void);
 AT_API const char* at_version(void);
 
+// How much of a response body the core will hand back, in bytes (AT_MAX_BODY). Exposed because
+// the caller owns the buffer and the core clamps it: a caller that asks for more silently gets
+// less, and one that keeps a smaller buffer silently truncates. That is not hypothetical - Bing's
+// translator page is 645,986 bytes and a 256 KB cap cut the session block off the end of it.
+AT_API int at_core_max_body(void);
+
 // Async HTTP GET (background thread).
 //
 // `host` may be "name", "name:port", "scheme://name[:port]" or "[v6]:port"; the

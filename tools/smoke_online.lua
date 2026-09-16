@@ -1397,6 +1397,13 @@ do
         "HTTP 400: Bad request. Reason: Value for 'source_lang' not supported.")
     fake_http_core.at_json_string_at = extract_translation
 
+    -- The reply buffer, matching at_core.c's AT_MAX_BODY (asserted on that side too, from the
+    -- selftest). Too small is not a theoretical concern: Bing's translator page measured
+    -- 645,986 bytes with its session block at offset 579,411, and a 256 KB buffer cut the block
+    -- off the end, which no stub could have shown.
+    check("the reply buffer fits a whole translator page",
+        online.body_cap_for_tests() >= 1024 * 1024 and online.body_cap_for_tests() >= 645986 + 4096, true)
+
     -- The session flow (Bing). Three things matter: a provider that needs a session is not
     -- sent a request before it has one; the fetch goes to the page the core names (through the
     -- same async GET as everything else, so the frame never waits); and a page that does not

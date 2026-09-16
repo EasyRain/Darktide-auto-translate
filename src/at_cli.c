@@ -467,6 +467,14 @@ static int cmd_selftest(void)
         at_online_bootstrap_clear();
     }
 
+    printf("\n== the reply buffer ==\n");
+    // The caller owns the reply buffer and the core clamps it to its own maximum, so the two
+    // sizes have to agree. This is not theoretical: Bing's translator page measured 645,986 bytes
+    // with its session block at offset 579,411, and a 256 KB cap cut the block off the end - the
+    // page arrived, looked fine, and carried no session. modules/online.lua asserts its own side.
+    expect_true("the core keeps at least a whole translator page", at_core_max_body() >= 1024 * 1024);
+    expect_true("and the number is stable", at_core_max_body() == at_core_max_body());
+
     printf("\n== multi-text batches (DeepL's own form) ==\n");
     {
         // The Lua layer joins short labels with [n] markers; DeepL takes `text=` repeatedly

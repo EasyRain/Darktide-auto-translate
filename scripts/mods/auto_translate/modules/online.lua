@@ -930,6 +930,10 @@ end
 -- the session page has been read, and the fetch that fills it in.
 M.session_ready_for_tests = session_ready
 M.start_bootstrap_for_tests = start_bootstrap
+-- The reply buffer has to be at least as large as the biggest reply any provider sends, and the
+-- core clamps it silently. That is how Bing's 645,986-byte translator page once arrived cut in
+-- half, so the size is asserted in the tests rather than left to whoever edits this line next.
+M.body_cap_for_tests = function() return BODY_CAP end
 
 -- The providers of an item, minus the ones this session has given up on.
 local function usable_providers(list)
