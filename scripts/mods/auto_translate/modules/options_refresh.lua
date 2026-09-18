@@ -24,8 +24,13 @@ local M = {}
 
 local util
 
-function M.init(u)
+-- The localization tables the injector saw (`injector.tables`, handed over in init). A mod's name key
+-- is found in there by value - see name_key_for - so no list of key names has to be guessed at.
+local injection_tables
+
+function M.init(u, tables)
     util = u
+    injection_tables = tables
 end
 
 -- mod_name -> { widgets = { [setting_id] = { title = <key>, tooltip = <key> } } }
@@ -39,19 +44,81 @@ local function is_key_missing(text)
     return type(text) ~= "string" or text == "" or text:match("^<.*>$") ~= nil
 end
 
--- The name a mod declares, in whatever language its localization resolves right now.
+-- Which localization key holds a mod's name, and what it resolves to right now.
 --
--- The key is NOT the same in every mod: their data file ends with `name = mod:localize(<key>)`, and
--- most use "mod_name" - but unlock_ui_fps and scores use "mod_title" (measured on the installed set;
--- no mod defines both). Reading only "mod_name" made localize() answer "<mod_name>" for those two, so
--- their names were skipped in silence: the row for unlock_ui_fps kept the translated name while
--- ability_timer's went back, which is exactly how it was reported.
-local NAME_KEYS = { "mod_title", "mod_name" }
+-- The key is the mod's own choice: its data file ends with `name = mod:localize(<key>)`, and the
+-- installed set already uses two ("mod_name" for most, "mod_title" for unlock_ui_fps and scores). A
+-- third name would break a hardcoded list, so the key is not looked up by name at all: the mod's
+-- localization table is searched for the entry that produced the value the list is showing, and that
+-- key is remembered for the session - which matters because the moment the translation is taken back
+-- out, the value it produced is gone from the table and cannot be matched any more.
+--
+-- `shown` is what the screen has (the mod's readable name, or the row's label). It is our translation
+-- while translating and the author's own text when a mod ships its own - either way it is the value
+-- the key produced, which is all the search needs.
+local NAME_KEYS = { "mod_title", "mod_name" }   -- last resort only, for a table we never saw
+M.name_keys = {}
 
-local function mod_name_in(target)
+local function looks_like_a_name(key)
+    return key:lower():find("name") ~= nil or key:lower():find("title") ~= nil
+end
+
+local function name_key_for(name, shown)
+    if type(name) ~= "string" or name == "" then
+        return nil
+    end
+    local known = M.name_keys[name]
+    if known then
+        return known
+    end
+    if type(shown) ~= "string" or shown == "" then
+        return nil
+    end
+
+    local table_for_mod = injection_tables and injection_tables[name]
+    if type(table_for_mod) ~= "table" then
+        return nil
+    end
+
+    local lang = util and util.game_language and util.game_language() or "en"
+    local in_language, in_english = nil, nil
+    for key, bucket in pairs(table_for_mod) do
+        if type(key) == "string" and type(bucket) == "table" then
+            if bucket[lang] == shown then
+                -- The entry that is producing what is on screen right now. Two keys can only both
+                -- match by holding the same text; prefer one that reads like a name.
+                if not in_language or (looks_like_a_name(key) and not looks_like_a_name(in_language)) then
+                    in_language = key
+                end
+            elseif bucket["en"] == shown and not in_english then
+                in_english = key
+            end
+        end
+    end
+
+    local found = in_language or in_english
+    if found then
+        M.name_keys[name] = found
+    end
+    return found
+end
+
+local function mod_name_in(name, target, shown)
     if type(target) ~= "table" or type(target.localize) ~= "function" then
         return nil
     end
+
+    local key = name_key_for(name, shown)
+    if key then
+        local value = target:localize(key)
+        if not is_key_missing(value) then
+            return value
+        end
+    end
+
+    -- No table to search (a mod with no localization file) or nothing matched: the two keys the
+    -- installed mods were measured to use. A mod that invents a third one is named by list_report, so
+    -- this list can be corrected from evidence rather than from another guess.
     for i = 1, #NAME_KEYS do
         local value = target:localize(NAME_KEYS[i])
         if not is_key_missing(value) then
@@ -165,7 +232,7 @@ function M.reapply_live(mod, view)
         local target = name and dmf.mods and dmf.mods[name] or nil
         -- The toggle-mods category has no mod_name: it is DMF's own row and keeps its own wording.
         if type(target) == "table" and type(target.localize) == "function" then
-            local title = mod_name_in(target)
+            local title = mod_name_in(name, target, entry.display_name)
             if title and entry.display_name ~= title then
                 entry.display_name = title
                 local widget = row.widget
@@ -231,9 +298,10 @@ function M.list_report(mod, view)
         local name = type(entry) == "table" and entry.mod_name or nil
         local target = name and dmf.mods and dmf.mods[name] or nil
         if type(target) == "table" and type(target.localize) == "function" and has_cjk(entry.display_name) then
-            found[#found + 1] = string.format("%s='%s' (own key: '%s')",
-                tostring(name), tostring(entry.display_name),
-                tostring(mod_name_in(target) or "<missing>"))
+            local key = name_key_for(name, entry.display_name)
+            found[#found + 1] = string.format("%s='%s' (key %s resolves '%s')",
+                tostring(name), tostring(entry.display_name), tostring(key or "?"),
+                tostring(mod_name_in(name, target, entry.display_name) or "<missing>"))
         end
     end
 
@@ -359,10 +427,11 @@ function M.reapply(mod)
             -- initialize_mod_options at all - which is why gating it on `raw` (below) left every
             -- option-less mod showing its translated name.
             --
-            -- `localize(<name key>)` is the mod's own name (see mod_name_in: "mod_name" for most,
-            -- "mod_title" for unlock_ui_fps). DMF itself uses `dmf_mod_name` and ships its own zh-cn
-            -- for it, so its row is DMF's own text and is left alone.
-            local title = mod_name_in(target)
+            -- The name key is found from the value (see name_key_for), not from a list of key names:
+            -- a mod picks its own key in `name = mod:localize(<key>)`. DMF itself narrates its own row
+            -- through `dmf_mod_name` and ships its own zh-cn for it, so its row stays DMF's text.
+            local shown = type(target.get_readable_name) == "function" and target:get_readable_name() or nil
+            local title = mod_name_in(name, target, (type(shown) == "string" and shown) or header.readable_mod_name)
             if title then
                 assign(header, "title", title)
                 if header.readable_mod_name ~= nil then
@@ -453,19 +522,21 @@ function M.reapply_templates(mod, view, quiet)
     end
 
     -- The name and description a mod shows, in the language its own localization currently resolves.
-    local function wording(mod_name)
+    -- `shown` is the label this copy holds: it is the value the name key produced, which is how the
+    -- key is found (see name_key_for) - a mod chooses its own key name.
+    local function wording(mod_name, shown)
         local target = mod_name and dmf.mods and dmf.mods[mod_name] or nil
         if type(target) ~= "table" or type(target.localize) ~= "function" then
             return nil, nil
         end
         local description = target:localize("mod_description")
-        return mod_name_in(target),
+        return mod_name_in(mod_name, target, shown),
             (not is_key_missing(description)) and description or nil
     end
 
     for _, category in ipairs(templates.categories or {}) do
         categories = categories + 1
-        local title, description = wording(category.mod_name)
+        local title, description = wording(category.mod_name, category.display_name)
         -- The first category is DMF's own toggle-mods page: no mod_name, nothing to translate. It is
         -- a useless sample, and reading `shown=` off it is what hid the rows that matter.
         if category.mod_name and not sample then
@@ -482,7 +553,7 @@ function M.reapply_templates(mod, view, quiet)
         local name = type(setting) == "table" and setting.search_id or nil
         if name and dmf.mods and dmf.mods[name] then
             toggles = toggles + 1
-            local title, description = wording(name)
+            local title, description = wording(name, setting.display_name)
             assign(setting, "display_name", title)
             assign(setting, "tooltip_text", description)
             sample = sample or setting

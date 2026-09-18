@@ -52,7 +52,9 @@ progress_hud.init(mod, util, online, download)
 progress_hud.install(mod)
 
 local options_refresh = mod:io_dofile(BASE .. "options_refresh")
-options_refresh.init(util)
+-- The injector's localization tables are handed over: a mod's name key is found in there by value
+-- (see options_refresh.name_key_for), because every mod picks its own key name.
+options_refresh.init(util, injector.tables)
 options_refresh.install_hook(mod)
 
 -- The settings screen builds its mod list and toggles from copies of the header data, so those copies

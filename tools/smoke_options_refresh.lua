@@ -41,6 +41,7 @@ local lang = "zh-cn"
 -- name in the list could not be moved at all and the failure was invisible (pcall on a nil method).
 local fake_mod = { internal = { readable_name = "技能计时器", description = "在 HUD 上显示倒计时。" } }
 function fake_mod:get_name() return "some_mod" end
+function fake_mod:get_readable_name() return self.internal.readable_name end
 function fake_mod:localize(key)
     local bucket = (lang == "zh-cn") and TRANSLATED or SOURCE
     return bucket[key] or ("<" .. tostring(key) .. ">")
@@ -53,6 +54,7 @@ local util = {
     info = function(_, fmt, ...) messages[#messages + 1] = string.format(tostring(fmt), ...) end,
     warn = function(_, fmt, ...) messages[#messages + 1] = "WARN " .. string.format(tostring(fmt), ...) end,
     log = function() end,
+    game_language = function() return lang end,
 }
 
 -- DMF's widget data, as the options screen holds it: a header plus the widget tables. The second mod
@@ -71,6 +73,7 @@ local TITLE_TRANSLATED = { mod_title = "技能计时器", mod_description = "在
 local TITLE_SOURCE = { mod_title = "Ability Timer", mod_description = "HUD countdown timer." }
 local quiet = { internal = { readable_name = "技能计时器" } }
 function quiet:get_name() return "quiet_mod" end
+function quiet:get_readable_name() return self.internal.readable_name end
 function quiet:localize(key)
     local bucket = (lang == "zh-cn") and TITLE_TRANSLATED or TITLE_SOURCE
     return bucket[key] or ("<" .. tostring(key) .. ">")
@@ -87,6 +90,18 @@ local dmf = {
 get_mod = function(name) if name == "DMF" then return dmf end return nil end
 CLASS = nil   -- mark_stale falls back to "restart needed" logging, which is fine here
 
+-- What the injector hands over: the localization tables it saw, per mod. The name key is searched for
+-- in here by value, so the keys below are the real ones each fake mod uses (see name_key_for).
+local injection_tables = {
+    some_mod = {
+        mod_name = { en = "Ability Timer", ["zh-cn"] = "技能计时器" },
+        mod_description = { en = "HUD countdown timer.", ["zh-cn"] = "在 HUD 上显示倒计时。" },
+    },
+    quiet_mod = {
+        mod_title = { en = "Ability Timer", ["zh-cn"] = "技能计时器" },
+    },
+}
+
 local chunk, err = loadfile(path)
 if not chunk then
     io.stderr:write("could not load the module: ", tostring(err), "\n")
@@ -97,7 +112,7 @@ if not ok then
     io.stderr:write("the module failed to load: ", tostring(refresh), "\n")
     os.exit(1)
 end
-refresh.init(util)
+refresh.init(util, injection_tables)
 
 -- ---- 1) the keys are recorded before DMF turns them into strings -------------------------------
 local options = {
@@ -283,11 +298,44 @@ check("nothing is reported when there is nothing to say", refresh.list_report(re
 check("reported once per session", refresh.list_report(report_mod, list_view), 0)
 local said = messages[#messages]
 check("the row is named", said:find("some_mod='技能计时器'") ~= nil, true)
-check("and what the mod's own key resolves to", said:find("own key: 'Ability Timer'") ~= nil, true)
+check("with the key that was found and what it resolves to", said:find("key mod_name resolves 'Ability Timer'") ~= nil, true)
 lang = "zh-cn"
 refresh.list_reported = nil
 check("a mod's own Chinese name is reported the same way", refresh.list_report(report_mod, list_view), 1)
-check("with both sides equal, which is the point", messages[#messages]:find("own key: '技能计时器'") ~= nil, true)
+check("with both sides equal, which is the point", messages[#messages]:find("key mod_name resolves '技能计时器'") ~= nil, true)
+
+-- ---- 9) a mod that invents a name key nobody has used -------------------------------------------
+-- Nothing may assume "mod_name" or "mod_title": the key is found from the value it produced, so a
+-- third style works without touching the code. This is the case a hardcoded list cannot survive.
+local odd = { internal = { readable_name = "解锁 UI 帧率" } }
+function odd:get_name() return "odd_mod" end
+function odd:get_readable_name() return self.internal.readable_name end
+function odd:localize(key)
+    local bucket = (lang == "zh-cn")
+        and { mod_pretty_name = "解锁 UI 帧率", mod_description = "把 UI 帧率解锁为自定义值。" }
+        or { mod_pretty_name = "Unlock UI FPS", mod_description = "Unlock UI FPS to a custom value." }
+    return bucket[key] or ("<" .. tostring(key) .. ">")
+end
+injection_tables.odd_mod = {
+    mod_pretty_name = { en = "Unlock UI FPS", ["zh-cn"] = "解锁 UI 帧率" },
+    mod_description = { en = "Unlock UI FPS to a custom value.", ["zh-cn"] = "把 UI 帧率解锁为自定义值。" },
+}
+dmf_stub.mods.odd_mod = odd
+local odd_view = {
+    _category_data = {
+        {
+            entry = { mod_name = "odd_mod", display_name = "解锁 UI 帧率" },
+            widget = { content = { text = "解锁 UI 帧率" } },
+        },
+    },
+}
+lang = "zh-cn"
+check("a name that is already right needs no patch", refresh.reapply_live(nil, odd_view), 0)
+check("and its key was found by value", refresh.name_keys.odd_mod, "mod_pretty_name")
+lang = "en"
+check("the row follows the switch anyway", refresh.reapply_live(nil, odd_view), 1)
+check("to the source name", odd_view._category_data[1].widget.content.text, "Unlock UI FPS")
+check("and the cached key is reused", refresh.name_keys.odd_mod, "mod_pretty_name")
 
 print("")
 if failures > 0 then
