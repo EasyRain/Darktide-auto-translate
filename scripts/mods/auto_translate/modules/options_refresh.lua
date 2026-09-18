@@ -252,4 +252,88 @@ function M.reapply(mod)
     return updated, named
 end
 
+-- What the settings screen has already BUILT, as opposed to the data it was built from.
+--
+-- The category list down the left (the mod names) and the per-mod toggles are made from *copies* of
+-- the header data the first time the screen is opened, while the detail widgets share the live tables.
+-- That is why switching translation off reverted the detail text immediately and left the list in the
+-- old language: re-localising the data reaches the live tables only. DMF rebuilds those copies when
+-- `_options_templates` is dropped, which happens on the next open - and the player is looking at the
+-- screen *now*. So patch the built entries as well, on every open.
+function M.reapply_templates(mod, view)
+    local dmf = get_mod("DMF")
+    local templates = type(view) == "table" and view._options_templates or nil
+    if type(dmf) ~= "table" or type(templates) ~= "table" then
+        return 0
+    end
+
+    local updated = 0
+    local function assign(target, field, value)
+        if value and target[field] ~= nil and target[field] ~= value then
+            target[field] = value
+            updated = updated + 1
+        end
+    end
+
+    -- The name and description a mod shows, in the language its own localization currently resolves.
+    local function wording(mod_name)
+        local target = mod_name and dmf.mods and dmf.mods[mod_name] or nil
+        if type(target) ~= "table" or type(target.localize) ~= "function" then
+            return nil, nil
+        end
+        local title = target:localize("mod_name")
+        local description = target:localize("mod_description")
+        return (not is_key_missing(title)) and title or nil,
+            (not is_key_missing(description)) and description or nil
+    end
+
+    for _, category in ipairs(templates.categories or {}) do
+        local title, description = wording(category.mod_name)
+        assign(category, "display_name", title)
+        assign(category, "description", description)
+    end
+
+    -- The mod toggles in the "toggle mods" category carry their own copies.
+    for _, setting in ipairs(templates.settings or {}) do
+        if type(setting) == "table" and setting.type == "mod_toggle" then
+            local title, description = wording(setting.search_id)
+            assign(setting, "display_name", title)
+            assign(setting, "tooltip_text", description)
+        end
+    end
+
+    return updated
+end
+
+-- Patches the built list every time the settings screen is entered, before it is drawn. hook_safe runs
+-- after the original, so the templates exist by then.
+--
+-- The view class itself is a local in DMF's file (`local DMFOptionsView = class("DMFOptionsView", ...)`),
+-- so it is reached the way Darktide names classes: the global CLASS table, which is also what resolves
+-- the `class = "DMFOptionsView"` string in the view registration.
+function M.install_view_hook(mod)
+    if M.view_hooked then
+        return true
+    end
+    local classes = rawget(_G, "CLASS")
+    local view_class = type(classes) == "table" and rawget(classes, "DMFOptionsView") or nil
+    if type(view_class) ~= "table" then
+        view_class = rawget(_G, "DMFOptionsView")
+    end
+    if type(view_class) ~= "table" or type(view_class.on_enter) ~= "function" then
+        return false
+    end
+    local ok = pcall(function()
+        mod:hook_safe(view_class, "on_enter", function(self)
+            pcall(M.reapply_templates, mod, self)
+        end)
+    end)
+    if not ok then
+        return false
+    end
+    M.view_hooked = true
+    util.log(mod, "settings list refresh installed")
+    return true
+end
+
 return M

@@ -138,7 +138,53 @@ updated, named = refresh.reapply(nil)
 check("a second pass changes nothing", updated, 0)
 check("but the names are still reached", named, 2)
 
--- ---- 5) the view is marked for a rebuild -------------------------------------------------------
+-- ---- 5) the built category list and mod toggles are patched as well -----------------------------
+-- These are copies made when the screen was first opened: re-localising the data never reaches them,
+-- which is why the left-hand list kept the old language while the detail text followed.
+local view = {
+    _options_templates = {
+        categories = {
+            { mod_name = "some_mod", display_name = "Ability Timer", description = "HUD countdown timer." },
+        },
+        settings = {
+            { type = "mod_toggle", search_id = "quiet_mod", display_name = "Ability Timer", tooltip_text = "HUD countdown timer." },
+        },
+    },
+}
+lang = "en"
+check("already in the source language: nothing to patch", refresh.reapply_templates(nil, view), 0)
+lang = "zh-cn"
+check("the built list is patched to the translation", refresh.reapply_templates(nil, view), 4)
+check("the category name follows", view._options_templates.categories[1].display_name, "技能计时器")
+check("so does the mod toggle", view._options_templates.settings[1].display_name, "技能计时器")
+
+lang = "en"
+check("and back to the source language", refresh.reapply_templates(nil, view), 4)
+check("the category name is back", view._options_templates.categories[1].display_name, "Ability Timer")
+check("the toggle is back", view._options_templates.settings[1].display_name, "Ability Timer")
+check("the category description too", view._options_templates.categories[1].description, "HUD countdown timer.")
+check("a second pass changes nothing", refresh.reapply_templates(nil, view), 0)
+
+-- ---- 6) the view hook resolves the class and installs -------------------------------------------
+local hooked = {}
+CLASS = { DMFOptionsView = { on_enter = function() end } }
+local fake_owner = {
+    hook_safe = function(_, object, method, handler)
+        hooked[#hooked + 1] = tostring(object == CLASS.DMFOptionsView) .. "/" .. tostring(method)
+        return true
+    end,
+}
+refresh.view_hooked = nil
+check("the view hook installs through CLASS", refresh.install_view_hook(fake_owner), true)
+check("on the right method", hooked[1], "true/on_enter")
+check("and it is not installed twice", refresh.install_view_hook(fake_owner), true)
+check("only one hook", #hooked, 1)
+
+CLASS = nil
+refresh.view_hooked = nil
+check("no CLASS means no hook (the list then needs a restart)", refresh.install_view_hook(fake_owner), false)
+
+-- ---- 7) the view is marked for a rebuild -------------------------------------------------------
 refresh.mark_stale(nil)
 check("the screen is marked stale", refresh.stale, true)
 

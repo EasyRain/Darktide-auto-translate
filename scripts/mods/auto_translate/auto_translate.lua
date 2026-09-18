@@ -55,6 +55,14 @@ local options_refresh = mod:io_dofile(BASE .. "options_refresh")
 options_refresh.init(util)
 options_refresh.install_hook(mod)
 
+-- The settings screen builds its mod list and toggles from copies of the header data, so those copies
+-- have to be patched on every open as well (see reapply_templates). If that hook cannot be installed,
+-- the list keeps whatever language it was built in and only a restart changes it - stand_down says so.
+local list_refresh_ok = options_refresh.install_view_hook(mod)
+if not list_refresh_ok then
+    util.warn(mod, "could not hook the settings screen; the mod list there may need a restart to change language")
+end
+
 -- Language we translate INTO (configured, or the game's current language).
 local function current_lang()
     return util.target_language(mod)
@@ -302,8 +310,10 @@ local function stand_down(reason)
     options_refresh.mark_stale(mod)
 
     if ok then
-        util.info(mod, "translation stopped (%s): took back %s injected key(s), restored %d option string(s) and %d mod name(s) to the original language; reopen the options screen for anything already drawn",
-            reason, tostring(removed), restored, restored_names)
+        util.info(mod, "translation stopped (%s): took back %s injected key(s), restored %d option string(s) and %d mod name(s); %s",
+            reason, tostring(removed), restored, restored_names,
+            list_refresh_ok and "reopen the options screen to see it (the list follows with it)"
+                or "the mod list on the left keeps its language until the game restarts")
     else
         util.warn(mod, "translation stopped (%s), but taking the injected text back failed: %s (a restart clears it)",
             reason, tostring(removed))
