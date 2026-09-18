@@ -58,7 +58,24 @@ function M.record(target_mod, options)
         for _, widget in ipairs(list) do
             if type(widget) == "table" then
                 if type(widget.setting_id) == "string" then
-                    entry.widgets[widget.setting_id] = { title = widget.title, tooltip = widget.tooltip }
+                    -- Everything DMF localises while building the widget: the title, the tooltip, a
+                    -- button's caption and each dropdown entry. All of them are keys right now, which
+                    -- is the only moment they can be caught.
+                    local record = {
+                        title = widget.title,
+                        tooltip = widget.tooltip,
+                        button_text = widget.button_text,
+                    }
+                    if type(widget.options) == "table" then
+                        local options = {}
+                        for i, option in ipairs(widget.options) do
+                            if type(option) == "table" and type(option.text) == "string" then
+                                options[i] = option.text
+                            end
+                        end
+                        record.options = options
+                    end
+                    entry.widgets[widget.setting_id] = record
                 end
                 if type(widget.sub_widgets) == "table" then
                     walk(widget.sub_widgets)
@@ -190,6 +207,25 @@ function M.reapply(mod)
                     end
                     if not is_key_missing(tooltip) then
                         assign(widget, "tooltip", tooltip)
+                    end
+
+                    if keys.button_text and type(widget.button_text) == "string" then
+                        local caption = target:localize(keys.button_text)
+                        if not is_key_missing(caption) then
+                            assign(widget, "button_text", caption)
+                        end
+                    end
+
+                    if keys.options and type(widget.options) == "table" then
+                        for i, option_key in pairs(keys.options) do
+                            local option = widget.options[i]
+                            if type(option) == "table" and type(option.text) == "string" then
+                                local caption = target:localize(option_key)
+                                if not is_key_missing(caption) then
+                                    assign(option, "text", caption)
+                                end
+                            end
+                        end
                     end
                 end
             end

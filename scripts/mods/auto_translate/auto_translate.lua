@@ -286,10 +286,23 @@ local function stand_down(reason)
     online.flush(mod)
     online.stop(mod)
     local ok, removed = pcall(injector.unapply, mod)
-    options_refresh.mark_stale(mod)
+
+    -- Put the original text back on the options screen. The widget titles and tooltips were localised
+    -- (and cached as strings) while each mod's data initialized, so removing our values from the
+    -- localization tables is not enough on its own: the widgets still hold the finished translation.
+    -- options_refresh kept the original keys, so re-localising now resolves to the source language
+    -- again (DMF falls back to `en` once the target-language entry is gone). The screen rebuilds on
+    -- the next open, because clearing its cached templates while it is open breaks its own callbacks.
+    local restored = 0
     if ok then
-        util.info(mod, "translation stopped (%s): took back %s injected key(s); reopen the options screen (or restart) for anything already drawn",
-            reason, tostring(removed))
+        local rok, count = pcall(options_refresh.reapply, mod)
+        restored = (rok and tonumber(count)) or 0
+    end
+    options_refresh.mark_stale(mod)
+
+    if ok then
+        util.info(mod, "translation stopped (%s): took back %s injected key(s), restored %d option string(s) to the original language; reopen the options screen for anything already drawn",
+            reason, tostring(removed), restored)
     else
         util.warn(mod, "translation stopped (%s), but taking the injected text back failed: %s (a restart clears it)",
             reason, tostring(removed))
