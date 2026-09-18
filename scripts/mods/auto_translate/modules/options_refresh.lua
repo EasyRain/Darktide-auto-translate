@@ -161,6 +161,7 @@ function M.reapply(mod)
     end
 
     local updated = 0
+    local named = 0
 
     local function assign(target, field, value)
         if target[field] ~= value then
@@ -175,8 +176,11 @@ function M.reapply(mod)
         local target = name and dmf.mods and dmf.mods[name] or nil
         local raw = name and M.raw[name] or nil
 
-        if type(target) == "table" and raw and type(target.localize) == "function" then
-            -- The mod's own entry in the options list.
+        if type(target) == "table" and type(target.localize) == "function" then
+            -- The mod's own entry in the options list. This part needs no recorded keys: it is the
+            -- name the list shows, and a mod that has no settings never goes through
+            -- initialize_mod_options at all - which is why gating it on `raw` (below) left every
+            -- option-less mod showing its translated name.
             local title = target:localize("mod_name")
             if not is_key_missing(title) then
                 assign(header, "title", title)
@@ -190,6 +194,7 @@ function M.reapply(mod)
                 if type(target.set_internal_data) == "function" then
                     pcall(target.set_internal_data, target, "readable_name", title)
                 end
+                named = named + 1
             end
             local description = target:localize("mod_description")
             if not is_key_missing(description) and header.description ~= nil then
@@ -199,7 +204,8 @@ function M.reapply(mod)
                 end
             end
 
-            -- Its widgets.
+            -- Its widgets: these do need the keys recorded before DMF turned them into strings.
+            if raw then
             for i = 2, #mod_data do
                 local widget = mod_data[i]
                 local keys = type(widget) == "table" and widget.setting_id and raw.widgets[widget.setting_id] or nil
@@ -239,10 +245,11 @@ function M.reapply(mod)
                     end
                 end
             end
+            end
         end
     end
 
-    return updated
+    return updated, named
 end
 
 return M

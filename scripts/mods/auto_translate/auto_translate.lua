@@ -293,16 +293,17 @@ local function stand_down(reason)
     -- options_refresh kept the original keys, so re-localising now resolves to the source language
     -- again (DMF falls back to `en` once the target-language entry is gone). The screen rebuilds on
     -- the next open, because clearing its cached templates while it is open breaks its own callbacks.
-    local restored = 0
+    local restored, restored_names = 0, 0
     if ok then
-        local rok, count = pcall(options_refresh.reapply, mod)
+        local rok, count, names = pcall(options_refresh.reapply, mod)
         restored = (rok and tonumber(count)) or 0
+        restored_names = (rok and tonumber(names)) or 0
     end
     options_refresh.mark_stale(mod)
 
     if ok then
-        util.info(mod, "translation stopped (%s): took back %s injected key(s), restored %d option string(s) to the original language; reopen the options screen for anything already drawn",
-            reason, tostring(removed), restored)
+        util.info(mod, "translation stopped (%s): took back %s injected key(s), restored %d option string(s) and %d mod name(s) to the original language; reopen the options screen for anything already drawn",
+            reason, tostring(removed), restored, restored_names)
     else
         util.warn(mod, "translation stopped (%s), but taking the injected text back failed: %s (a restart clears it)",
             reason, tostring(removed))

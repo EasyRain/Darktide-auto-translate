@@ -48,14 +48,29 @@ end
 
 local util = { info = function() end, warn = function() end, log = function() end }
 
--- DMF's widget data, as the options screen holds it: a header plus the widget tables.
+-- DMF's widget data, as the options screen holds it: a header plus the widget tables. The second mod
+-- has no settings at all - it never goes through initialize_mod_options, so nothing is recorded for it
+-- and only its name can be restored. Gating the name on the recorded keys left exactly those mods
+-- showing a translated name in the list.
 local widget = {
     setting_id = "bar_color",
     title = "Bar Color", tooltip = "Tooltip text", button_text = "Reload",
     options = { { text = "Start" }, { text = "End" } },
 }
 local header = { mod_name = "some_mod", title = "Ability Timer", description = "HUD countdown timer." }
-local dmf = { mods = { some_mod = fake_mod }, options_widgets_data = { { header, widget } } }
+local quiet = { internal = { readable_name = "技能计时器" } }
+function quiet:get_name() return "quiet_mod" end
+function quiet:localize(key)
+    local bucket = (lang == "zh-cn") and TRANSLATED or SOURCE
+    return bucket[key] or ("<" .. tostring(key) .. ">")
+end
+function quiet:set_internal_data(key, value) self.internal[key] = value end
+
+local quiet_header = { mod_name = "quiet_mod", title = "Ability Timer", readable_mod_name = "技能计时器" }
+local dmf = {
+    mods = { some_mod = fake_mod, quiet_mod = quiet },
+    options_widgets_data = { { header, widget }, { quiet_header } },
+}
 get_mod = function(name) if name == "DMF" then return dmf end return nil end
 CLASS = nil   -- mark_stale falls back to "restart needed" logging, which is fine here
 
@@ -89,7 +104,9 @@ check("the button key is kept", recorded.button_text, "button")
 check("the dropdown keys are kept", recorded.options[2], "opt_end")
 
 -- ---- 2) with a translation in place, reapply puts the translation on the widgets ---------------
-check("seven strings were applied", refresh.reapply(nil), 7)
+local updated, named = refresh.reapply(nil)
+check("eight strings were applied", updated, 8)
+check("both mod names were reached", named, 2)
 check("the header title is translated", header.title, "技能计时器")
 check("the widget title is translated", widget.title, "进度条颜色")
 check("the widget tooltip is translated", widget.tooltip, "提示文字")
@@ -100,7 +117,11 @@ check("the mod object carries the translated name too", fake_mod.internal.readab
 
 -- ---- 3) once the injected values are taken back, reapply restores the original language --------
 lang = "en"      -- what DMF's localization falls back to after injector.unapply
-check("seven strings were restored", refresh.reapply(nil), 7)
+updated, named = refresh.reapply(nil)
+check("nine strings were restored", updated, 9)
+check("including both mod names", named, 2)
+check("the mod that has no settings got its name back too", quiet_header.readable_mod_name, "Ability Timer")
+check("and its cached name on the mod object", quiet.internal.readable_name, "Ability Timer")
 check("the header title is back to the source", header.title, "Ability Timer")
 check("the widget title is back", widget.title, "Bar Color")
 check("the tooltip is back", widget.tooltip, "Tooltip text")
@@ -113,7 +134,9 @@ check("the mod object's name is back", fake_mod.internal.readable_name, "Ability
 check("and its description", fake_mod.internal.description, "HUD countdown timer.")
 
 -- ---- 4) nothing to do when it already matches --------------------------------------------------
-check("a second pass changes nothing", refresh.reapply(nil), 0)
+updated, named = refresh.reapply(nil)
+check("a second pass changes nothing", updated, 0)
+check("but the names are still reached", named, 2)
 
 -- ---- 5) the view is marked for a rebuild -------------------------------------------------------
 refresh.mark_stale(nil)
