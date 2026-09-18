@@ -93,6 +93,7 @@ sub-widgets of that dropdown: DMF hides all ten under `DeepL` and shows them the
 | Retranslate offline results | Offline model | With an online engine, treats what the model wrote as pending again. |
 | Translation status | Maintenance | Shows the run's state (also the progress line's source). |
 | Reload translation files | Maintenance | Re-scan and re-inject without restarting. |
+| Open translation folder | Maintenance | Opens `translations/<language>/` in Explorer: one plain-Lua file per mod, to fix a line by hand or hand the files to something else. Fix what you like, put the result back and press *Reload translation files*. |
 | Clear local translations | Maintenance | Deletes the local library files. |
 | Test the glossary | Maintenance | Reports how many terms are loaded and which are missing. |
 | Collect terms | Maintenance | Writes the game's own wording for the collected keys into `translations/export/`. Off by default: switch it on for a collection round and off afterwards. Turning it on collects straight away, so no restart is needed. |
@@ -728,6 +729,11 @@ marker). A file whose every entry has been read through can be listed in `CHECKE
 is marked `manual = true`, and the mod carries that instruction out on the next start — every marker
 in the file is stripped and the flag returns to `false`, so a checked file looks exactly like a hand
 written one.
+
+**In the game**, the *Open translation folder* button (Maintenance) opens that same folder —
+`translations/<language>/`, one plain-Lua file per mod — in Explorer. Edit a line by hand or hand the
+files to another program, put them back and press *Reload translation files*: what you wrote is kept,
+because an entry with no `src` marker counts as hand written.
 
 ### Where `translations/export/` belongs
 

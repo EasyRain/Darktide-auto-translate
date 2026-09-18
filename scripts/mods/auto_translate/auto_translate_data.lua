@@ -294,6 +294,15 @@ return {
                         function_name = "reload_translations",
                     },
                     {
+                        -- The translation files are plain Lua and a hand-written entry is never
+                        -- overwritten, so this opens them where they are: to fix a line by hand, or to
+                        -- hand the folder to something else.
+                        setting_id = "open_translation_folder",
+                        type = "button",
+                        button_text = "open_translation_folder",
+                        function_name = "open_translation_folder",
+                    },
+                    {
                         setting_id = "clear_cache",
                         type = "button",
                         button_text = "clear_cache",

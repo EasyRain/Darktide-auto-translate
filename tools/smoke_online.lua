@@ -548,6 +548,20 @@ if not util_chunk then
 end
 local util = util_chunk()
 
+-- ---------------------------------------------------------------------------
+-- the "open translation folder" button's helpers
+--
+-- open_folder talks to shell32 through FFI; this harness's ffi.load refuses on purpose (see the top of
+-- this file), so what is checked here is the path the button lands on and the failure branch - a
+-- button that cannot open a folder has to return a reason instead of looking broken.
+-- ---------------------------------------------------------------------------
+check("the folder for one language", util.translations_dir_for("zh-cn"), util.TRANSLATIONS_DIR .. "/zh-cn")
+check("and without a language", util.translations_dir_for(nil), util.TRANSLATIONS_DIR .. "/en")
+local opened, open_why = util.open_folder(util.translations_dir_for("zh-cn"))
+check("opening says so when it cannot", opened, false)
+check("with a reason", type(open_why) == "string" and #open_why > 0, true)
+check("and an absolute path never raises", type(util.absolute_path(util.TRANSLATIONS_DIR)), "string")
+
 local dmf_like = {
     info = function(_, str, ...) return string.format(str, ...) end,
     warning = function(_, str, ...) return string.format(str, ...) end,

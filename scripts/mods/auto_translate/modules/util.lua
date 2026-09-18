@@ -208,6 +208,74 @@ function M.ensure_dir(path)
     return true
 end
 
+-- The folder a language's translation files live in (one file per mod, plain Lua).
+--
+-- An entry in there without a `src` marker counts as hand written and is never overwritten while its
+-- source text is unchanged (see modules/store.lua), which is what makes the folder worth pointing a
+-- player at: edit the files yourself, or hand them to something else and drop the result back.
+function M.translations_dir_for(lang)
+    return M.TRANSLATIONS_DIR .. "/" .. tostring(lang or "en")
+end
+
+-- The absolute form of one of our relative paths.
+--
+-- Everything here is relative to the game's working directory, which a player reading a log line
+-- cannot use; GetFullPathNameA also collapses the ".." segments.
+function M.absolute_path(path)
+    local ffi = Mods and Mods.lua and Mods.lua.ffi
+    if not (ffi and ffi.cdef and ffi.load and ffi.new) then
+        return path
+    end
+
+    pcall(ffi.cdef, [[
+        unsigned long __stdcall GetFullPathNameA(const char* lpFileName, unsigned long nBufferLength,
+                                                 char* lpBuffer, char** lpFilePart);
+    ]])
+
+    local ok, kernel32 = pcall(ffi.load, "kernel32")
+    if not ok or not kernel32 then
+        return path
+    end
+
+    local buf = ffi.new("char[1024]")
+    local length = kernel32.GetFullPathNameA(path, 1024, buf, nil)
+    if length == 0 or length >= 1024 then
+        return path
+    end
+    return ffi.string(buf)
+end
+
+-- Hands a folder to Windows, so the player does not have to find it in the file manager.
+--
+-- Lua has no way out of the process; the game runs LuaJIT, so shell32 does the job. Returns
+-- (ok, reason) and never raises: a button whose only effect is a window that did not open has to say
+-- so instead of looking broken.
+function M.open_folder(path)
+    local ffi = Mods and Mods.lua and Mods.lua.ffi
+    if not (ffi and ffi.cdef and ffi.load and ffi.cast) then
+        return false, "no ffi in this Lua"
+    end
+
+    pcall(ffi.cdef, [[
+        void* __stdcall ShellExecuteA(void* hwnd, const char* lpOperation, const char* lpFile,
+                                      const char* lpParameters, const char* lpDirectory, int nShowCmd);
+    ]])
+
+    local ok, shell32 = pcall(ffi.load, "shell32")
+    if not ok or not shell32 then
+        return false, "shell32 could not be loaded"
+    end
+
+    -- SW_SHOWNORMAL. The shell answers with a value above 32 when it took the request; the return
+    -- value is an HINSTANCE, so it is cast to an integer before it is compared.
+    local result = shell32.ShellExecuteA(nil, "open", path, nil, nil, 1)
+    local code = tonumber(ffi.cast("intptr_t", result)) or 0
+    if code <= 32 then
+        return false, "ShellExecuteA returned " .. tostring(code)
+    end
+    return true
+end
+
 -- Execute a Lua file and return its result (used to read other mods' localization files).
 function M.load_lua_file(path)
     local content, err = M.read_file(path)

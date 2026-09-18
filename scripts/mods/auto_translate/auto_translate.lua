@@ -608,6 +608,39 @@ function mod.test_custom_api()
 end
 
 -- Mod options: "Clear local translations" (only the current target language)
+-- Opens the folder this language's translation files live in.
+--
+-- The files are plain Lua, one per mod, and an entry without a `src` marker is treated as hand written
+-- (never overwritten while its source text is unchanged) - so the folder is what a player needs when
+-- the point is to fix a translation by hand, or to hand the files to something else and drop the
+-- result back. Opening it is best effort: when the shell will not take the request the log carries the
+-- full path, because that is the part the player cannot guess.
+function mod.open_translation_folder()
+    local lang = current_lang()
+    local dir = util.translations_dir_for(lang)
+
+    -- Where a language that has no files yet would put them; harmless, and it means the button always
+    -- lands somewhere useful instead of on a path that does not exist.
+    util.ensure_dir(dir)
+
+    local ok, why = util.open_folder(dir)
+    if not ok then
+        dir = util.TRANSLATIONS_DIR
+        ok, why = util.open_folder(dir)
+    end
+
+    local full = util.absolute_path(dir)
+    if ok then
+        util.info(mod, "opened the translation folder: %s", full)
+        return
+    end
+
+    -- One notice, and it carries the path: this is a button the player pressed, so silence would just
+    -- look like a broken button.
+    util.info(mod, "could not open the translation folder (%s): %s", tostring(why), full)
+    util.popup(mod, "open_folder_failed", full)
+end
+
 function mod.clear_cache()
     local oslib = (Mods and Mods.lua and Mods.lua.os) or os
     local lang = current_lang()
