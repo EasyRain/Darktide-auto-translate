@@ -378,7 +378,21 @@ local function run_pipeline(reason)
             #waiting > 12 and string.format(", ... and %d more", #waiting - 12) or "")
     end
 
-    injector.apply(mod, report, lang)
+    local injected = injector.apply(mod, report, lang)
+
+    -- The option widgets are built from strings DMF cached while the mods loaded, so writing the
+    -- translations into the localization tables does not reach them: re-localise from the recorded
+    -- keys and have the screen rebuilt. Without this, switching the master switch back on translated
+    -- plenty of runtime text but the options screen only changed after some other action re-localised
+    -- it - which is what made it look like the switch needed a second click.
+    if injected > 0 then
+        local ok, refreshed = pcall(options_refresh.reapply, mod)
+        if ok and tonumber(refreshed) and tonumber(refreshed) > 0 then
+            options_refresh.mark_stale(mod)
+            util.info(mod, "%d option string(s) re-localised; the options screen rebuilds on the next open",
+                tonumber(refreshed))
+        end
+    end
 
     local saved = injector.flush(mod, lang)
     if saved > 0 then

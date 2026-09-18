@@ -183,10 +183,20 @@ function M.reapply(mod)
                 if header.readable_mod_name ~= nil then
                     assign(header, "readable_mod_name", title)
                 end
+                -- DMF's mod list does not read this header for the name: it reads the mod object
+                -- (`get_readable_name()`), whose value was cached when the mod was constructed - so the
+                -- name has to be written back through the setter DMF exposes, or the list keeps
+                -- showing the translation while everything else has gone back to the source language.
+                if type(target.set_internal_data) == "function" then
+                    pcall(target.set_internal_data, target, "readable_name", title)
+                end
             end
             local description = target:localize("mod_description")
             if not is_key_missing(description) and header.description ~= nil then
                 assign(header, "description", description)
+                if type(target.set_internal_data) == "function" then
+                    pcall(target.set_internal_data, target, "description", description)
+                end
             end
 
             -- Its widgets.

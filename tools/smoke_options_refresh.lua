@@ -35,11 +35,15 @@ local SOURCE = {
 -- The mod's localization: the target language while we are translating, the source once our values
 -- have been taken back out (which is DMF's `en` fallback).
 local lang = "zh-cn"
-local fake_mod = {}
+local fake_mod = { internal = { readable_name = "技能计时器", description = "在 HUD 上显示倒计时。" } }
 function fake_mod:get_name() return "some_mod" end
 function fake_mod:localize(key)
     local bucket = (lang == "zh-cn") and TRANSLATED or SOURCE
     return bucket[key] or ("<" .. tostring(key) .. ">")
+end
+-- DMF's mod objects expose this setter, and DMF's mod list reads the name back from the object.
+function fake_mod:set_internal_data(key, value)
+    self.internal[key] = value
 end
 
 local util = { info = function() end, warn = function() end, log = function() end }
@@ -92,6 +96,7 @@ check("the widget tooltip is translated", widget.tooltip, "提示文字")
 check("the button caption is translated", widget.button_text, "重新加载")
 check("the first dropdown entry is translated", widget.options[1].text, "起点")
 check("and the second", widget.options[2].text, "终点")
+check("the mod object carries the translated name too", fake_mod.internal.readable_name, "技能计时器")
 
 -- ---- 3) once the injected values are taken back, reapply restores the original language --------
 lang = "en"      -- what DMF's localization falls back to after injector.unapply
@@ -102,6 +107,10 @@ check("the tooltip is back", widget.tooltip, "Tooltip text")
 check("the button caption is back", widget.button_text, "Reload")
 check("the dropdown entries are back", widget.options[1].text, "Start")
 check("both of them", widget.options[2].text, "End")
+-- The mod list on the left reads the name from the mod object, not from this header: without the
+-- write-through it kept showing the translation while everything else was back to the source.
+check("the mod object's name is back", fake_mod.internal.readable_name, "Ability Timer")
+check("and its description", fake_mod.internal.description, "HUD countdown timer.")
 
 -- ---- 4) nothing to do when it already matches --------------------------------------------------
 check("a second pass changes nothing", refresh.reapply(nil), 0)
