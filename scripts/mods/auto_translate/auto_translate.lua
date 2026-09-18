@@ -619,9 +619,23 @@ function mod.open_translation_folder()
     local lang = current_lang()
     local dir = util.translations_dir_for(lang)
 
-    -- Where a language that has no files yet would put them; harmless, and it means the button always
-    -- lands somewhere useful instead of on a path that does not exist.
-    util.ensure_dir(dir)
+    -- By target language: the folder that already holds this language's files is opened, and a
+    -- language that has none yet gets one - the button is for dropping files in, so an empty folder is
+    -- the useful answer rather than a path that does not exist. Which of the three happened is logged,
+    -- and the check after ensure_dir is what keeps that line honest: ensure_dir is best effort.
+    if util.dir_exists(dir) then
+        util.info(mod, "opening the '%s' translation folder", tostring(lang))
+    else
+        util.ensure_dir(dir)
+        if util.dir_exists(dir) then
+            util.info(mod, "created the '%s' translation folder (nothing translated into it yet)", tostring(lang))
+        else
+            -- Should not happen (the parent is part of the mod), but opening a path that is not there
+            -- would just raise the shell's SE_ERR_FNF again.
+            util.info(mod, "no '%s' translation folder and it could not be created; opening the parent", tostring(lang))
+            dir = util.TRANSLATIONS_DIR
+        end
+    end
 
     -- util.open_folder turns this into an absolute path itself: the shell does not resolve our
     -- relative ones (see there).

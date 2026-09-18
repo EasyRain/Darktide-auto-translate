@@ -301,6 +301,40 @@ function M.open_folder(path)
     return false, string.format("ShellExecuteA -> %d, WinExec explorer.exe -> %d", code, code2)
 end
 
+-- Is there a directory at this path?
+--
+-- io.open() cannot be trusted to tell a directory from a file on every build, so this asks Windows
+-- when the FFI is there (GetFileAttributesA, FILE_ATTRIBUTE_DIRECTORY = 0x10) and falls back to the
+-- file test. The button that opens the translation folder uses it to say whether it opened a folder
+-- that was already there or made an empty one.
+function M.dir_exists(path)
+    local ffi = Mods and Mods.lua and Mods.lua.ffi
+    if ffi and ffi.cdef and ffi.load then
+        pcall(ffi.cdef, [[
+            unsigned long __stdcall GetFileAttributesA(const char* lpFileName);
+        ]])
+        local ok, kernel32 = pcall(ffi.load, "kernel32")
+        if ok and kernel32 then
+            local attrs = tonumber(kernel32.GetFileAttributesA(path))
+            if attrs and attrs ~= 0xFFFFFFFF then
+                -- modulo instead of a bit library: 0x10 is the directory bit.
+                return math.floor(attrs / 16) % 2 == 1
+            end
+            return false
+        end
+    end
+
+    -- Without the FFI (a test harness) the best available test is a rename onto itself: it succeeds for
+    -- a path that is there and fails for one that is not. It cannot tell a file from a directory, which
+    -- is why the FFI path above exists.
+    local lib = os_lib()
+    if lib and lib.rename then
+        local ok, renamed = pcall(lib.rename, path, path)
+        return ok and renamed == true
+    end
+    return false
+end
+
 -- Execute a Lua file and return its result (used to read other mods' localization files).
 function M.load_lua_file(path)
     local content, err = M.read_file(path)

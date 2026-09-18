@@ -557,6 +557,10 @@ local util = util_chunk()
 -- ---------------------------------------------------------------------------
 check("the folder for one language", util.translations_dir_for("zh-cn"), util.TRANSLATIONS_DIR .. "/zh-cn")
 check("and without a language", util.translations_dir_for(nil), util.TRANSLATIONS_DIR .. "/en")
+-- The button decides between "open it" and "make it first" with this; the harness has no FFI, so this
+-- also covers the rename fallback.
+check("an existing folder is seen", util.dir_exists(here), true)
+check("one that is not there is not seen", util.dir_exists(here .. "/no-such-folder"), false)
 local opened, open_why = util.open_folder(util.translations_dir_for("zh-cn"))
 check("opening says so when it cannot", opened, false)
 check("with a reason", type(open_why) == "string" and #open_why > 0, true)
