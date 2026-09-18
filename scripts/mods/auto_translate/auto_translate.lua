@@ -116,10 +116,15 @@ end
 -- ---------------------------------------------------------------------------
 local hooked = false
 
--- Was the mod off while the game was loading? The early merge is the only chance to put translations
--- into a mod's localization table before DMF caches the option texts, so a mod that starts disabled
--- cannot catch up in the same session - see run_pipeline. nil means "not seen yet" (treated as on).
+-- Was the mod off while the game was loading, and why? The early merge is the only chance to put
+-- translations into a mod's localization table before DMF caches the option texts, so a mod that starts
+-- inactive cannot merge during loading - but the runtime pass (scan + inject + options_refresh) fixes
+-- the option widgets afterwards, which is the route mods loaded before us take as well. What it cannot
+-- reach is text a mod cached in its own tables, so a restart can still be needed for that - and that is
+-- worth saying when the mod was switched off in DMF, which is the case a player thinks of as "off".
+-- nil means "not seen yet" (treated as on).
 local started_disabled = nil
+local started_disabled_reason = nil
 local restart_notice_shown = false
 
 local function install_hook()
@@ -140,9 +145,11 @@ local function install_hook()
         end
 
         -- The first call is during loading, which is exactly when the switch state decides whether
-        -- this session can translate at all: remember it before the state can change under us.
+        -- this session can merge at all: remember it, and why, before the state can change under us.
         if started_disabled == nil then
-            started_disabled = not active()
+            local on, why = active()
+            started_disabled = not on
+            started_disabled_reason = why
         end
 
         -- Nothing is merged while either switch says no; the table is still handed on untouched, so
@@ -331,13 +338,14 @@ local function run_pipeline(reason)
     -- texts of the mods it loaded in the source language. That does NOT mean nothing can be done: the
     -- runtime pass injects the translations and options_refresh re-localises the widgets, which is the
     -- same route mods loaded before us take. What it cannot reach is text a mod cached in its own
-    -- tables while loading, so the player is told that a restart may still be needed for those - and
-    -- then the work runs, because blocking it was what made the switch look like it needed a second
-    -- click (it had to be followed by the reload button to do anything at all).
-    if started_disabled and not restart_notice_shown then
+    -- tables, so the work runs either way and the notice is only for the case that started *disabled in
+    -- DMF* - the one a player thinks of as "the mod was off", and the one where a restart may still be
+    -- needed for such text. A mod that was merely not applying (its own switch off) is not worth a
+    -- notice: it starts translating the moment the switch goes on.
+    if started_disabled and started_disabled_reason == "disabled in DMF" and not restart_notice_shown then
         restart_notice_shown = true
         util.popup(mod, "enable_restart_needed")
-        util.info(mod, "started disabled: translating now, a restart may still be needed for text a mod cached while loading (%s)",
+        util.info(mod, "started disabled in DMF: translating now, a restart may still be needed for text a mod cached while loading (%s)",
             reason)
     end
 
