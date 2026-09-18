@@ -165,24 +165,28 @@ check("the toggle is back", view._options_templates.settings[1].display_name, "A
 check("the category description too", view._options_templates.categories[1].description, "HUD countdown timer.")
 check("a second pass changes nothing", refresh.reapply_templates(nil, view), 0)
 
--- ---- 6) the view hook resolves the class and installs -------------------------------------------
+-- ---- 6) the view hook is queued by class name ---------------------------------------------------
+-- DMF's view class only exists once the screen is created, so the hook is registered by NAME and DMF
+-- applies it later (its delayed hooks listen for the game's class()). Looking the class up at load time
+-- failed, and the failure was surfaced as a warning - which DMF shows as a notification.
 local hooked = {}
-CLASS = { DMFOptionsView = { on_enter = function() end } }
-local fake_owner = {
-    hook_safe = function(_, object, method, handler)
-        hooked[#hooked + 1] = tostring(object == CLASS.DMFOptionsView) .. "/" .. tostring(method)
-        return true
-    end,
-}
+local function owner()
+    return {
+        hook_safe = function(_, object, method, handler)
+            hooked[#hooked + 1] = tostring(object) .. "/" .. tostring(method)
+            return true
+        end,
+    }
+end
 refresh.view_hooked = nil
-check("the view hook installs through CLASS", refresh.install_view_hook(fake_owner), true)
-check("on the right method", hooked[1], "true/on_enter")
-check("and it is not installed twice", refresh.install_view_hook(fake_owner), true)
-check("only one hook", #hooked, 1)
+check("the view hook is queued by class name", refresh.install_view_hook(owner()), true)
+check("for DMFOptionsView.on_enter", hooked[1], "DMFOptionsView/on_enter")
+check("and it is not queued twice", refresh.install_view_hook(owner()), true)
+check("so there is only one entry", #hooked, 1)
 
-CLASS = nil
 refresh.view_hooked = nil
-check("no CLASS means no hook (the list then needs a restart)", refresh.install_view_hook(fake_owner), false)
+check("a refusal is reported, not thrown",
+    refresh.install_view_hook({ hook_safe = function() error("no such class") end }), false)
 
 -- ---- 7) the view is marked for a rebuild -------------------------------------------------------
 refresh.mark_stale(nil)

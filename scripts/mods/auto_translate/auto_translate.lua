@@ -56,11 +56,12 @@ options_refresh.init(util)
 options_refresh.install_hook(mod)
 
 -- The settings screen builds its mod list and toggles from copies of the header data, so those copies
--- have to be patched on every open as well (see reapply_templates). If that hook cannot be installed,
--- the list keeps whatever language it was built in and only a restart changes it - stand_down says so.
+-- have to be patched on every open as well (see reapply_templates). The hook is queued by class name
+-- and DMF applies it when the screen is first created, so this is a log line when it works and a log
+-- line when it cannot be queued - never a warning: DMF turns warnings into notifications.
 local list_refresh_ok = options_refresh.install_view_hook(mod)
 if not list_refresh_ok then
-    util.warn(mod, "could not hook the settings screen; the mod list there may need a restart to change language")
+    util.log(mod, "the settings list will keep its language until the game restarts")
 end
 
 -- Language we translate INTO (configured, or the game's current language).
@@ -310,10 +311,9 @@ local function stand_down(reason)
     options_refresh.mark_stale(mod)
 
     if ok then
-        util.info(mod, "translation stopped (%s): took back %s injected key(s), restored %d option string(s) and %d mod name(s); %s",
+        util.info(mod, "translation stopped (%s): took back %s injected key(s), restored %d option string(s) and %d mod name(s); reopen the options screen to see it%s",
             reason, tostring(removed), restored, restored_names,
-            list_refresh_ok and "reopen the options screen to see it (the list follows with it)"
-                or "the mod list on the left keeps its language until the game restarts")
+            list_refresh_ok and "" or " (the mod list on the left needs a restart)")
     else
         util.warn(mod, "translation stopped (%s), but taking the injected text back failed: %s (a restart clears it)",
             reason, tostring(removed))

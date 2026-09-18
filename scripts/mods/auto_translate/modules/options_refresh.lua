@@ -308,31 +308,27 @@ end
 -- Patches the built list every time the settings screen is entered, before it is drawn. hook_safe runs
 -- after the original, so the templates exist by then.
 --
--- The view class itself is a local in DMF's file (`local DMFOptionsView = class("DMFOptionsView", ...)`),
--- so it is reached the way Darktide names classes: the global CLASS table, which is also what resolves
--- the `class = "DMFOptionsView"` string in the view registration.
+-- The hook is registered by NAME, not by looking the class up: DMF's view class is a local in its own
+-- file and only comes into existence when the screen is first created, and DMF supports exactly that -
+-- `mod:hook_safe("SomeClass", ...)` is queued in its delayed hooks and applied when the game's class()
+-- creates it (`dmf:hook(_G, "class", ...)`, core/hooks.lua). Looking the class up here failed at load
+-- time and the failure was surfaced as a warning, which DMF shows as a notification - a popup about
+-- something that was never a problem.
 function M.install_view_hook(mod)
     if M.view_hooked then
         return true
     end
-    local classes = rawget(_G, "CLASS")
-    local view_class = type(classes) == "table" and rawget(classes, "DMFOptionsView") or nil
-    if type(view_class) ~= "table" then
-        view_class = rawget(_G, "DMFOptionsView")
-    end
-    if type(view_class) ~= "table" or type(view_class.on_enter) ~= "function" then
-        return false
-    end
-    local ok = pcall(function()
-        mod:hook_safe(view_class, "on_enter", function(self)
+    local ok, err = pcall(function()
+        mod:hook_safe("DMFOptionsView", "on_enter", function(self)
             pcall(M.reapply_templates, mod, self)
         end)
     end)
     if not ok then
+        util.log(mod, "could not queue the settings list refresh: %s", tostring(err))
         return false
     end
     M.view_hooked = true
-    util.log(mod, "settings list refresh installed")
+    util.log(mod, "settings list refresh queued (applies when the settings screen is created)")
     return true
 end
 
