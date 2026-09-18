@@ -1454,7 +1454,9 @@ function M.start(mod, report, lang)
         is_local and "offline model" or table.concat(providers, ", "),
         #notes > 0 and (" (" .. table.concat(notes, ", ") .. ")") or "")
 
-    return queued > 0
+    -- The second value says why when nothing was queued: with a fully translated install that is the
+    -- normal case, and the caller must not report it as "see the warnings above" - there are none.
+    return queued > 0, queued == 0 and "every key already has a translation" or nil
 end
 
 function M.stop(mod)

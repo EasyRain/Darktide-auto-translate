@@ -600,6 +600,22 @@ do
     check("popup: a mod without localize is ignored", #seen, 0)
 end
 
+-- Every notice also leaves one log line. The popups write nothing themselves, so a screenful of them
+-- could only ever be explained from a screenshot, and "only say it when it matters" could not be
+-- checked against anything.
+do
+    local logged = {}
+    local stub = {
+        localize = function(_, key) return key end,
+        info = function(_, fmt, ...) logged[#logged + 1] = string.format(fmt, ...) end,
+        notify = function() end,
+    }
+    util.popup(stub, "no_engine_available")
+    check("popup: the notice is in the log", logged[1], "[AT] notice [no_engine_available]: no_engine_available")
+    util.popup({ notify = function() end }, "x")   -- no info() either: tracing must not raise
+    check("popup: a mod without info is still ignored", logged[2], nil)
+end
+
 -- ---------------------------------------------------------------------------
 -- engine priority (modules/engines.lua)
 --

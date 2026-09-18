@@ -326,34 +326,46 @@ function M.reapply_templates(mod, view)
     return updated
 end
 
--- Patches the built list every time the settings screen is entered, before it is drawn. hook_safe runs
--- after the original, so the templates exist by then.
+-- Patches the built list whenever the settings screen builds its templates.
 --
--- The hook is registered by NAME, not by looking the class up: DMF's view class is a local in its own
--- file and only comes into existence when the screen is first created, and DMF supports exactly that -
--- `mod:hook_safe("SomeClass", ...)` is queued in its delayed hooks and applied when the game's class()
--- creates it (`dmf:hook(_G, "class", ...)`, core/hooks.lua). Looking the class up here failed at load
--- time and the failure was surfaced as a warning, which DMF shows as a notification - a popup about
--- something that was never a problem.
+-- The hook goes on `dmf.create_mod_options_settings` - the function that turns the header data into the
+-- category list and the mod toggles - rather than on the view class. Hooking the class needs DMF's
+-- delayed hooks (the class does not exist at load), and although DMF reported applying it, the callback
+-- never ran: measured twice, with the diagnostic in place. This one uses exactly the same pattern as
+-- the option-key recording that has worked since the beginning: a plain hook on a function of the dmf
+-- table, with the original called first.
 function M.install_view_hook(mod)
     if M.view_hooked then
         return true
     end
-    local ok, err = pcall(function()
-        mod:hook_safe("DMFOptionsView", "on_enter", function(self)
-            local done, err = pcall(M.reapply_templates, mod, self)
-            if not done then
-                -- util.info, not util.warn: a diagnostic must not become a notification.
-                util.info(mod, "settings list refresh failed: %s", tostring(err))
+    local dmf = get_mod("DMF")
+    if not (dmf and type(dmf.hook) == "function") then
+        return false
+    end
+    local ok, hook_err = pcall(function()
+        dmf:hook(dmf, "create_mod_options_settings", function(next_func, self, options_templates)
+            local built_ok, built = pcall(next_func, self, options_templates)
+            if not built_ok then
+                util.info(mod, "the settings screen build failed: %s", tostring(built))
+                return nil
             end
+            -- DMF returns the templates table it filled in; fall back to the argument in case that
+            -- ever changes, so the patch lands on whatever actually holds the list.
+            local templates = (type(built) == "table") and built or options_templates
+            local patched, perr = pcall(M.reapply_templates, mod, { _options_templates = templates })
+            if not patched then
+                -- util.info, not util.warn: a diagnostic must not become a notification.
+                util.info(mod, "settings list refresh failed: %s", tostring(perr))
+            end
+            return built
         end)
     end)
     if not ok then
-        util.log(mod, "could not queue the settings list refresh: %s", tostring(err))
+        util.info(mod, "could not hook the settings screen build: %s", tostring(hook_err))
         return false
     end
     M.view_hooked = true
-    util.log(mod, "settings list refresh queued (applies when the settings screen is created)")
+    util.info(mod, "settings list refresh installed")
     return true
 end
 

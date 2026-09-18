@@ -274,6 +274,12 @@ function M.popup(mod, key, ...)
         return
     end
     local message = mod:localize(key, ...)
+    -- Every visible notice also leaves a log line. The popups themselves write nothing, so a screenful
+    -- of them could only ever be explained from a screenshot; now the log says which notice fired and
+    -- when, which is what the "only tell me when it matters" tuning has to be checked against.
+    -- pcall: this function's contract is that a notice never raises, and a stub mod object without
+    -- info() must not turn tracing into an error either.
+    pcall(M.info, mod, "notice [%s]: %s", tostring(key), tostring(message))
     if type(mod.notify) == "function" then
         pcall(mod.notify, mod, message)
     elseif type(mod.echo) == "function" then

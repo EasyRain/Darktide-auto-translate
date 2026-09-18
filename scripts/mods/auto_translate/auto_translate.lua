@@ -152,14 +152,11 @@ local function install_hook()
             started_disabled_reason = why
         end
 
-        -- Nothing is merged while either switch says no; the table is still handed on untouched, so
-        -- the mod plays exactly as it shipped.
+        -- The table is handed to the injector either way: this is the only moment DMF shows us a mod's
+        -- localization table, and holding it (without writing anything) is what lets the mod translate
+        -- later without re-registering the file - which DMF warns about once per mod, as a popup.
         local on = active()
-        if not on then
-            return next_func(target_mod, loc_table)
-        end
-
-        local ok, err = pcall(injector.merge, mod, name, loc_table, current_lang())
+        local ok, err = pcall(injector.merge, mod, name, loc_table, current_lang(), not on)
         if not ok then
             util.warn(mod, "merge error (%s): %s", tostring(name), tostring(err))
         end
@@ -426,8 +423,13 @@ local function run_pipeline(reason)
             -- online.start() as well; only the way a string travels differs (a
             -- submit/poll pair in the core instead of an HTTP job). Keeping both on
             -- one path is what keeps the anti-misalignment guards in one place.
-            if not online.start(mod, report, lang) then
-                util.info(mod, "translation was not started (see the warnings above)")
+            local started, why = online.start(mod, report, lang)
+            if not started then
+                if why then
+                    util.info(mod, "translation was not started: %s", tostring(why))
+                else
+                    util.info(mod, "translation was not started (see the warnings above)")
+                end
             end
         else
             util.info(mod, "translation paused: the selected engine is not usable yet")

@@ -87,6 +87,16 @@ local loc3 = { alpha = { en = "Alpha" } }
 check("merging works again after unapply", injector.merge(nil, "some_mod", loc3, "zh-cn"), 1)
 check("and records again", select(1, injector.unapply(nil)), 1)
 
+-- ---- 6) remember_only: hold the table without translating --------------------------------------
+-- Used while the mod is switched off, so that turning it on later writes into the table DMF already
+-- serves instead of registering the file again (which DMF warns about, as a popup).
+local loc4 = { alpha = { en = "Alpha" } }
+check("nothing is merged while remembering", injector.merge(nil, "off_mod", loc4, "zh-cn", true), 0)
+check("and nothing was written", loc4.alpha["zh-cn"], nil)
+check_true("but the live table is remembered", injector.tables["off_mod"] == loc4)
+check("turning it on then writes into that same table", injector.merge(nil, "off_mod", loc4, "zh-cn"), 1)
+check("the text is there", loc4.alpha["zh-cn"], "阿尔法")
+
 print("")
 if failures > 0 then
     print(string.format("%d FAILURE(S)", failures))

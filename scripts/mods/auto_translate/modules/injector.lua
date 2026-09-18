@@ -57,7 +57,13 @@ end
 -- as plain strings) while `data` is initialized. So the translation has to be
 -- inside the table BEFORE DMF stores it — the on_all_mods_loaded path is too late
 -- for option texts.
-function M.merge(mod, name, loc_table, lang)
+--
+-- `remember_only` records the table without translating anything into it. The mod uses it while it is
+-- switched off: this hook is the only moment DMF hands us a mod's localization table, and holding on to
+-- it is what lets the translations be written in later without registering the file a second time -
+-- which DMF answers with "(localization): overwritting already loaded localization file", one warning
+-- per mod, shown to the player as a popup.
+function M.merge(mod, name, loc_table, lang, remember_only)
     if type(name) ~= "string" or name == "" or name == "auto_translate" then
         return 0
     end
@@ -69,6 +75,10 @@ function M.merge(mod, name, loc_table, lang)
     -- translation file at all, and those are exactly the ones that need live
     -- updates as the engine produces text for them.
     M.tables[name] = loc_table
+
+    if remember_only then
+        return 0
+    end
 
     local data = store.load(name, lang)
     if not data then

@@ -46,7 +46,14 @@ function fake_mod:set_internal_data(key, value)
     self.internal[key] = value
 end
 
-local util = { info = function() end, warn = function() end, log = function() end }
+-- The module logs through these; keeping the messages makes a swallowed error visible here instead of
+-- only in the game log.
+local messages = {}
+local util = {
+    info = function(_, fmt, ...) messages[#messages + 1] = string.format(tostring(fmt), ...) end,
+    warn = function(_, fmt, ...) messages[#messages + 1] = "WARN " .. string.format(tostring(fmt), ...) end,
+    log = function() end,
+}
 
 -- DMF's widget data, as the options screen holds it: a header plus the widget tables. The second mod
 -- has no settings at all - it never goes through initialize_mod_options, so nothing is recorded for it
@@ -165,28 +172,39 @@ check("the toggle is back", view._options_templates.settings[1].display_name, "A
 check("the category description too", view._options_templates.categories[1].description, "HUD countdown timer.")
 check("a second pass changes nothing", refresh.reapply_templates(nil, view), 0)
 
--- ---- 6) the view hook is queued by class name ---------------------------------------------------
--- DMF's view class only exists once the screen is created, so the hook is registered by NAME and DMF
--- applies it later (its delayed hooks listen for the game's class()). Looking the class up at load time
--- failed, and the failure was surfaced as a warning - which DMF shows as a notification.
+-- ---- 6) the build hook goes on DMF's template builder ------------------------------------------
+-- Hooking the view class needs DMF's delayed hooks, and although DMF reported applying one, the callback
+-- never ran (measured twice). dmf.create_mod_options_settings is a plain function that builds the very
+-- list this module patches, and hooking it is the same pattern as the option-key recording.
 local hooked = {}
-local function owner()
-    return {
-        hook_safe = function(_, object, method, handler)
-            hooked[#hooked + 1] = tostring(object) .. "/" .. tostring(method)
-            return true
-        end,
-    }
-end
+-- The handler is parked in a box rather than on dmf_stub itself: a table literal cannot refer to the
+-- local it is being assigned to, so `dmf_stub.handler = ...` inside it would index the global nil.
+local view_hook = {}
+local dmf_stub = {
+    mods = { some_mod = fake_mod, quiet_mod = quiet },
+    hook = function(_, object, method, handler)
+        hooked[#hooked + 1] = tostring(method)
+        view_hook.handler = handler
+        return true
+    end,
+}
+get_mod = function(name) if name == "DMF" then return dmf_stub end return nil end
 refresh.view_hooked = nil
-check("the view hook is queued by class name", refresh.install_view_hook(owner()), true)
-check("for DMFOptionsView.on_enter", hooked[1], "DMFOptionsView/on_enter")
-check("and it is not queued twice", refresh.install_view_hook(owner()), true)
-check("so there is only one entry", #hooked, 1)
+check("the build hook installs", refresh.install_view_hook(nil), true)
+check("on create_mod_options_settings", hooked[1], "create_mod_options_settings")
+check("and only once", refresh.install_view_hook(nil), true)
+check("still one hook", #hooked, 1)
 
-refresh.view_hooked = nil
-check("a refusal is reported, not thrown",
-    refresh.install_view_hook({ hook_safe = function() error("no such class") end }), false)
+-- it patches the templates DMF has just built, after calling the original
+lang = "en"
+local built = {
+    categories = { { mod_name = "quiet_mod", display_name = "技能计时器", description = "描述" } },
+    settings = {},
+}
+local original_ran = false
+pcall(view_hook.handler, function() original_ran = true return true end, nil, built)
+check("the original builder ran first", original_ran, true)
+check("the freshly built list is patched to the source language", built.categories[1].display_name, "Ability Timer")
 
 -- ---- 7) the view is marked for a rebuild -------------------------------------------------------
 refresh.mark_stale(nil)
