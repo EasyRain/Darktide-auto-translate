@@ -206,9 +206,48 @@ pcall(view_hook.handler, function() original_ran = true return true end, nil, bu
 check("the original builder ran first", original_ran, true)
 check("the freshly built list is patched to the source language", built.categories[1].display_name, "Ability Timer")
 
--- ---- 7) the view is marked for a rebuild -------------------------------------------------------
+-- ---- 7) the list that is on screen right now is written to as well ------------------------------
+-- The category rows bake the name into widget.content.text when they are built, so a screen that is
+-- open while the switch is flipped has to be patched directly: marking the templates stale only takes
+-- effect on the next build, which is what made the list look stuck until a restart.
+local live_view = {
+    _options_templates = {
+        categories = { { mod_name = "some_mod", display_name = "技能计时器" } },
+        settings = {},
+    },
+    _category_data = {
+        {
+            entry = { mod_name = "some_mod", display_name = "技能计时器" },
+            widget = { content = { text = "技能计时器" } },
+        },
+        -- DMF's own toggle-mods page: no mod_name, and its wording is DMF's, not ours.
+        {
+            entry = { is_toggle_mods_category = true, display_name = "开启关闭模组" },
+            widget = { content = { text = "开启关闭模组" } },
+        },
+    },
+}
+lang = "zh-cn"
+check("already in this language: nothing to do", refresh.reapply_live(nil, live_view), 0)
+lang = "en"
+check("the row on screen is patched", refresh.reapply_live(nil, live_view), 1)
+check("the drawn label follows", live_view._category_data[1].widget.content.text, "Ability Timer")
+check("and the entry behind it", live_view._category_data[1].entry.display_name, "Ability Timer")
+check("DMF's own category is left alone", live_view._category_data[2].widget.content.text, "开启关闭模组")
+check("a second pass changes nothing", refresh.reapply_live(nil, live_view), 0)
+check("a view without a built list is ignored", refresh.reapply_live(nil, {}), 0)
+
+-- mark_stale does both: it patches the open screen and queues the rebuild for the next open.
+lang = "en"
+live_view._category_data[1].entry.display_name = "技能计时器"
+live_view._category_data[1].widget.content.text = "技能计时器"
+live_view._options_templates.categories[1].display_name = "技能计时器"
+refresh.view = live_view
+refresh.stale = false
 refresh.mark_stale(nil)
-check("the screen is marked stale", refresh.stale, true)
+check("mark_stale patches the open screen", live_view._category_data[1].widget.content.text, "Ability Timer")
+check("its templates too", live_view._options_templates.categories[1].display_name, "Ability Timer")
+check("and still marks the screen for a rebuild", refresh.stale, true)
 
 print("")
 if failures > 0 then

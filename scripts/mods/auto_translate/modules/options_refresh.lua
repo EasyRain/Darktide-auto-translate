@@ -118,10 +118,87 @@ function M.install_hook(mod)
     return true
 end
 
--- Clears the view's cached templates when it is next left, so the following open
--- rebuilds from the (re-localised) data. Only ever clears once per reload.
+-- The left-hand list as it is being drawn right now.
+--
+-- The category rows are widgets built at on_enter out of the name copies, and the label is baked into
+-- `widget.content.text` at that moment (dmf_options_view_content_blueprints.lua, settings_button:init),
+-- with the entry kept in `content.entry`. Marking the templates stale only takes effect on the NEXT
+-- build, so a player who flips the switch while the screen is open keeps looking at the old language -
+-- which is exactly what "the list does not follow, only a restart helps" was.
+function M.reapply_live(mod, view)
+    local dmf = get_mod("DMF")
+    if type(view) ~= "table" or type(dmf) ~= "table" then
+        return 0
+    end
+    local rows = view._category_data
+    if type(rows) ~= "table" then
+        return 0
+    end
+
+    local updated = 0
+    for i = 1, #rows do
+        local row = rows[i]
+        local entry = type(row) == "table" and row.entry or nil
+        local name = type(entry) == "table" and entry.mod_name or nil
+        local target = name and dmf.mods and dmf.mods[name] or nil
+        -- The toggle-mods category has no mod_name: it is DMF's own row and keeps its own wording.
+        if type(target) == "table" and type(target.localize) == "function" then
+            local title = target:localize("mod_name")
+            if not is_key_missing(title) and entry.display_name ~= title then
+                entry.display_name = title
+                local widget = row.widget
+                if type(widget) == "table" and type(widget.content) == "table" then
+                    widget.content.text = title
+                end
+                updated = updated + 1
+            end
+        end
+    end
+
+    -- The rows of DMF's own mod-toggle list are widgets built from those same templates, and they baked
+    -- the label into content.text when they were created: patching the template moves nothing.
+    local by_category = view._settings_category_widgets
+    if type(by_category) == "table" then
+        for _, data in pairs(by_category) do
+            if type(data) == "table" then
+                for i = 1, #data do
+                    local item = data[i]
+                    local entry = type(item) == "table" and item.entry or nil
+                    local widget = type(item) == "table" and item.widget or nil
+                    if type(entry) == "table" and type(widget) == "table"
+                        and type(widget.content) == "table"
+                        and type(widget.content.text) == "string"
+                        and type(entry.display_name) == "string"
+                        and widget.content.text ~= entry.display_name then
+                        widget.content.text = entry.display_name
+                        updated = updated + 1
+                    end
+                end
+            end
+        end
+    end
+
+    return updated
+end
+
+-- Clears the view's cached templates when it is next left, so the following open rebuilds from the
+-- (re-localised) data, and writes into the screen that is open right now. The second half is what the
+-- player actually looks at: the category rows were built from the name copies, so marking the
+-- templates stale only helps the next build.
 function M.mark_stale(mod)
     M.stale = true
+
+    local view = M.view
+    if type(view) == "table" then
+        local rows, templates = 0, 0
+        pcall(function() rows = M.reapply_live(mod, view) end)
+        pcall(function() templates = M.reapply_templates(mod, view, true) end)
+        if mod and (rows > 0 or templates > 0) then
+            util.info(mod, "options screen is open: %d list row(s) and %d template(s) re-localised in place",
+                rows, templates)
+        end
+    end
+
     if exit_hook_installed then
         return
     end
@@ -133,6 +210,15 @@ function M.mark_stale(mod)
     end
 
     local ok, err = pcall(function()
+        -- The live view instance is the one thing DMF keeps no handle on, so it is taken from the view
+        -- callbacks. on_enter, not on_exit: the screen is open when the switch gets flipped, and the
+        -- very first open has no exit behind it yet.
+        mod:hook_safe(BaseView, "on_enter", function(self)
+            if self and self.view_name == "dmf_options_view" then
+                M.view = self
+            end
+        end)
+
         mod:hook_safe(BaseView, "on_exit", function(self)
             if self and self.view_name == "dmf_options_view" and M.stale then
                 M.stale = false
@@ -260,7 +346,7 @@ end
 -- old language: re-localising the data reaches the live tables only. DMF rebuilds those copies when
 -- `_options_templates` is dropped, which happens on the next open - and the player is looking at the
 -- screen *now*. So patch the built entries as well, on every open.
-function M.reapply_templates(mod, view)
+function M.reapply_templates(mod, view, quiet)
     local dmf = get_mod("DMF")
     local templates = type(view) == "table" and view._options_templates or nil
     if type(dmf) ~= "table" or type(templates) ~= "table" then
@@ -291,28 +377,35 @@ function M.reapply_templates(mod, view)
     for _, category in ipairs(templates.categories or {}) do
         categories = categories + 1
         local title, description = wording(category.mod_name)
+        -- The first category is DMF's own toggle-mods page: no mod_name, nothing to translate. It is
+        -- a useless sample, and reading `shown=` off it is what hid the rows that matter.
+        if category.mod_name and not sample then
+            sample = category
+        end
         assign(category, "display_name", title)
         assign(category, "description", description)
-        sample = sample or category
     end
 
     -- The mod toggles carry their own copies. They are not marked with `type` (DMF picks the builder by
-    -- type and the built template does not keep it), so they are recognised by the fields they have.
+    -- type and the built template does not keep it), so the marker is `search_id` being a mod DMF
+    -- knows: DMF sets it to the mod name, while an ordinary option row carries its own setting id.
     for _, setting in ipairs(templates.settings or {}) do
-        if type(setting) == "table" and setting.search_id and setting.display_name ~= nil then
+        local name = type(setting) == "table" and setting.search_id or nil
+        if name and dmf.mods and dmf.mods[name] then
             toggles = toggles + 1
-            local title, description = wording(setting.search_id)
+            local title, description = wording(name)
             assign(setting, "display_name", title)
             assign(setting, "tooltip_text", description)
             sample = sample or setting
         end
     end
 
-    -- Up to three lines per session, so a report of "the list still does not change" can be answered
-    -- from the log instead of guessed at: the first build, and any later build that actually changed
-    -- something. util.info, not util.log - log lines are silent unless debug logging is on.
+    -- The first three builds always report, changed or not: "0 patched" on a fresh build says the list
+    -- was already right, while no line at all says the build never happened - and telling those two
+    -- apart is the whole question when a player reports that the list did not follow.
+    -- util.info, not util.log - log lines are silent unless debug logging is on.
     local logs = M.templates_logs or 0
-    if mod and logs < 3 and (logs == 0 or updated > 0) then
+    if mod and not quiet and logs < 3 then
         M.templates_logs = logs + 1
         local name = sample and (sample.mod_name or sample.search_id) or "-"
         local target = name ~= "-" and dmf.mods and dmf.mods[name] or nil
