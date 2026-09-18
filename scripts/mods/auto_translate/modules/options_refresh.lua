@@ -181,6 +181,52 @@ function M.reapply_live(mod, view)
     return updated
 end
 
+-- Which names in the left-hand list are Chinese, and who put them there.
+--
+-- The list is translated by two different hands. Ours: a `mod_name` entry in the translation files,
+-- which follows the switch. The mod's own: most mods ship a zh-cn name in their own localization file
+-- (23 of the 27 installed here, measured), and `name = mod:localize("mod_name")` in the mod's data
+-- file picks it up - that one is the mod author's text and cannot follow our switch at all. Without
+-- this line, "the list is still Chinese" cannot be told apart from "our translation did not come back
+-- out", and both have been reported with the same words.
+local function has_cjk(text)
+    return type(text) == "string" and text:find("[\228-\233]") ~= nil
+end
+
+function M.list_report(mod, view)
+    local dmf = get_mod("DMF")
+    if M.list_reported or type(view) ~= "table" or type(dmf) ~= "table" then
+        return 0
+    end
+    local rows = view._category_data
+    if type(rows) ~= "table" then
+        return 0
+    end
+
+    local found, shown = {}, {}
+    for i = 1, #rows do
+        local entry = type(rows[i]) == "table" and rows[i].entry or nil
+        local name = type(entry) == "table" and entry.mod_name or nil
+        local target = name and dmf.mods and dmf.mods[name] or nil
+        if type(target) == "table" and type(target.localize) == "function" and has_cjk(entry.display_name) then
+            found[#found + 1] = string.format("%s='%s' (own key: '%s')",
+                tostring(name), tostring(entry.display_name),
+                tostring(target:localize("mod_name")))
+        end
+    end
+
+    if mod and #found > 0 then
+        M.list_reported = true
+        for i = 1, math.min(#found, 4) do
+            shown[#shown + 1] = found[i]
+        end
+        util.info(mod, "%d name(s) in the mod list are still Chinese; each with what the mod's own key resolves to (equal = the mod author's own zh-cn, different = ours did not come out): %s%s",
+            #found, table.concat(shown, "; "),
+            #found > 4 and string.format("; and %d more", #found - 4) or "")
+    end
+    return #found
+end
+
 -- Clears the view's cached templates when it is next left, so the following open rebuilds from the
 -- (re-localised) data, and writes into the screen that is open right now. The second half is what the
 -- player actually looks at: the category rows were built from the name copies, so marking the
@@ -190,13 +236,17 @@ function M.mark_stale(mod)
 
     local view = M.view
     if type(view) == "table" then
+        -- Templates first, then the rows: the row text is copied out of the template, so the other
+        -- order would push the old wording into the widgets.
         local rows, templates = 0, 0
-        pcall(function() rows = M.reapply_live(mod, view) end)
         pcall(function() templates = M.reapply_templates(mod, view, true) end)
+        pcall(function() rows = M.reapply_live(mod, view) end)
         if mod and (rows > 0 or templates > 0) then
             util.info(mod, "options screen is open: %d list row(s) and %d template(s) re-localised in place",
                 rows, templates)
         end
+        -- Say which Chinese names are left, and whose they are (see list_report).
+        pcall(M.list_report, mod, view)
     end
 
     if exit_hook_installed then
@@ -256,6 +306,25 @@ function M.reapply(mod)
         end
     end
 
+    -- DMF's mod list does not read the options header for a mod's name: it reads the mod object
+    -- (`get_readable_name()`), whose value was cached when the mod was constructed - `name =
+    -- mod:localize("mod_name")` in the mod's own data file, so it holds whatever language was in the
+    -- table at load time. Writing it back is the only way the list can move.
+    --
+    -- The setter has to be DMF's: `set_internal_data` is a module-local in dmf_mod_data.lua and is
+    -- attached to the mod object ONLY for DMF itself (line 101), so `target.set_internal_data` is nil
+    -- for every other mod and the call did nothing at all - silently, through the pcall. That is why
+    -- the name on the left never went back while every detail row did.
+    local function set_internal(target, key, value)
+        if type(dmf.set_internal_data) == "function" then
+            return (pcall(dmf.set_internal_data, target, key, value))
+        end
+        if type(target.set_internal_data) == "function" then
+            return (pcall(target.set_internal_data, target, key, value))
+        end
+        return false
+    end
+
     for _, mod_data in ipairs(dmf.options_widgets_data) do
         local header = mod_data[1]
         local name = type(header) == "table" and header.mod_name or nil
@@ -267,27 +336,25 @@ function M.reapply(mod)
             -- name the list shows, and a mod that has no settings never goes through
             -- initialize_mod_options at all - which is why gating it on `raw` (below) left every
             -- option-less mod showing its translated name.
+            --
+            -- `localize("mod_name")` is the mod's own name key; DMF itself uses `dmf_mod_name` and
+            -- ships its own zh-cn for it, so its row is DMF's own text and is left alone.
             local title = target:localize("mod_name")
             if not is_key_missing(title) then
                 assign(header, "title", title)
                 if header.readable_mod_name ~= nil then
                     assign(header, "readable_mod_name", title)
                 end
-                -- DMF's mod list does not read this header for the name: it reads the mod object
-                -- (`get_readable_name()`), whose value was cached when the mod was constructed - so the
-                -- name has to be written back through the setter DMF exposes, or the list keeps
-                -- showing the translation while everything else has gone back to the source language.
-                if type(target.set_internal_data) == "function" then
-                    pcall(target.set_internal_data, target, "readable_name", title)
+                -- Counted only when the write went through: this count is the evidence that the list
+                -- can actually be moved, and it was overstated while the call was a silent no-op.
+                if set_internal(target, "readable_name", title) then
+                    named = named + 1
                 end
-                named = named + 1
             end
             local description = target:localize("mod_description")
             if not is_key_missing(description) and header.description ~= nil then
                 assign(header, "description", description)
-                if type(target.set_internal_data) == "function" then
-                    pcall(target.set_internal_data, target, "description", description)
-                end
+                set_internal(target, "description", description)
             end
 
             -- Its widgets: these do need the keys recorded before DMF turned them into strings.

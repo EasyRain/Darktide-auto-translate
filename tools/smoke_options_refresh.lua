@@ -35,15 +35,15 @@ local SOURCE = {
 -- The mod's localization: the target language while we are translating, the source once our values
 -- have been taken back out (which is DMF's `en` fallback).
 local lang = "zh-cn"
+-- DMF attaches `set_internal_data` to the mod object ONLY for DMF itself (dmf_mod_data.lua:101); for
+-- every other mod the setter exists as `dmf.set_internal_data(mod, key, value)`. The mods here
+-- deliberately have no setter of their own: the write has to go through DMF, and while it did not, the
+-- name in the list could not be moved at all and the failure was invisible (pcall on a nil method).
 local fake_mod = { internal = { readable_name = "技能计时器", description = "在 HUD 上显示倒计时。" } }
 function fake_mod:get_name() return "some_mod" end
 function fake_mod:localize(key)
     local bucket = (lang == "zh-cn") and TRANSLATED or SOURCE
     return bucket[key] or ("<" .. tostring(key) .. ">")
-end
--- DMF's mod objects expose this setter, and DMF's mod list reads the name back from the object.
-function fake_mod:set_internal_data(key, value)
-    self.internal[key] = value
 end
 
 -- The module logs through these; keeping the messages makes a swallowed error visible here instead of
@@ -77,6 +77,8 @@ local quiet_header = { mod_name = "quiet_mod", title = "Ability Timer", readable
 local dmf = {
     mods = { some_mod = fake_mod, quiet_mod = quiet },
     options_widgets_data = { { header, widget }, { quiet_header } },
+    -- What the game exposes: dmf_mod_manager.lua sets readable_name/description through this.
+    set_internal_data = function(target, key, value) target.internal[key] = value end,
 }
 get_mod = function(name) if name == "DMF" then return dmf end return nil end
 CLASS = nil   -- mark_stale falls back to "restart needed" logging, which is fine here
@@ -144,6 +146,15 @@ check("and its description", fake_mod.internal.description, "HUD countdown timer
 updated, named = refresh.reapply(nil)
 check("a second pass changes nothing", updated, 0)
 check("but the names are still reached", named, 2)
+
+-- The write has to go through DMF: the setter a mod object carries is DMF's own (dmf_mod_data.lua
+-- attaches it only to the DMF mod), so a mod that has one is still served by it when DMF's is missing.
+dmf.set_internal_data = nil
+quiet.internal.readable_name = "技能计时器"
+updated, named = refresh.reapply(nil)
+check("a mod that carries the setter is still written to", quiet.internal.readable_name, "Ability Timer")
+check("and it is the one counted", named, 1)
+dmf.set_internal_data = function(target, key, value) target.internal[key] = value end
 
 -- ---- 5) the built category list and mod toggles are patched as well -----------------------------
 -- These are copies made when the screen was first opened: re-localising the data never reaches them,
@@ -248,6 +259,31 @@ refresh.mark_stale(nil)
 check("mark_stale patches the open screen", live_view._category_data[1].widget.content.text, "Ability Timer")
 check("its templates too", live_view._options_templates.categories[1].display_name, "Ability Timer")
 check("and still marks the screen for a rebuild", refresh.stale, true)
+
+-- ---- 8) the report says whose Chinese names those are -------------------------------------------
+-- Most mods ship a zh-cn name of their own (23 of the 27 installed here), so the list stays Chinese
+-- with our switch off and that is the mod author's text, not ours. The report has to make that
+-- visible, or "the list is still Chinese" cannot be told from "our text did not come back out".
+local report_mod = { info = function(_, fmt, ...) messages[#messages + 1] = string.format(fmt, ...) end }
+local list_view = {
+    _category_data = {
+        { entry = { mod_name = "some_mod", display_name = "技能计时器" } },       -- ours, still in
+        { entry = { mod_name = "quiet_mod", display_name = "Ability Timer" } },  -- not Chinese
+        { entry = { is_toggle_mods_category = true, display_name = "开启关闭模组" } },  -- DMF's own page
+    },
+}
+refresh.list_reported = nil
+lang = "en"
+check("the one Chinese row is reported", refresh.list_report(report_mod, list_view), 1)
+check("nothing is reported when there is nothing to say", refresh.list_report(report_mod, { _category_data = {} }), 0)
+check("reported once per session", refresh.list_report(report_mod, list_view), 0)
+local said = messages[#messages]
+check("the row is named", said:find("some_mod='技能计时器'") ~= nil, true)
+check("and what the mod's own key resolves to", said:find("own key: 'Ability Timer'") ~= nil, true)
+lang = "zh-cn"
+refresh.list_reported = nil
+check("a mod's own Chinese name is reported the same way", refresh.list_report(report_mod, list_view), 1)
+check("with both sides equal, which is the point", messages[#messages]:find("own key: '技能计时器'") ~= nil, true)
 
 print("")
 if failures > 0 then
