@@ -327,16 +327,18 @@ local function run_pipeline(reason)
         return
     end
 
-    -- The mod was off while the game loaded, so the early merge never ran: the option texts DMF
-    -- cached during loading are English and cannot be replaced in this session (the runtime pass can
-    -- only reach text a mod reads later, and the rebuilt options screen only re-localizes widgets).
-    -- Running anyway produced a pile of notices for a result that looks broken, so say the one useful
-    -- thing instead, once.
+    -- The mod was off while the game loaded, so the early merge never ran and DMF cached the option
+    -- texts of the mods it loaded in the source language. That does NOT mean nothing can be done: the
+    -- runtime pass injects the translations and options_refresh re-localises the widgets, which is the
+    -- same route mods loaded before us take. What it cannot reach is text a mod cached in its own
+    -- tables while loading, so the player is told that a restart may still be needed for those - and
+    -- then the work runs, because blocking it was what made the switch look like it needed a second
+    -- click (it had to be followed by the reload button to do anything at all).
     if started_disabled and not restart_notice_shown then
         restart_notice_shown = true
         util.popup(mod, "enable_restart_needed")
-        util.info(mod, "started disabled: translation needs a restart (%s)", reason)
-        return
+        util.info(mod, "started disabled: translating now, a restart may still be needed for text a mod cached while loading (%s)",
+            reason)
     end
 
     local lang = current_lang()
