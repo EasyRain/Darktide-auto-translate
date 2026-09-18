@@ -61,6 +61,33 @@ local function current_lang()
 end
 
 -- ---------------------------------------------------------------------------
+-- Should the mod be doing anything at all?
+--
+-- Two switches, and the *early merge below has to honour both of them*, because that is where option
+-- labels and tooltips are written - before DMF caches the localized strings. A switch that is only
+-- consulted later cannot stop what the player sees:
+--
+--   * `apply_translation` is this mod's own master switch in its options;
+--   * DMF's toggle in its mod list. `is_togglable` only adds that switch: DMF keeps loading the mod
+--     and calls on_enabled/on_disabled, so respecting it is the mod's own job (dmf/modules/core/
+--     events.lua documents exactly that). is_enabled() defaults to true and DMF applies the stored
+--     state while it initializes, before any mod is loaded, so asking it here is safe.
+--
+-- Reported from the mod page: with the switch off, and with the mod disabled in DMF, translations
+-- were still applied after a restart - both because this hook never asked.
+-- ---------------------------------------------------------------------------
+local function active()
+    if not mod:get("apply_translation") then
+        return false, "master switch off"
+    end
+    local ok, enabled = pcall(function() return mod:is_enabled() end)
+    if ok and enabled == false then
+        return false, "disabled in DMF"
+    end
+    return true
+end
+
+-- ---------------------------------------------------------------------------
 -- Early hook: every mod loaded AFTER us passes through here.
 --
 -- DMF loads a mod's resources as localization -> data -> script, and localizes
@@ -95,6 +122,13 @@ local function install_hook()
         local name
         if target_mod and target_mod.get_name then
             name = target_mod:get_name()
+        end
+
+        -- Nothing is merged while either switch says no; the table is still handed on untouched, so
+        -- the mod plays exactly as it shipped.
+        local on = active()
+        if not on then
+            return next_func(target_mod, loc_table)
         end
 
         local ok, err = pcall(injector.merge, mod, name, loc_table, current_lang())
@@ -232,9 +266,28 @@ local function glossary_report(lang)
     )
 end
 
+-- Everything stops, and what was merged into other mods' tables is taken back out. Used by both
+-- switches: the mod's own master switch and DMF's toggle. The mods whose option texts the game has
+-- already drawn keep them until the screen is rebuilt, which is why the options screen is marked
+-- stale (and why the log says so).
+local function stand_down(reason)
+    online.flush(mod)
+    online.stop(mod)
+    local ok, removed = pcall(injector.unapply, mod)
+    options_refresh.mark_stale(mod)
+    if ok then
+        util.info(mod, "translation stopped (%s): took back %s injected key(s); reopen the options screen (or restart) for anything already drawn",
+            reason, tostring(removed))
+    else
+        util.warn(mod, "translation stopped (%s), but taking the injected text back failed: %s (a restart clears it)",
+            reason, tostring(removed))
+    end
+end
+
 local function run_pipeline(reason)
-    if not mod:get("apply_translation") then
-        util.info(mod, "translations disabled by master switch (%s)", reason)
+    local on, why = active()
+    if not on then
+        util.info(mod, "nothing to do: %s (%s)", why, reason)
         return
     end
 
@@ -336,6 +389,12 @@ local CACHE_HARVEST_INTERVAL = 60
 local harvest_timer = 0
 
 function mod.update(dt)
+    -- A mod that has been switched off (its own master switch, or DMF's toggle) does nothing: no
+    -- queue to advance, no cache to harvest.
+    if not active() then
+        return
+    end
+
     local ok, err = pcall(online.update, mod, dt)
     if not ok then
         util.warn(mod, "online update error: %s", tostring(err))
@@ -577,6 +636,28 @@ function mod.test_glossary()
     end
 end
 
+-- DMF's own switch (its mod list). `is_togglable` in the descriptor is what puts it there, and DMF
+-- keeps the mod loaded either way, so these two callbacks are what make the switch mean something.
+--
+-- The startup calls (initial_call = true) need no work: `active()` already refused the early merge
+-- and `on_all_mods_loaded` runs its own check, so a mod that starts disabled starts silent.
+function mod.on_disabled(initial_call)
+    if initial_call then
+        return
+    end
+    stand_down("disabled in DMF")
+end
+
+function mod.on_enabled(initial_call)
+    if initial_call then
+        return
+    end
+    local ok, err = pcall(run_pipeline, "enabled in DMF")
+    if not ok then
+        util.warn(mod, "could not start after being enabled in DMF: %s", tostring(err))
+    end
+end
+
 mod.on_setting_changed = function(setting_id)
     if setting_id == "download_model" then
         -- The switch is the control: on starts (or continues) the transfer, off cancels it
@@ -642,9 +723,13 @@ mod.on_setting_changed = function(setting_id)
             util.info(mod, "translation stopped by setting; %d key(s) already stored", online.status().done)
         end
     elseif setting_id == "apply_translation" then
-        local ok, err = pcall(run_pipeline, "master switch")
-        if not ok then
-            util.warn(mod, "could not re-apply: %s", tostring(err))
+        if mod:get("apply_translation") then
+            local ok, err = pcall(run_pipeline, "master switch")
+            if not ok then
+                util.warn(mod, "could not re-apply: %s", tostring(err))
+            end
+        else
+            stand_down("master switch off")
         end
     elseif setting_id == "collect_terms" then
         if mod:get("collect_terms") then

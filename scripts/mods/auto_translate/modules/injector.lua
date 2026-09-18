@@ -14,6 +14,20 @@ end
 -- store tables that gained bookkeeping fields (en/hash) and should be saved back
 local dirty = {}
 
+-- What we wrote into other mods' tables, so it can be taken back out again: DMF's toggle can be
+-- flipped at runtime, and a mod that has been switched off should stop being translated.
+-- name -> { [key] = { lang = ..., text = ... } }
+local written = {}
+
+local function remember(name, key, lang, text)
+    local per_mod = written[name]
+    if not per_mod then
+        per_mod = {}
+        written[name] = per_mod
+    end
+    per_mod[key] = { lang = lang, text = text }
+end
+
 -- The localization table each mod is actually being served from, keyed by mod id.
 -- DMF stores the very table we merged into, and mod scripts read it on every
 -- lookup, so writing into it later makes a new translation visible immediately —
@@ -78,6 +92,7 @@ function M.merge(mod, name, loc_table, lang)
                 local text, src, needs_backfill = store.lookup(data, key, value["en"], hash)
                 if text then
                     value[lang] = text
+                    remember(name, key, lang, text)
                     applied = applied + 1
                     if needs_backfill then
                         store.set_entry(data, key, value["en"], hash, text, src)
@@ -141,6 +156,7 @@ local function inject_mod(mod, dmf, entry, lang)
         local bucket = tbl[item.key]
         if type(bucket) == "table" then
             bucket[lang] = item.text
+            remember(entry.name, item.key, lang, item.text)
             injected = injected + 1
         end
     end
@@ -193,6 +209,34 @@ function M.apply(mod, report, lang)
 
     util.info(mod, "injected %d translated key(s) across %d mod(s) [%s]", total, #report.mods, lang)
     return total
+end
+
+-- Takes back everything this mod wrote into other mods' localization tables.
+--
+-- Only entries whose value is still exactly the text we put there are removed: if the mod itself (or
+-- a later translation) replaced it, that text is not ours to delete. Called when DMF's toggle is
+-- switched off, so a mod that is disabled stops being translated without needing a restart.
+function M.unapply(mod)
+    local removed, kept = 0, 0
+    for name, per_mod in pairs(written) do
+        local tbl = M.tables[name]
+        if type(tbl) == "table" then
+            for key, item in pairs(per_mod) do
+                local bucket = tbl[key]
+                if type(bucket) == "table" and bucket[item.lang] == item.text then
+                    bucket[item.lang] = nil
+                    removed = removed + 1
+                else
+                    kept = kept + 1
+                end
+            end
+        end
+        written[name] = nil
+    end
+    if mod then
+        util.info(mod, "took back %d injected key(s); %d had already been replaced", removed, kept)
+    end
+    return removed, kept
 end
 
 return M

@@ -951,6 +951,7 @@ python tools\check_localization.py               # 133 keys × 12 languages
 luajit tools\smoke_online.lua                    # loads modules/online.lua with stubs, runs 262 assertions
 luajit tools\smoke_export.lua                    # the string-cache harvest: what it keeps, drops and rewrites
 luajit tools\smoke_store.lua                     # hand-written vs machine markers in a translation file
+luajit tools\smoke_injector.lua                  # merging into other mods' tables, and taking it back out
 luajit tools\check_stores.lua [translations-dir] # the played-with stores: placeholders, markers, line breaks
 luajit tools\check_options_layout.lua [custom]   # what the options screen will actually show
 luajit tools\live_bing_check.lua                 # the whole Bing flow live, through the real DLL
