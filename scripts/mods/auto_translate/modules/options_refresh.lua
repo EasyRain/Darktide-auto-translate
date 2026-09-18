@@ -39,6 +39,28 @@ local function is_key_missing(text)
     return type(text) ~= "string" or text == "" or text:match("^<.*>$") ~= nil
 end
 
+-- The name a mod declares, in whatever language its localization resolves right now.
+--
+-- The key is NOT the same in every mod: their data file ends with `name = mod:localize(<key>)`, and
+-- most use "mod_name" - but unlock_ui_fps and scores use "mod_title" (measured on the installed set;
+-- no mod defines both). Reading only "mod_name" made localize() answer "<mod_name>" for those two, so
+-- their names were skipped in silence: the row for unlock_ui_fps kept the translated name while
+-- ability_timer's went back, which is exactly how it was reported.
+local NAME_KEYS = { "mod_title", "mod_name" }
+
+local function mod_name_in(target)
+    if type(target) ~= "table" or type(target.localize) ~= "function" then
+        return nil
+    end
+    for i = 1, #NAME_KEYS do
+        local value = target:localize(NAME_KEYS[i])
+        if not is_key_missing(value) then
+            return value
+        end
+    end
+    return nil
+end
+
 -- Records the raw title/tooltip keys of one mod's widgets. Called from the hook,
 -- before DMF localises them.
 function M.record(target_mod, options)
@@ -143,8 +165,8 @@ function M.reapply_live(mod, view)
         local target = name and dmf.mods and dmf.mods[name] or nil
         -- The toggle-mods category has no mod_name: it is DMF's own row and keeps its own wording.
         if type(target) == "table" and type(target.localize) == "function" then
-            local title = target:localize("mod_name")
-            if not is_key_missing(title) and entry.display_name ~= title then
+            local title = mod_name_in(target)
+            if title and entry.display_name ~= title then
                 entry.display_name = title
                 local widget = row.widget
                 if type(widget) == "table" and type(widget.content) == "table" then
@@ -211,7 +233,7 @@ function M.list_report(mod, view)
         if type(target) == "table" and type(target.localize) == "function" and has_cjk(entry.display_name) then
             found[#found + 1] = string.format("%s='%s' (own key: '%s')",
                 tostring(name), tostring(entry.display_name),
-                tostring(target:localize("mod_name")))
+                tostring(mod_name_in(target) or "<missing>"))
         end
     end
 
@@ -337,10 +359,11 @@ function M.reapply(mod)
             -- initialize_mod_options at all - which is why gating it on `raw` (below) left every
             -- option-less mod showing its translated name.
             --
-            -- `localize("mod_name")` is the mod's own name key; DMF itself uses `dmf_mod_name` and
-            -- ships its own zh-cn for it, so its row is DMF's own text and is left alone.
-            local title = target:localize("mod_name")
-            if not is_key_missing(title) then
+            -- `localize(<name key>)` is the mod's own name (see mod_name_in: "mod_name" for most,
+            -- "mod_title" for unlock_ui_fps). DMF itself uses `dmf_mod_name` and ships its own zh-cn
+            -- for it, so its row is DMF's own text and is left alone.
+            local title = mod_name_in(target)
+            if title then
                 assign(header, "title", title)
                 if header.readable_mod_name ~= nil then
                     assign(header, "readable_mod_name", title)
@@ -435,9 +458,8 @@ function M.reapply_templates(mod, view, quiet)
         if type(target) ~= "table" or type(target.localize) ~= "function" then
             return nil, nil
         end
-        local title = target:localize("mod_name")
         local description = target:localize("mod_description")
-        return (not is_key_missing(title)) and title or nil,
+        return mod_name_in(target),
             (not is_key_missing(description)) and description or nil
     end
 
@@ -476,8 +498,8 @@ function M.reapply_templates(mod, view, quiet)
         M.templates_logs = logs + 1
         local name = sample and (sample.mod_name or sample.search_id) or "-"
         local target = name ~= "-" and dmf.mods and dmf.mods[name] or nil
-        local resolved = type(target) == "table" and target.localize and target:localize("mod_name") or nil
-        util.info(mod, "settings screen build: %d categor%s, %d mod toggle(s), %d patched; sample %s: shown=%s, localize(mod_name)=%s, readable=%s",
+        local resolved = type(target) == "table" and mod_name_in(target) or nil
+        util.info(mod, "settings screen build: %d categor%s, %d mod toggle(s), %d patched; sample %s: shown=%s, localize(name key)=%s, readable=%s",
             categories, categories == 1 and "y" or "ies", toggles, updated, tostring(name),
             tostring(sample and sample.display_name), tostring(resolved),
             tostring(type(target) == "table" and target.get_readable_name and target:get_readable_name() or nil))

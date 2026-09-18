@@ -65,10 +65,14 @@ local widget = {
     options = { { text = "Start" }, { text = "End" } },
 }
 local header = { mod_name = "some_mod", title = "Ability Timer", description = "HUD countdown timer." }
+-- This one names itself with `mod_title`, the way unlock_ui_fps and scores do, and defines no
+-- `mod_name` at all. Reading only "mod_name" skipped exactly these names in silence.
+local TITLE_TRANSLATED = { mod_title = "技能计时器", mod_description = "在 HUD 上显示倒计时。" }
+local TITLE_SOURCE = { mod_title = "Ability Timer", mod_description = "HUD countdown timer." }
 local quiet = { internal = { readable_name = "技能计时器" } }
 function quiet:get_name() return "quiet_mod" end
 function quiet:localize(key)
-    local bucket = (lang == "zh-cn") and TRANSLATED or SOURCE
+    local bucket = (lang == "zh-cn") and TITLE_TRANSLATED or TITLE_SOURCE
     return bucket[key] or ("<" .. tostring(key) .. ">")
 end
 function quiet:set_internal_data(key, value) self.internal[key] = value end
