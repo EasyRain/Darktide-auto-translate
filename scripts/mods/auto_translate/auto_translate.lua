@@ -623,6 +623,8 @@ function mod.open_translation_folder()
     -- lands somewhere useful instead of on a path that does not exist.
     util.ensure_dir(dir)
 
+    -- util.open_folder turns this into an absolute path itself: the shell does not resolve our
+    -- relative ones (see there).
     local ok, why = util.open_folder(dir)
     if not ok then
         dir = util.TRANSLATIONS_DIR

@@ -560,6 +560,9 @@ check("and without a language", util.translations_dir_for(nil), util.TRANSLATION
 local opened, open_why = util.open_folder(util.translations_dir_for("zh-cn"))
 check("opening says so when it cannot", opened, false)
 check("with a reason", type(open_why) == "string" and #open_why > 0, true)
+-- Both routes are named in the reason: inside the game the shell refused a folder that exists, so
+-- "which route answered what" is the whole diagnosis when this button does not open a window.
+check("naming both routes", open_why:find("WinExec") ~= nil, true)
 check("and an absolute path never raises", type(util.absolute_path(util.TRANSLATIONS_DIR)), "string")
 
 local dmf_like = {

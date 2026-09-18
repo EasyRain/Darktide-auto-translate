@@ -247,9 +247,16 @@ end
 
 -- Hands a folder to Windows, so the player does not have to find it in the file manager.
 --
--- Lua has no way out of the process; the game runs LuaJIT, so shell32 does the job. Returns
+-- Lua has no way out of the process; the game runs LuaJIT, so shell32/kernel32 do the job. Returns
 -- (ok, reason) and never raises: a button whose only effect is a window that did not open has to say
 -- so instead of looking broken.
+--
+-- Two routes, because inside the game the shell refused a path that exists: ShellExecuteA answered
+-- SE_ERR_FNF (2) for a folder under the game directory, where a plain process answers 42. So the path
+-- is made absolute first (our paths are relative to the game's working directory, which the shell need
+-- not resolve the way the C runtime does), and if the shell still will not take it, explorer.exe is
+-- started directly with WinExec - no association, no shell lookup. Both codes go into the reason, so a
+-- report of "it does not open" says which route got which answer.
 function M.open_folder(path)
     local ffi = Mods and Mods.lua and Mods.lua.ffi
     if not (ffi and ffi.cdef and ffi.load and ffi.cast) then
@@ -259,21 +266,39 @@ function M.open_folder(path)
     pcall(ffi.cdef, [[
         void* __stdcall ShellExecuteA(void* hwnd, const char* lpOperation, const char* lpFile,
                                       const char* lpParameters, const char* lpDirectory, int nShowCmd);
+        unsigned int __stdcall WinExec(const char* lpCmdLine, unsigned int uCmdShow);
     ]])
 
     local ok, shell32 = pcall(ffi.load, "shell32")
-    if not ok or not shell32 then
-        return false, "shell32 could not be loaded"
+    local okk, kernel32 = pcall(ffi.load, "kernel32")
+
+    local full = M.absolute_path(path)
+    local code, code2 = 0, 0
+
+    if ok and shell32 then
+        -- SW_SHOWNORMAL. The shell answers with a value above 32 when it took the request; the return
+        -- value is an HINSTANCE, so it is cast to an integer before it is compared.
+        local result = shell32.ShellExecuteA(nil, "open", full, nil, nil, 1)
+        code = tonumber(ffi.cast("intptr_t", result)) or 0
+        if code > 32 then
+            return true
+        end
+    else
+        code = -1
     end
 
-    -- SW_SHOWNORMAL. The shell answers with a value above 32 when it took the request; the return
-    -- value is an HINSTANCE, so it is cast to an integer before it is compared.
-    local result = shell32.ShellExecuteA(nil, "open", path, nil, nil, 1)
-    local code = tonumber(ffi.cast("intptr_t", result)) or 0
-    if code <= 32 then
-        return false, "ShellExecuteA returned " .. tostring(code)
+    if okk and kernel32 then
+        -- Quoted, because a mod path can contain spaces ("Warhammer 40,000 DARKTIDE"). WinExec answers
+        -- above 31 when it started the program.
+        code2 = tonumber(kernel32.WinExec('explorer.exe "' .. full .. '"', 1)) or 0
+        if code2 > 31 then
+            return true
+        end
+    else
+        code2 = -1
     end
-    return true
+
+    return false, string.format("ShellExecuteA -> %d, WinExec explorer.exe -> %d", code, code2)
 end
 
 -- Execute a Lua file and return its result (used to read other mods' localization files).
