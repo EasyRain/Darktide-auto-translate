@@ -947,7 +947,7 @@ load, and a missing export only shows up when the game calls it:
 ```
 python tools\lua_syntax_check.py                 # parses all 15 files, runs nothing
 python tools\check_exports.py                    # every at_* name in the Lua CDEF exists in the DLL
-python tools\check_localization.py               # 133 keys × 12 languages
+python tools\check_localization.py               # 134 keys × 12 languages
 luajit tools\smoke_online.lua                    # loads modules/online.lua with stubs, runs 262 assertions
 luajit tools\smoke_export.lua                    # the string-cache harvest: what it keeps, drops and rewrites
 luajit tools\smoke_store.lua                     # hand-written vs machine markers in a translation file

@@ -107,6 +107,12 @@ end
 -- ---------------------------------------------------------------------------
 local hooked = false
 
+-- Was the mod off while the game was loading? The early merge is the only chance to put translations
+-- into a mod's localization table before DMF caches the option texts, so a mod that starts disabled
+-- cannot catch up in the same session - see run_pipeline. nil means "not seen yet" (treated as on).
+local started_disabled = nil
+local restart_notice_shown = false
+
 local function install_hook()
     if hooked then
         return true
@@ -122,6 +128,12 @@ local function install_hook()
         local name
         if target_mod and target_mod.get_name then
             name = target_mod:get_name()
+        end
+
+        -- The first call is during loading, which is exactly when the switch state decides whether
+        -- this session can translate at all: remember it before the state can change under us.
+        if started_disabled == nil then
+            started_disabled = not active()
         end
 
         -- Nothing is merged while either switch says no; the table is still handed on untouched, so
@@ -288,6 +300,18 @@ local function run_pipeline(reason)
     local on, why = active()
     if not on then
         util.info(mod, "nothing to do: %s (%s)", why, reason)
+        return
+    end
+
+    -- The mod was off while the game loaded, so the early merge never ran: the option texts DMF
+    -- cached during loading are English and cannot be replaced in this session (the runtime pass can
+    -- only reach text a mod reads later, and the rebuilt options screen only re-localizes widgets).
+    -- Running anyway produced a pile of notices for a result that looks broken, so say the one useful
+    -- thing instead, once.
+    if started_disabled and not restart_notice_shown then
+        restart_notice_shown = true
+        util.popup(mod, "enable_restart_needed")
+        util.info(mod, "started disabled: translation needs a restart (%s)", reason)
         return
     end
 

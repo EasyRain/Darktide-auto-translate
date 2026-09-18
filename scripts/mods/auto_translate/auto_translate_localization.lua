@@ -1884,4 +1884,19 @@ return {
         ["pt-br"] = "Grava as formulações do jogo para as chaves coletadas em translations/export/. Ative apenas durante a coleta de termos: nada lê esses arquivos com o jogo em execução.",
     },
 
+    enable_restart_needed = {
+        en = "Auto Translate: enabled. The mod was off when the game started, so the texts the game had already cached stay as they are - restart the game to translate them.",
+        ["zh-cn"] = "Auto Translate：已启用。游戏启动时本模组处于关闭状态，游戏已缓存的文本在本次运行中无法替换——请重启游戏以完成翻译。",
+        ["zh-tw"] = "Auto Translate：已啟用。遊戲啟動時本模組處於關閉狀態，遊戲已快取的文字在本次執行中無法取代——請重新啟動遊戲以完成翻譯。",
+        ja = "Auto Translate：有効にしました。ゲーム起動時にこの MOD は無効だったため、すでにキャッシュされたテキストは今回の起動では置き換わりません。翻訳を反映するにはゲームを再起動してください。",
+        ko = "Auto Translate: 활성화했습니다. 게임을 시작할 때 이 모드가 꺼져 있었기 때문에 이미 캐시된 텍스트는 이번 실행에서 바뀌지 않습니다. 번역을 적용하려면 게임을 재시작하세요.",
+        ru = "Auto Translate: включено. При запуске игры мод был отключён, поэтому уже кэшированные тексты в этом сеансе не заменятся — перезапустите игру, чтобы перевод применился.",
+        de = "Auto Translate: aktiviert. Beim Spielstart war der Mod aus, deshalb bleiben die bereits zwischengespeicherten Texte in dieser Sitzung unverändert – starte das Spiel neu, damit die Übersetzung greift.",
+        fr = "Auto Translate : activé. Le mod était désactivé au lancement du jeu ; les textes déjà mis en cache ne changent donc pas dans cette session — redémarrez le jeu pour appliquer la traduction.",
+        es = "Auto Translate: activado. El mod estaba desactivado al iniciar el juego, así que los textos ya en caché no cambian en esta sesión: reinicia el juego para aplicar la traducción.",
+        it = "Auto Translate: attivato. All'avvio del gioco la mod era disattivata, quindi i testi già in cache non cambiano in questa sessione: riavvia il gioco per applicare la traduzione.",
+        pl = "Auto Translate: włączone. W momencie startu gry mod był wyłączony, więc teksty już zapisane w pamięci podręcznej nie zmienią się w tej sesji — uruchom grę ponownie, aby tłumaczenie zaczęło działać.",
+        ["pt-br"] = "Auto Translate: ativado. O mod estava desligado quando o jogo iniciou, então os textos já em cache não mudam nesta sessão — reinicie o jogo para aplicar a tradução.",
+    },
+
 }
