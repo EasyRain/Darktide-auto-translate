@@ -268,6 +268,7 @@ function M.reapply_templates(mod, view)
     end
 
     local updated = 0
+    local categories, toggles, sample = 0, 0, nil
     local function assign(target, field, value)
         if value and target[field] ~= nil and target[field] ~= value then
             target[field] = value
@@ -288,18 +289,38 @@ function M.reapply_templates(mod, view)
     end
 
     for _, category in ipairs(templates.categories or {}) do
+        categories = categories + 1
         local title, description = wording(category.mod_name)
         assign(category, "display_name", title)
         assign(category, "description", description)
+        sample = sample or category
     end
 
-    -- The mod toggles in the "toggle mods" category carry their own copies.
+    -- The mod toggles carry their own copies. They are not marked with `type` (DMF picks the builder by
+    -- type and the built template does not keep it), so they are recognised by the fields they have.
     for _, setting in ipairs(templates.settings or {}) do
-        if type(setting) == "table" and setting.type == "mod_toggle" then
+        if type(setting) == "table" and setting.search_id and setting.display_name ~= nil then
+            toggles = toggles + 1
             local title, description = wording(setting.search_id)
             assign(setting, "display_name", title)
             assign(setting, "tooltip_text", description)
+            sample = sample or setting
         end
+    end
+
+    -- Up to three lines per session, so a report of "the list still does not change" can be answered
+    -- from the log instead of guessed at: the first build, and any later build that actually changed
+    -- something. util.info, not util.log - log lines are silent unless debug logging is on.
+    local logs = M.templates_logs or 0
+    if mod and logs < 3 and (logs == 0 or updated > 0) then
+        M.templates_logs = logs + 1
+        local name = sample and (sample.mod_name or sample.search_id) or "-"
+        local target = name ~= "-" and dmf.mods and dmf.mods[name] or nil
+        local resolved = type(target) == "table" and target.localize and target:localize("mod_name") or nil
+        util.info(mod, "settings screen build: %d categor%s, %d mod toggle(s), %d patched; sample %s: shown=%s, localize(mod_name)=%s, readable=%s",
+            categories, categories == 1 and "y" or "ies", toggles, updated, tostring(name),
+            tostring(sample and sample.display_name), tostring(resolved),
+            tostring(type(target) == "table" and target.get_readable_name and target:get_readable_name() or nil))
     end
 
     return updated
@@ -320,7 +341,11 @@ function M.install_view_hook(mod)
     end
     local ok, err = pcall(function()
         mod:hook_safe("DMFOptionsView", "on_enter", function(self)
-            pcall(M.reapply_templates, mod, self)
+            local done, err = pcall(M.reapply_templates, mod, self)
+            if not done then
+                -- util.info, not util.warn: a diagnostic must not become a notification.
+                util.info(mod, "settings list refresh failed: %s", tostring(err))
+            end
         end)
     end)
     if not ok then
