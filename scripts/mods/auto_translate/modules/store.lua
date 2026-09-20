@@ -4,7 +4,9 @@
 --     ../mods/auto_translate/translations/<language>/<modid>.lua
 -- e.g. translations/zh-cn/ability_timer.lua, translations/ja/ability_timer.lua
 --
--- Format (hand editable on purpose):
+-- Format (hand editable on purpose). The same explanation is written into every file's header, in
+-- full, because the file is what a player hands to an editor - or to an AI - and the one field that
+-- looks like a setting but is not is `src`:
 --     return {
 --         enabled = false,         -- false = skip this mod completely (always written, so it is
 --         manual  = false,         -- one word to flip: true = "I have hand checked this file")
@@ -15,8 +17,9 @@
 --     }
 --
 -- `manual = true` is an instruction, not a state: on load the mod reads it as "every entry in this
--- file has been hand checked", drops the engine marker (`src`) from all of them, writes the file
--- back and puts the flag to false again - so nobody has to delete the markers by hand. From then on
+-- file has been hand checked", drops the `src` line from all of them (whatever it says - an engine
+-- name, or "manual" as an outside editor writes it), writes the file back and puts the flag to
+-- false again - so nobody has to delete the markers by hand. From then on
 -- the marker is what tells the two apart:
 --     no `src`   hand written: a machine translation never overwrites it while its source matches
 --     `src = X`  written by engine X, and it is the entry's history (the engine re-writes it when
@@ -24,6 +27,11 @@
 --                machine one again: it goes stale, gets re-translated and comes back with a marker)
 -- `text_prev` keeps an out of date hand written translation (with `text_prev_src` saying where it
 -- came from) when the mod's source text changed under it.
+--
+-- An outside editor that writes `src = "manual"` on every entry is a real case (it happened on the
+-- first file a player sent to an AI): those entries are treated as hand written either way, but the
+-- file then no longer says which lines a machine wrote, which is the whole point of the field. The
+-- file header therefore documents `src` as bookkeeping and asks an AI editor to leave it alone.
 local M = {}
 
 local util
@@ -88,11 +96,17 @@ local function machine_src(entry)
 end
 
 -- Carries out a `manual = true` instruction: every entry in the file has been hand checked, so the
--- engine markers go. Returns how many were removed (0 = nothing to do, no write needed).
+-- markers go. Returns how many were removed.
+--
+-- Any value counts, not just a real engine: a file that came back from an outside calibration pass
+-- (an AI, an editor) carries `src = "manual"`, and an editor that wrote `src = ""` is no different.
+-- The state the header documents for a hand written entry is *no* src line, so leaving "manual"
+-- behind made the instruction look like it had done nothing - reported by a player whose file still
+-- had all 80 markers after flipping the flag.
 local function strip_markers(data)
     local stripped = 0
     for _, entry in pairs(data.entries) do
-        if type(entry) == "table" and machine_src(entry) then
+        if type(entry) == "table" and type(entry.src) == "string" and entry.src ~= "" then
             entry.src = nil
             entry.text_prev_src = nil
             stripped = stripped + 1
@@ -127,11 +141,13 @@ function M.load(mod_id, lang)
         local stripped = strip_markers(data)
         data.manual = false
         data.manual_stripped = stripped
-        if stripped > 0 then
-            M.save(mod_id, lang, data)
-            if notifier then
-                pcall(notifier, mod_id, lang, stripped)
-            end
+        -- Written back even when there was no marker to remove: the flag itself has to reach the
+        -- file. Skipping the write when nothing was stripped left `manual = true` in a file that
+        -- had already been cleaned by hand, so the instruction stayed armed for the next start -
+        -- and then stripped the marker off whatever the engine wrote in between.
+        M.save(mod_id, lang, data)
+        if stripped > 0 and notifier then
+            pcall(notifier, mod_id, lang, stripped)
         end
     end
     return data
@@ -149,12 +165,35 @@ function M.serialize(mod_id, lang, data)
 
     local out = {}
     out[#out + 1] = "-- Auto Translate translations for mod: " .. tostring(mod_id) .. "  (language: " .. tostring(lang) .. ")"
-    out[#out + 1] = "-- enabled = false : skip this mod completely"
-    out[#out + 1] = "-- manual  = true  : \"I have hand checked this file\": the engine markers below are"
-    out[#out + 1] = "--                   removed on the next start and the flag goes back to false."
-    out[#out + 1] = "-- An entry without a 'src' line is hand written (and never overwritten while its source"
-    out[#out + 1] = "-- text is unchanged); one with 'src' was written by that engine. Both flags are always"
-    out[#out + 1] = "-- written out, so there is one word to flip."
+    out[#out + 1] = "--"
+    out[#out + 1] = "-- This file is the mod's translation memory: one entry per string the mod translates, for one"
+    out[#out + 1] = "-- mod and one language. It is plain Lua on purpose, so it can be edited by hand; the mod also"
+    out[#out + 1] = "-- writes it back whenever it translates something new, so keep the shape and edit the entries."
+    out[#out + 1] = "--"
+    out[#out + 1] = "--   enabled = false   skip this mod completely (none of it gets translated)"
+    out[#out + 1] = "--   manual  = true    \"I have hand checked this file\". On the next start the mod removes the"
+    out[#out + 1] = "--                     src line from every entry, writes the file back, and sets the flag to"
+    out[#out + 1] = "--                     false again. One shot: set it, start the game, done."
+    out[#out + 1] = "--"
+    out[#out + 1] = "-- The fields of an entry:"
+    out[#out + 1] = "--"
+    out[#out + 1] = "--   en     the source text (English). The mod finds an entry by key *and* compares this text,"
+    out[#out + 1] = "--          so changing it detaches the entry from the game's string - it then counts as \"the"
+    out[#out + 1] = "--          source changed\" and is translated again."
+    out[#out + 1] = "--   hash   a fingerprint of en. Same meaning as en, cheap to keep."
+    out[#out + 1] = "--   text   the translation the game shows. This is the field to edit."
+    out[#out + 1] = "--   src    bookkeeping: the name of the engine that wrote text (deepl, local_base, bing, ...)."
+    out[#out + 1] = "--          An entry with NO src line is hand written, and hand written text is never"
+    out[#out + 1] = "--          overwritten while en is unchanged. src is not a setting: writing it on every entry"
+    out[#out + 1] = "--          marks nothing as hand written, it only throws away the record of which lines a"
+    out[#out + 1] = "--          machine wrote. Leave it alone (or use the flag above)."
+    out[#out + 1] = "--   ts     when the entry was last written, unix time. Informational."
+    out[#out + 1] = "--"
+    out[#out + 1] = "-- If this file is handed to an AI to improve the translations: edit `text` only, and keep"
+    out[#out + 1] = "-- Warhammer 40,000: Darktide's official terminology exactly as the game shows it - the game's"
+    out[#out + 1] = "-- own words for weapons, talents, abilities, enemies, places. Never replace a game term with a"
+    out[#out + 1] = "-- generic synonym, never translate a proper noun the game leaves in English, and leave `en`,"
+    out[#out + 1] = "-- `hash`, `src` and `ts` as they are."
     out[#out + 1] = "return {"
     out[#out + 1] = string.format("    enabled = %s,", tostring(data.enabled == true))
     out[#out + 1] = string.format("    manual = %s,", tostring(data.manual == true))

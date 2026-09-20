@@ -133,6 +133,55 @@ local again = store.load("some_mod", "zh-cn")
 check("loading again rewrites nothing", #writes, 0)
 check("and the flag is not set a second time", again.manual_stripped, nil)
 
+-- ---- 4b) a file an outside editor marked "manual" ----------------------------------------------
+-- The file a player gets back from a calibration pass (an AI, an editor, a person with a script)
+-- carries `src = "manual"` on every entry, and the player then flips the flag. "manual" is not an
+-- engine, but it is still a marker, and the state the header documents for a hand written entry is
+-- *no* src line at all - so the instruction has to remove it too. It also has to write the file back
+-- even when there was nothing to remove, or the flag itself never reaches the file and stays armed
+-- for the next start (which is how the markers came back the first time this was reported).
+files[file] = table.concat({
+    "return {",
+    "    enabled = true,",
+    "    manual = true,",
+    "    entries = {",
+    '        ["a"] = { en = "One", hash = "h3", text = "一", src = "manual", ts = 1 },',
+    '        ["b"] = { en = "Two", hash = "h3", text = "二", src = "manual", ts = 2 },',
+    "    },",
+    "}", "",
+}, "\n")
+writes = {}
+notified = {}
+local calibrated = store.load("some_mod", "zh-cn")
+check("an outside editor's 'manual' markers are counted", calibrated.manual_stripped, 2)
+check("the file is written back once", #writes, 1)
+check_true("and carries no marker any more", not contains(files[file], "src ="))
+check_true("with the flag reset in the file", contains(files[file], "    manual = false,"))
+check("the notifier still reports it", notified[1], "some_mod/zh-cn/2")
+check("the entries are hand written now",
+    select(2, store.lookup(calibrated, "a", "One", util.hash("One"))), "manual")
+check("a machine translation no longer overwrites them", (function()
+    store.set_entry(calibrated, "a", "One", util.hash("One"), "MACHINE", "deepl", 9)
+    return calibrated.entries["a"].text
+end)(), "一")
+
+-- The flag on a file that has no marker left (an editor that already removed them, or a second
+-- run): the instruction is still carried out, so the file stops saying "hand checked".
+files[file] = table.concat({
+    "return {",
+    "    enabled = true,",
+    "    manual = true,",
+    "    entries = {",
+    '        ["k"] = { text = "只有译文" },',
+    "    },",
+    "}", "",
+}, "\n")
+writes = {}
+local nothing = store.load("some_mod", "zh-cn")
+check("a flag with nothing to strip reports zero", nothing.manual_stripped, 0)
+check("and still writes the file once", #writes, 1)
+check_true("so the flag is false in the file", contains(files[file], "    manual = false,"))
+
 -- ---- 5) a file the player wrote by hand, in the documented format ------------------------------
 files[file] = table.concat({
     "return {",
