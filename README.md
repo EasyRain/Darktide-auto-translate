@@ -3,7 +3,7 @@
 Automatically translates the texts of your installed mods **in memory** — the original mod
 files are never modified. Translations are cached locally in editable text files.
 
-> **Status: v0.2.3 — all four engines implemented and working.**
+> **Status: v0.2.4 — all four engines implemented and working.**
 > Scans every loaded mod, applies translations from the local library, hot-injects the
 > merged table back into DMF, and translates what is missing through one of four engines:
 > `Automatic` (API key → downloaded offline model → keyless free endpoints), the official
@@ -869,6 +869,11 @@ return {
 * Every file carries that explanation in its own header, including a line addressed to an AI editor
   — edit `text` only, and keep Warhammer 40,000: Darktide's official terminology exactly as the game
   shows it. The file is what gets handed to someone else, so the documentation lives in it.
+* **That comment block is the mod's, and it keeps itself current**: a file written by an older version
+  — or one an editor or an AI stripped the comments from — gets today's explanation on the next
+  launch. Only the block above `return {` is touched; everything below it is written back byte for
+  byte, so a note of your own inside an entry (or at the top, when there is no header to replace)
+  survives it.
 * `manual = true` is an **instruction, not a state**: on the next start the mod reads it as
   "every entry in this file has been checked by hand", removes the `src` line from all of them
   (whatever it says — an engine name, or `"manual"` as an outside editor writes it), writes the
