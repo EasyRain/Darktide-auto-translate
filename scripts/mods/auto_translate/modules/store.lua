@@ -134,6 +134,83 @@ function M.set_notifier(fn)
     notifier = fn
 end
 
+-- The comment block every file starts with. It is built here rather than inline in serialize() so
+-- that a file written by an older version can be compared against it and brought up to date (see
+-- refresh_header): the explanation is the part a player reads - and hands to an AI - and a stale one
+-- is worse than none. Changing the prose is therefore enough; there is no version number to forget.
+local HEADER_MARK = "-- Auto Translate translations for mod:"
+
+local function header_lines(mod_id, lang)
+    return {
+        HEADER_MARK .. " " .. tostring(mod_id) .. "  (language: " .. tostring(lang) .. ")",
+        "--",
+        "-- This file is the mod's translation memory: one entry per string the mod translates, for one",
+        "-- mod and one language. It is plain Lua on purpose, so it can be edited by hand; the mod also",
+        "-- writes it back whenever it translates something new, so keep the shape and edit the entries.",
+        "--",
+        "--   enabled = false   skip this mod completely (none of it gets translated)",
+        "--   manual  = true    \"I have hand checked this file\". On the next start the mod removes the",
+        "--                     src line from every entry, writes the file back, and sets the flag to",
+        "--                     false again. One shot: set it, start the game, done.",
+        "--",
+        "-- The fields of an entry:",
+        "--",
+        "--   en     the source text (English). The mod finds an entry by key *and* compares this text,",
+        "--          so changing it detaches the entry from the game's string - it then counts as \"the",
+        "--          source changed\" and is translated again.",
+        "--   hash   a fingerprint of en. Same meaning as en, cheap to keep.",
+        "--   text   the translation the game shows. This is the field to edit.",
+        "--   src    bookkeeping: the name of the engine that wrote text (deepl, local_base, bing, ...).",
+        "--          An entry with NO src line is hand written, and hand written text is never",
+        "--          overwritten while en is unchanged. src is not a setting: writing it on every entry",
+        "--          marks nothing as hand written, it only throws away the record of which lines a",
+        "--          machine wrote. Leave it alone (or use the flag above).",
+        "--   ts     when the entry was last written, unix time. Informational.",
+        "--",
+        "-- If this file is handed to an AI to improve the translations: edit `text` only, and keep",
+        "-- Warhammer 40,000: Darktide's official terminology exactly as the game shows it - the game's",
+        "-- own words for weapons, talents, abilities, enemies, places. Never replace a game term with a",
+        "-- generic synonym, never translate a proper noun the game leaves in English, and leave `en`,",
+        "-- `hash`, `src` and `ts` as they are.",
+    }
+end
+
+-- The text of that block, ending exactly where the table begins.
+local function header_text(mod_id, lang)
+    return table.concat(header_lines(mod_id, lang), "\n") .. "\n"
+end
+
+-- Brings the comment block of a file up to date. Returns true when the file was rewritten.
+--
+-- Two shapes have to end the same way - the file carries today's explanation - and neither may touch
+-- a single byte the player wrote:
+--
+--   * an older header of ours: the block above `return {` is ours by definition, so it is replaced,
+--     and everything from `return {` on is written back byte for byte (a note inside an entry, a
+--     different order, whatever an external editor left there);
+--   * no header at all - an editor or an AI that "cleaned up the comments" - : ours is *prepended*,
+--     so the player's own note at the top survives underneath it.
+--
+-- The file has already parsed by the time this runs, so prepending comments is always safe.
+local function refresh_header(mod_id, lang, path)
+    local raw = util.read_file(path)
+    if type(raw) ~= "string" or raw == "" then
+        return false
+    end
+    local header = header_text(mod_id, lang)
+    if raw:sub(1, #header) == header then
+        return false                                   -- already current
+    end
+    if raw:sub(1, #HEADER_MARK) ~= HEADER_MARK then
+        return util.write_file_atomic(path, header .. raw) and true or false
+    end
+    local body_at = raw:find("\nreturn {", 1, true)
+    if not body_at then
+        return false
+    end
+    return util.write_file_atomic(path, header .. raw:sub(body_at + 1)) and true or false
+end
+
 function M.load(mod_id, lang)
     local path = M.path_for(mod_id, lang)
     if not util.file_exists(path) then
@@ -149,6 +226,7 @@ function M.load(mod_id, lang)
     -- the player opens is already free of markers, and the flag goes back to false: leaving it set
     -- would strip the marker off every entry the engine re-writes later, which is exactly the
     -- distinction this is for.
+    local wrote = false
     if data.manual == true then
         local stripped = strip_markers(data)
         data.manual = false
@@ -158,9 +236,18 @@ function M.load(mod_id, lang)
         -- had already been cleaned by hand, so the instruction stayed armed for the next start -
         -- and then stripped the marker off whatever the engine wrote in between.
         M.save(mod_id, lang, data)
+        wrote = true
         if stripped > 0 and notifier then
             pcall(notifier, mod_id, lang, stripped)
         end
+    end
+
+    -- A file an older version wrote keeps that version's explanation until something rewrites it, and
+    -- a file an editor or an AI stripped the comments from has none at all. Both get today's - "the
+    -- player reads this, and hands it to an AI" is exactly why it has to be there. Skipped when the
+    -- instruction above already wrote the file, which writes the header too.
+    if not wrote then
+        data.header_refreshed = refresh_header(mod_id, lang, path) or nil
     end
     return data
 end
@@ -175,37 +262,7 @@ end
 function M.serialize(mod_id, lang, data)
     data = normalize(data)
 
-    local out = {}
-    out[#out + 1] = "-- Auto Translate translations for mod: " .. tostring(mod_id) .. "  (language: " .. tostring(lang) .. ")"
-    out[#out + 1] = "--"
-    out[#out + 1] = "-- This file is the mod's translation memory: one entry per string the mod translates, for one"
-    out[#out + 1] = "-- mod and one language. It is plain Lua on purpose, so it can be edited by hand; the mod also"
-    out[#out + 1] = "-- writes it back whenever it translates something new, so keep the shape and edit the entries."
-    out[#out + 1] = "--"
-    out[#out + 1] = "--   enabled = false   skip this mod completely (none of it gets translated)"
-    out[#out + 1] = "--   manual  = true    \"I have hand checked this file\". On the next start the mod removes the"
-    out[#out + 1] = "--                     src line from every entry, writes the file back, and sets the flag to"
-    out[#out + 1] = "--                     false again. One shot: set it, start the game, done."
-    out[#out + 1] = "--"
-    out[#out + 1] = "-- The fields of an entry:"
-    out[#out + 1] = "--"
-    out[#out + 1] = "--   en     the source text (English). The mod finds an entry by key *and* compares this text,"
-    out[#out + 1] = "--          so changing it detaches the entry from the game's string - it then counts as \"the"
-    out[#out + 1] = "--          source changed\" and is translated again."
-    out[#out + 1] = "--   hash   a fingerprint of en. Same meaning as en, cheap to keep."
-    out[#out + 1] = "--   text   the translation the game shows. This is the field to edit."
-    out[#out + 1] = "--   src    bookkeeping: the name of the engine that wrote text (deepl, local_base, bing, ...)."
-    out[#out + 1] = "--          An entry with NO src line is hand written, and hand written text is never"
-    out[#out + 1] = "--          overwritten while en is unchanged. src is not a setting: writing it on every entry"
-    out[#out + 1] = "--          marks nothing as hand written, it only throws away the record of which lines a"
-    out[#out + 1] = "--          machine wrote. Leave it alone (or use the flag above)."
-    out[#out + 1] = "--   ts     when the entry was last written, unix time. Informational."
-    out[#out + 1] = "--"
-    out[#out + 1] = "-- If this file is handed to an AI to improve the translations: edit `text` only, and keep"
-    out[#out + 1] = "-- Warhammer 40,000: Darktide's official terminology exactly as the game shows it - the game's"
-    out[#out + 1] = "-- own words for weapons, talents, abilities, enemies, places. Never replace a game term with a"
-    out[#out + 1] = "-- generic synonym, never translate a proper noun the game leaves in English, and leave `en`,"
-    out[#out + 1] = "-- `hash`, `src` and `ts` as they are."
+    local out = header_lines(mod_id, lang)
     out[#out + 1] = "return {"
     out[#out + 1] = string.format("    enabled = %s,", tostring(data.enabled == true))
     out[#out + 1] = string.format("    manual = %s,", tostring(data.manual == true))

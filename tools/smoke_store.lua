@@ -34,6 +34,7 @@ local util = {
     TRANSLATIONS_DIR = "/at",
     ensure_dir = function() return true end,
     file_exists = function(p) return files[p] ~= nil end,
+    read_file = function(p) return files[p] end,
     load_lua_file = function(p)
         local src = files[p]
         if not src then return nil, "missing" end
@@ -183,7 +184,7 @@ check("and still writes the file once", #writes, 1)
 check_true("so the flag is false in the file", contains(files[file], "    manual = false,"))
 
 -- ---- 5) a file the player wrote by hand, in the documented format ------------------------------
-files[file] = table.concat({
+local hand_body = table.concat({
     "return {",
     "    enabled = true,",
     "    manual = false,",
@@ -192,10 +193,16 @@ files[file] = table.concat({
     "    },",
     "}", "",
 }, "\n")
+files[file] = hand_body
 writes = {}
 local plain = store.load("some_mod", "zh-cn")
 check("a plain hand file loads", plain.entries["k"].text, "只有译文")
-check("nothing is rewritten", #writes, 0)
+-- It gets the documentation the mod puts on every file it manages (it is in the store folder, under a
+-- mod's id), but only that: the body is written back byte for byte, so nothing the player wrote is
+-- normalised, reordered or dropped by it.
+check("the missing header is added", plain.header_refreshed, true)
+check("which is one write", #writes, 1)
+check_true("and the body is byte for byte what it was", files[file]:sub(-#hand_body) == hand_body)
 check("and it is protected from machines",
     (function()
         store.set_entry(plain, "k", "Source", util.hash("Source"), "MACHINE", "deepl", 9)
@@ -233,7 +240,51 @@ check("which is how the caller decides to remove the file", only_machine.entries
 check("an empty table is not a failure", select(1, store.drop_machine_entries({})), 0)
 check("and neither is a missing one", select(1, store.drop_machine_entries(nil)), 0)
 
--- ---- 7) a parked key still serializes without a marker, and stays machine territory -------------
+-- ---- 7) an old file's comment block is brought up to date, and nothing else ---------------------
+-- The comment block is the part a player reads and hands to an AI, so a file written by an older
+-- version must not keep yesterday's explanation for ever: it is refreshed when the file is read - and
+-- only the block above `return {` is replaced, so a hand edit inside an entry survives it.
+local old_body = 'return {\n'
+    .. '    enabled = true,\n'
+    .. '    manual = false,\n'
+    .. '    entries = {\n'
+    .. '        ["k"] = { text = "手写的" }, -- my own note\n'
+    .. '    },\n'
+    .. '}\n'
+files[file] = "-- Auto Translate translations for mod: some_mod  (language: zh-cn)\n"
+    .. "-- the explanation an older version wrote\n"
+    .. old_body
+writes = {}
+local refreshed = store.load("some_mod", "zh-cn")
+check("an out of date header is refreshed", refreshed.header_refreshed, true)
+check("which is one write", #writes, 1)
+check_true("the file now carries the current explanation",
+    contains(files[file], "src is not a setting"))
+check_true("and not the old one", not contains(files[file], "an older version wrote"))
+check_true("while the body is byte for byte what it was, note and all",
+    files[file]:sub(-#old_body) == old_body)
+check("and the entries still load", refreshed.entries.k.text, "手写的")
+
+writes = {}
+store.load("some_mod", "zh-cn")
+check("reading it again writes nothing", #writes, 0)
+check_true("because the header is current now", contains(files[file], "src is not a setting"))
+-- The other way the comments go missing: an editor or an AI strips them, and the file starts straight
+-- at `return {`. Ours is put in front of whatever is there, so a note of the player's own survives.
+files[file] = '-- my own note\nreturn { entries = { ["k"] = { text = "我写的" } } }\n'
+writes = {}
+local stripped = store.load("some_mod", "zh-cn")
+check("a file with no header at all gets one", stripped.header_refreshed, true)
+check("which is one write", #writes, 1)
+check_true("it is the first thing in the file",
+    files[file]:find("-- Auto Translate translations for mod:", 1, true) == 1)
+check_true("and the player's own note is still there", contains(files[file], "-- my own note"))
+check("the entries still load", stripped.entries.k.text, "我写的")
+writes = {}
+store.load("some_mod", "zh-cn")
+check("and it is not written a second time", #writes, 0)
+
+-- ---- 8) a parked key still serializes without a marker, and stays machine territory -------------
 local parked = { enabled = true, entries = { r = { en = "Bad", hash = "h3", refused_by = "bing", refusals = 3 } } }
 text = store.serialize("some_mod", "zh-cn", parked)
 check_true("a refusal keeps its bookkeeping", contains(text, 'refused_by = "bing"') and contains(text, "refusals = 3"))
