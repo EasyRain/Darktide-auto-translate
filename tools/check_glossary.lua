@@ -298,6 +298,35 @@ do
     check("the blocked-player label masks on its own", (through("Blocked", "zh-cn")), "已屏蔽")
     check("but a sentence keeps the word", (through("they blocked it", "zh-cn")), "they blocked it")
 
+    -- A mod UI names the breed on its own, not its faction: the export only ever carries the full
+    -- name ("Scab Mauler"), so a short name matched nothing and the word went to the engine. Measured
+    -- on the string below: 启用粉碎者/猛击者·激进·光辉 (Crusher protected, Mauler not), and the boss
+    -- pair came back as 队长 / 双生.
+    check("a breed's short name uses the game's own generic wording",
+        (through("Rager", "zh-cn")), "狂暴者")
+    check("including the traditional value", (through("Rager", "zh-tw")), "暴怒者")
+    check("a second breed beside the first is protected too",
+        (through("Crusher/Mauler", "zh-cn")), "粉碎者/重锤兵")
+    check("in a settings label", (through("Enable Crusher/Mauler Aggro Glow", "zh-cn")),
+        "启用粉碎者/重锤兵 Aggro Glow")
+    check("the boss pair", (through("Captain", "zh-cn")), "连长")
+    check("and its other half", (through("Twins", "zh-cn")), "双子")
+    check("including where a mod writes them plural",
+        (through("Captains/Twins", "zh-cn")), "连长/双子")
+    check("a breed list keeps the short name it knows",
+        (through("Maulers, Crushers and Bulwarks", "zh-cn")), "重锤兵, Crushers and Bulwarks")
+    -- The plural of a *full* official name is deliberately still the engine's job: the whole-word
+    -- rule keeps "Crushers" out of "Crusher", and a plural row would have to copy the singular value,
+    -- which several target languages inflect (ru Дробитель / Дробители). Only the short breed names
+    -- above carry the spelling a mod UI actually writes, singular and plural.
+    check("the plural of a full official name is the engine's job",
+        (through("Crushers", "zh-cn")), "Crushers")
+    -- The full official name is still the longer, more specific term.
+    check("the full official name still wins", (through("Scab Mauler", "zh-cn")), "血痂重锤兵")
+    -- Only the two Chinese columns were verified, so anywhere else the short name stays out of the
+    -- way instead of forcing a wording nobody checked.
+    check("and is left alone where it has no value", (through("Mauler", "ru")), "Mauler")
+
     -- A multi-word term that merely starts with a label-only word is a name of its own.
     check("a multi-word name keeps masking",
         (glossary.mask("Close Combat", "zh-cn", false)):find("^⟦%d+⟧$") ~= nil, true)

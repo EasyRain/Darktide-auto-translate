@@ -286,6 +286,66 @@ MISSING_LOC = [
     ("Stimm Supply",   {"zh-cn": "兴奋剂补给", "zh-tw": "興奮劑補給"}),
 ]
 
+# ---- short names a mod UI writes for a breed ----
+#
+# The exports only ever carry the game's *full* breed name, because that is the string the game
+# localises: "Scab Mauler", "Scab Sniper", "Dreg Tox Bomber". Mod UIs name the breed on its own -
+# a highlight option reads "Enable Crusher/Mauler Aggro Glow" or "Sniper Glow Color" - and a short
+# name matches nothing, so the word went to the engine: the measured result of that exact string was
+# 启用粉碎者/猛击者·激进·光辉 (Crusher was protected, Mauler was not), and "Captain / Twins" came
+# back as 队长 / 双生.
+#
+# So each row below is the breed word on its own, and its value comes from the game: where the game
+# has a generic breed name of its own (`loc_breed_berzerker_generic_name` = "Ragers" = 狂暴者) that
+# wording is used - it is the game saying "the breed, not the faction variant" - and where it has
+# none, the official name minus the faction word (血痂 / 渣滓 / 瘟疫 / 猎手) the short English form
+# leaves out, which is the same wording the game's own compound keeps where it has one
+# ("Monstrosity Hunter" = 怪物猎手 / 巨獸獵人). Nothing about the breed is invented; only the faction
+# prefix the source did not say is dropped.
+# The plural is listed too, because a real mod string does list breeds: "Maulers, Crushers,
+# Bulwarks, Pack Masters, Captains/Twins and Monstrosities" (Enhanced_descriptions). It is a second
+# source spelling with the same value, not a matcher rule - a rule would also "fix" the plurals of
+# languages that inflect, where the target value here is deliberately the singular. The four breeds
+# whose generic name the export already carries (Ragers, Flamers, Gunners, Shotgunners) are shadowed
+# by it, which is why only their singular spelling comes from here.
+#
+# Deliberately absent:
+#   * "Bruiser" - the export already owns that bare word: the Ogryn talent of that name
+#     (loc_talent_ogryn_cooldown_on_elite_kills) is 巨汉, and the export is authoritative for its own
+#     strings. A breed list writes "Bruisers", which is still left to the engine rather than risk
+#     putting a talent's name in an enemy list.
+#   * the plural of the four breeds the export carries a generic name for (Ragers, Flamers, Gunners,
+#     Shotgunners) - the game's own generic wording wins, and it is emitted by the export section.
+#   * "Groaner", "Daemonhost", "Grenadier", "Bulwark", "Reaper", "Mutant", "Poxwalker" - the export
+#     already carries these as terms of their own.
+#   * "Captain" and "Twins" are the boss pair, and neither is in the collected strings. The boss
+#     nameplates stay English in every language (the game shows "Rodin Karnak" / "Rinda Karnak", and
+#     the breed row `loc_breed_display_name_renegade_captain` is the *Scab* Captain = 血痂头目, which
+#     stays authoritative for that longer spelling). 连长 is what the Chinese client's dialogue calls
+#     the boss - the player's own reading of the game - and 双子 is the community's word for the pair;
+#     engines turn the bare "Twins" into 双生.
+#   * "Disabler" has no string anywhere in the game; 控制型敌人 is the wording the Chinese mod UIs use.
+SHORT_BREEDS = [
+    # what a mod writes      its plural            zh-cn        zh-tw            where the value is from
+    ("Mauler",      "Maulers",      {"zh-cn": "重锤兵",     "zh-tw": "重錘兵"}),      # Scab Mauler 血痂重锤兵
+    ("Sniper",      "Snipers",      {"zh-cn": "狙击手",     "zh-tw": "狙擊手"}),      # Scab Sniper 血痂狙击手
+    ("Rager",       "Ragers",       {"zh-cn": "狂暴者",     "zh-tw": "暴怒者"}),      # berzerker generic name 狂暴者 / 暴怒者
+    ("Flamer",      "Flamers",      {"zh-cn": "火焰兵",     "zh-tw": "噴火兵"}),      # flamer generic name 火焰兵 / 噴火兵
+    ("Bomber",      "Bombers",      {"zh-cn": "轰炸者",     "zh-tw": "轟炸者"}),      # Scab Bomber 血痂轰炸者
+    ("Tox Bomber",  "Tox Bombers",  {"zh-cn": "剧毒轰炸者", "zh-tw": "劇毒轟炸者"}),  # Dreg Tox Bomber 渣滓剧毒轰炸者
+    ("Pox Burster", "Pox Bursters", {"zh-cn": "瘟疫爆破手", "zh-tw": "瘟疫爆者"}),    # Poxburster (the mod writes a space)
+    ("Gunner",      "Gunners",      {"zh-cn": "炮手",       "zh-tw": "槍手"}),        # gunner generic name 炮手 / 槍手
+    ("Stalker",     "Stalkers",     {"zh-cn": "潜行者",     "zh-tw": "潛行者"}),      # Scab Stalker 血痂潜行者
+    ("Vanguard",    "Vanguards",    {"zh-cn": "先锋",       "zh-tw": "先鋒"}),        # Scab Vanguard 疤痂先锋 (the game's own typo)
+    ("Shotgunner",  "Shotgunners",  {"zh-cn": "霰弹枪手",   "zh-tw": "霰彈槍手"}),    # shocktrooper generic name 霰弹枪手 / 霰彈槍手
+    ("Trapper",     "Trappers",     {"zh-cn": "陷阱手",     "zh-tw": "陷阱兵"}),      # Scab Trapper 血痂陷阱手
+    ("Hound",       "Hounds",       {"zh-cn": "猎犬",       "zh-tw": "獵犬"}),        # Pox Hound 瘟疫猎犬
+    ("Monstrosity", "Monstrosities", {"zh-cn": "怪物",      "zh-tw": "巨獸"}),        # Monstrosity Hunter 怪物猎手 / 巨獸獵人
+    ("Captain",     "Captains",     {"zh-cn": "连长",       "zh-tw": "連長"}),        # the boss, as the Chinese client's dialogue has it
+    ("Twins",       None,           {"zh-cn": "双子",       "zh-tw": "雙子"}),        # community wording (the game keeps Rodin/Rinda)
+    ("Disabler",    "Disablers",    {"zh-cn": "控制型敌人", "zh-tw": "控制型敵人"}),  # no official string anywhere
+]
+
 # ---- hand written interface labels, all 16 languages ----
 #
 # General interface wording rather than game lore: the meaning in each language is
@@ -427,6 +487,10 @@ AUTONYMS = [
 hand_keys = set()
 for en, _ in HAND + MISSING_LOC + UI + LANGS:
     hand_keys.add(en.lower())
+for en, plural, _ in SHORT_BREEDS:
+    hand_keys.add(en.lower())
+    if plural:
+        hand_keys.add(plural.lower())
 for text in AUTONYMS:
     hand_keys.add(text.lower())
 
@@ -462,6 +526,8 @@ lines.append('--   * Ukrainian values were extracted from the complete community
 lines.append('--     "Ukrainian Localization" (Nexus 618); the game ships no Ukrainian itself')
 lines.append('--   * the hand verified block lists mechanics wording that has no loc key of its')
 lines.append('--     own (Blitz / Keystone / Aura / ...), taken from the official wording')
+lines.append('--   * short breed names a mod UI writes ("Mauler" for the game\'s "Scab Mauler") carry')
+lines.append('--     that official name minus the faction word the short English form leaves out')
 lines.append('--')
 lines.append('-- A term is only used for languages that have a value; empty ones are skipped.')
 lines.append('--')
@@ -501,6 +567,25 @@ for en, vals in MISSING_LOC:
         if lang in vals:
             parts.append((LANG_KEY.get(lang, lang)) + ' = ' + quote(vals[lang]))
     lines.append('        { ' + ', '.join(parts) + ' },')
+lines.append('')
+lines.append('        -- short breed names a mod UI writes, and their plural: the official row is the')
+lines.append('        -- full name ("Scab Mauler"), so a string that says only "Mauler" never matched it')
+# Same shadow rule as MISSING_LOC: if a round ever collects one of these as a string of its own, the
+# game's wording is authoritative and this row steps aside.
+breed_shadowed = []
+breed_used = 0
+for en, plural, vals in SHORT_BREEDS:
+    for spelling in [en] + ([plural] if plural else []):
+        if spelling.lower() in exported_keys:
+            breed_shadowed.append(spelling)
+            continue
+        breed_used += 1
+        emitted.add(spelling.lower())
+        parts = ['en = ' + quote(spelling)]
+        for lang in LANG_ORDER:
+            if lang in vals:
+                parts.append((LANG_KEY.get(lang, lang)) + ' = ' + quote(vals[lang]))
+        lines.append('        { ' + ', '.join(parts) + ' },')
 lines.append('')
 lines.append('        -- hand written interface labels (general UI words, 16 languages)')
 # A word the game itself localises keeps the game's wording: those entries came from
@@ -577,6 +662,11 @@ if ui_shadowed:
 if lang_shadowed:
     print('language names the game already localises (kept the game wording): %s'
           % ', '.join(lang_shadowed))
+print('short breed names written: %d (of %d listed; %d shadowed by an export)'
+      % (breed_used, sum(2 if plural else 1 for _, plural, _ in SHORT_BREEDS), len(breed_shadowed)))
+if breed_shadowed:
+    print('short breed names the export now has (kept the game wording): %s'
+          % ', '.join(breed_shadowed))
 multi = sum(1 for l in terms.values() if len(l) >= 12)
 print('terms with >=12 languages: %d' % multi)
 print('\n--- skipped (not a bare term) ---')

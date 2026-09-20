@@ -10,6 +10,8 @@
 --     "Ukrainian Localization" (Nexus 618); the game ships no Ukrainian itself
 --   * the hand verified block lists mechanics wording that has no loc key of its
 --     own (Blitz / Keystone / Aura / ...), taken from the official wording
+--   * short breed names a mod UI writes ("Mauler" for the game's "Scab Mauler") carry
+--     that official name minus the faction word the short English form leaves out
 --
 -- A term is only used for languages that have a value; empty ones are skipped.
 --
@@ -34,6 +36,38 @@ return {
         -- wording, checked against the export where the export has the term
         { en = "Rampage!", ["zh-cn"] = "怒火冲天！", ["zh-tw"] = "怒火沖天！" },
         { en = "Rampage", ["zh-cn"] = "怒火冲天", ["zh-tw"] = "怒火沖天" },
+
+        -- short breed names a mod UI writes, and their plural: the official row is the
+        -- full name ("Scab Mauler"), so a string that says only "Mauler" never matched it
+        { en = "Mauler", ["zh-cn"] = "重锤兵", ["zh-tw"] = "重錘兵" },
+        { en = "Maulers", ["zh-cn"] = "重锤兵", ["zh-tw"] = "重錘兵" },
+        { en = "Sniper", ["zh-cn"] = "狙击手", ["zh-tw"] = "狙擊手" },
+        { en = "Snipers", ["zh-cn"] = "狙击手", ["zh-tw"] = "狙擊手" },
+        { en = "Rager", ["zh-cn"] = "狂暴者", ["zh-tw"] = "暴怒者" },
+        { en = "Flamer", ["zh-cn"] = "火焰兵", ["zh-tw"] = "噴火兵" },
+        { en = "Bomber", ["zh-cn"] = "轰炸者", ["zh-tw"] = "轟炸者" },
+        { en = "Bombers", ["zh-cn"] = "轰炸者", ["zh-tw"] = "轟炸者" },
+        { en = "Tox Bomber", ["zh-cn"] = "剧毒轰炸者", ["zh-tw"] = "劇毒轟炸者" },
+        { en = "Tox Bombers", ["zh-cn"] = "剧毒轰炸者", ["zh-tw"] = "劇毒轟炸者" },
+        { en = "Pox Burster", ["zh-cn"] = "瘟疫爆破手", ["zh-tw"] = "瘟疫爆者" },
+        { en = "Pox Bursters", ["zh-cn"] = "瘟疫爆破手", ["zh-tw"] = "瘟疫爆者" },
+        { en = "Gunner", ["zh-cn"] = "炮手", ["zh-tw"] = "槍手" },
+        { en = "Stalker", ["zh-cn"] = "潜行者", ["zh-tw"] = "潛行者" },
+        { en = "Stalkers", ["zh-cn"] = "潜行者", ["zh-tw"] = "潛行者" },
+        { en = "Vanguard", ["zh-cn"] = "先锋", ["zh-tw"] = "先鋒" },
+        { en = "Vanguards", ["zh-cn"] = "先锋", ["zh-tw"] = "先鋒" },
+        { en = "Shotgunner", ["zh-cn"] = "霰弹枪手", ["zh-tw"] = "霰彈槍手" },
+        { en = "Trapper", ["zh-cn"] = "陷阱手", ["zh-tw"] = "陷阱兵" },
+        { en = "Trappers", ["zh-cn"] = "陷阱手", ["zh-tw"] = "陷阱兵" },
+        { en = "Hound", ["zh-cn"] = "猎犬", ["zh-tw"] = "獵犬" },
+        { en = "Hounds", ["zh-cn"] = "猎犬", ["zh-tw"] = "獵犬" },
+        { en = "Monstrosity", ["zh-cn"] = "怪物", ["zh-tw"] = "巨獸" },
+        { en = "Monstrosities", ["zh-cn"] = "怪物", ["zh-tw"] = "巨獸" },
+        { en = "Captain", ["zh-cn"] = "连长", ["zh-tw"] = "連長" },
+        { en = "Captains", ["zh-cn"] = "连长", ["zh-tw"] = "連長" },
+        { en = "Twins", ["zh-cn"] = "双子", ["zh-tw"] = "雙子" },
+        { en = "Disabler", ["zh-cn"] = "控制型敌人", ["zh-tw"] = "控制型敵人" },
+        { en = "Disablers", ["zh-cn"] = "控制型敌人", ["zh-tw"] = "控制型敵人" },
 
         -- hand written interface labels (general UI words, 16 languages)
         { en = "Right", ["zh-cn"] = "右侧", ["zh-tw"] = "右側", ja = "右", ko = "오른쪽", ru = "справа", de = "rechts", fr = "droite", es = "derecha", it = "destra", pl = "prawo", ["pt-br"] = "direita", uk = "праворуч", nl = "rechts", sv = "höger", tr = "sağ", ar = "يمين" },
