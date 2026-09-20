@@ -875,8 +875,10 @@ return {
   file back and puts the flag to `false` again — so nobody deletes markers
   entry by entry. The file is written back even when there was nothing left to remove, so the flag
   cannot stay armed for the next start. Set it again whenever the same treatment is wanted. `manual`
-  does **not** skip the mod: the file is still read and validated on every launch, and keys a mod
-  update adds (or whose source changed) are queued for translation as usual.
+  does **not** skip the mod: the file is still read on every launch, and keys a mod update adds (or
+  whose source changed) are queued for translation as usual. What is *not* checked is the text
+  itself — hand written or machine, it is injected as written — so placeholders, `%`-specifiers,
+  line breaks and leftover `⟦⟧` markers are what `luajit tools\check_stores.lua` is for.
 * When a hand written entry goes out of date, the fresh translation is stored, the old text is
   kept next to it as `text_prev`, and that one entry gets a `src` again - which is how a file
   shows at a glance what is still yours and what the engine rewrote.
