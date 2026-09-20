@@ -202,7 +202,38 @@ check("and it is protected from machines",
         return plain.entries["k"].text
     end)(), "只有译文")
 
--- ---- 6) a parked key still serializes without a marker, and stays machine territory -------------
+-- ---- 6) "Clear machine translations" keeps the player's own text -------------------------------
+-- The button in the options threw the whole file away, which deleted hand written entries with it -
+-- the one path in the mod that destroyed text nothing can bring back. It clears machine work now:
+-- entries an engine wrote and the refusal records go, hand written entries (no marker, or the
+-- "manual" an outside editor writes) and the file itself stay.
+local mixed = { enabled = true, entries = {
+    hand = { en = "One", hash = "h3", text = "手写的" },
+    typed = { en = "Two", hash = "h3", text = "也是手写的", src = "manual" },
+    machine = { en = "Three", hash = "h5", text = "机器写的", src = "deepl" },
+    parked = { en = "Four", hash = "h4", refused_by = "bing", refusals = 3 },
+    stale = { en = "Five", hash = "h4", text = "新的机翻", src = "local_base", text_prev = "以前手写的" },
+} }
+local removed, kept = store.drop_machine_entries(mixed)
+check("clearing drops the machine entries and the refusals", removed, 3)
+check("and keeps the hand written ones", kept, 2)
+check("a hand written entry survives", mixed.entries.hand and mixed.entries.hand.text, "手写的")
+check("an editor's 'manual' entry survives too", mixed.entries.typed and mixed.entries.typed.text, "也是手写的")
+check("an engine's entry goes", mixed.entries.machine, nil)
+check("a refusal record goes with it", mixed.entries.parked, nil)
+-- A rewritten entry (stale hand text kept in text_prev) is the engine's now: it goes, and the comment
+-- in store.lua says why - restoring a translation for a source text it no longer matches is worse.
+check("and so does one an engine rewrote", mixed.entries.stale, nil)
+
+local only_machine = { enabled = true, entries = {
+    a = { en = "One", hash = "h3", text = "机翻", src = "deepl" },
+} }
+check("a file with nothing hand written keeps nothing", select(2, store.drop_machine_entries(only_machine)), 0)
+check("which is how the caller decides to remove the file", only_machine.entries.a, nil)
+check("an empty table is not a failure", select(1, store.drop_machine_entries({})), 0)
+check("and neither is a missing one", select(1, store.drop_machine_entries(nil)), 0)
+
+-- ---- 7) a parked key still serializes without a marker, and stays machine territory -------------
 local parked = { enabled = true, entries = { r = { en = "Bad", hash = "h3", refused_by = "bing", refusals = 3 } } }
 text = store.serialize("some_mod", "zh-cn", parked)
 check_true("a refusal keeps its bookkeeping", contains(text, 'refused_by = "bing"') and contains(text, "refusals = 3"))

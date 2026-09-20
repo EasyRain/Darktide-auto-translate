@@ -303,6 +303,11 @@ return {
                         function_name = "open_translation_folder",
                     },
                     {
+                        -- Machine work only: a hand written entry is protected everywhere else in
+                        -- the mod, so this button keeps the files that still hold one. The tooltip
+                        -- (`clear_cache_description`, which DMF resolves from the setting id) says
+                        -- so, because a kept entry is exactly the one thing the player has to
+                        -- delete themselves.
                         setting_id = "clear_cache",
                         type = "button",
                         button_text = "clear_cache",

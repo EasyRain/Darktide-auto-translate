@@ -94,7 +94,7 @@ sub-widgets of that dropdown: DMF hides all ten under `DeepL` and shows them the
 | Translation status | Maintenance | Shows the run's state (also the progress line's source). |
 | Reload translation files | Maintenance | Re-scan and re-inject without restarting. |
 | Open translation folder | Maintenance | Opens `translations/<language>/` in Explorer: one plain-Lua file per mod, to fix a line by hand or hand the files to something else. Fix what you like, put the result back and press *Reload translation files*. |
-| Clear local translations | Maintenance | Deletes the local library files. |
+| Clear local translations | Maintenance | Throws away the translations an engine wrote; they are rebuilt when next needed. Hand written entries and the files holding them are kept — the mod never deletes those, so delete a line in the file yourself (the tooltip says so too). |
 | Test the glossary | Maintenance | Reports how many terms are loaded and which are missing. |
 | Collect terms | Maintenance | Writes the game's own wording for the collected keys into `translations/export/`. Off by default: switch it on for a collection round and off afterwards. Turning it on collects straight away, so no restart is needed. |
 | Debug logging | Maintenance | Verbose `[AT]` logging. |
@@ -989,7 +989,7 @@ load, and a missing export only shows up when the game calls it:
 ```
 python tools\lua_syntax_check.py                 # parses all 15 files, runs nothing
 python tools\check_exports.py                    # every at_* name in the Lua CDEF exists in the DLL
-python tools\check_localization.py               # 134 keys × 12 languages
+python tools\check_localization.py               # 138 keys × 12 languages
 luajit tools\smoke_online.lua                    # loads modules/online.lua with stubs, runs 262 assertions
 luajit tools\smoke_export.lua                    # the string-cache harvest: what it keeps, drops and rewrites
 luajit tools\smoke_store.lua                     # hand-written vs machine markers in a translation file

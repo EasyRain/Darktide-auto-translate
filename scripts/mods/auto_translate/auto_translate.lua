@@ -657,21 +657,46 @@ function mod.open_translation_folder()
     util.popup(mod, "open_folder_failed", full)
 end
 
+-- Mod options: "Clear machine translations".
+--
+-- The button throws away what an engine wrote and has it redone ("rebuilt on demand"). It must not
+-- be the one path in the mod that destroys the player's own text: a hand written entry is protected
+-- everywhere else (modules/store.lua), so a file that still holds one is rewritten with just those,
+-- and only a file that holds none is removed - which is what this used to do to every file.
+--
+-- A file the player disabled (`enabled = false`) or one that does not parse is left completely
+-- alone: both are the player's own state, and deleting an unreadable file would silently discard
+-- text nobody can get back.
 function mod.clear_cache()
     local oslib = (Mods and Mods.lua and Mods.lua.os) or os
     local lang = current_lang()
     online.stop(mod)
     online.forget_cache()
     local report = scanner.scan(mod, lang)
-    local removed = 0
+    local removed_files, kept_files, removed_entries, kept_entries, skipped_files = 0, 0, 0, 0, 0
     for _, entry in ipairs(report.mods) do
         local path = store.path_for(entry.name, lang)
         if util.file_exists(path) then
-            pcall(oslib.remove, path)
-            removed = removed + 1
+            local data = store.load(entry.name, lang)
+            if type(data) ~= "table" or data.enabled == false then
+                skipped_files = skipped_files + 1
+            else
+                local removed, kept = store.drop_machine_entries(data)
+                if kept == 0 then
+                    pcall(oslib.remove, path)
+                    removed_files = removed_files + 1
+                else
+                    store.save(entry.name, lang, data)
+                    kept_files = kept_files + 1
+                end
+                removed_entries = removed_entries + removed
+                kept_entries = kept_entries + kept
+            end
         end
     end
-    util.info(mod, "cleared %d translation file(s) for '%s'; they will be rebuilt on demand", removed, lang)
+    util.info(mod, "cleared %d machine translation(s) for '%s': %d file(s) removed, %d kept with %d hand written entr(ies)%s",
+        removed_entries, lang, removed_files, kept_files, kept_entries,
+        skipped_files > 0 and string.format(", %d file(s) left alone (disabled or unreadable)", skipped_files) or "")
 end
 
 -- Mod options: "Delete the model files".

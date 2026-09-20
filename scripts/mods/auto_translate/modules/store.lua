@@ -63,6 +63,25 @@ local function normalize(data)
     return data
 end
 
+-- Does this entry carry text at all?
+local function entry_has_text(entry)
+    return type(entry) == "table" and type(entry.text) == "string" and entry.text ~= ""
+end
+
+-- Is this entry hand written, ignoring the file level flag? One rule, used by the two things that
+-- ask the question - is_manual() when a translation comes back, and drop_machine_entries() when the
+-- player asks for the machine work to be thrown away - so "Clear machine translations" can never
+-- delete what is_manual() calls the player's.
+local function entry_is_manual(entry)
+    if type(entry) ~= "table" then
+        return false
+    end
+    if entry.src == "manual" then
+        return true
+    end
+    return (entry.src == nil or entry.src == "") and entry_has_text(entry)
+end
+
 -- Is this entry protected from machine translation?
 --
 -- No marker at all means hand written: that is the format the file header documents (`{ text = "…" }`),
@@ -73,14 +92,7 @@ local function is_manual(data, entry)
     if data and data.manual == true then
         return true
     end
-    if type(entry) ~= "table" then
-        return false
-    end
-    if entry.src == "manual" then
-        return true
-    end
-    return (entry.src == nil or entry.src == "")
-        and type(entry.text) == "string" and entry.text ~= ""
+    return entry_is_manual(entry)
 end
 
 -- Returns true when the entry carries a machine marker (the value to write back to the file).
@@ -359,6 +371,36 @@ function M.count(data)
         end
     end
     return n
+end
+
+-- Throws away everything an engine wrote and keeps the hand written entries. Returns how many
+-- entries were dropped and how many were kept; the caller decides what to do with a file whose kept
+-- count is zero (the mod's "Clear machine translations" button removes it).
+--
+-- This exists because "clear the translations" must not be the one path in the mod that destroys a
+-- player's own text: everywhere else a hand written entry is protected (set_entry), and the button's
+-- job is to have the *machine* work redone. The rule is exactly the one set_entry uses, so an entry
+-- an outside editor marked `src = "manual"` counts as hand written here too. A parked key (a refusal
+-- record) has no text and no marker, and it *is* machine bookkeeping - it goes, or a cleared key
+-- would stay parked for the engine that gave up on it.
+--
+-- An entry that an engine rewrote keeps its old hand written text in `text_prev`, and that goes with
+-- the machine entry: the entry as a whole is the engine's now, and restoring a translation for a
+-- source text it no longer matches would be worse.
+function M.drop_machine_entries(data)
+    if type(data) ~= "table" or type(data.entries) ~= "table" then
+        return 0, 0
+    end
+    local removed, kept = 0, 0
+    for key, entry in pairs(data.entries) do
+        if entry_is_manual(entry) and entry_has_text(entry) then
+            kept = kept + 1
+        else
+            data.entries[key] = nil
+            removed = removed + 1
+        end
+    end
+    return removed, kept
 end
 
 -- ---------------------------------------------------------------------------
