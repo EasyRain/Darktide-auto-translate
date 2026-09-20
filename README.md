@@ -627,6 +627,18 @@ return {
   nothing is invented. Only verified wording is shipped (currently zh-cn / zh-tw / ja / ko for
   the mechanics terms, and zh-cn / zh-tw for class names); missing languages are welcome as
   reliable sources appear (official localisation mods, localised wiki pages).
+* **A mod UI names the breed, not its faction.** The game only localises the full name ("Scab
+  Mauler"), so a string that says just "Mauler" — a highlight option reads `Enable Crusher/Mauler
+  Aggro Glow` — used to go to the engine: measured, that came back as 启用粉碎者/猛击者·激进·光辉,
+  with Crusher protected and Mauler not, and `Captain / Twins` as 队长 / 双生. The `SHORT_BREEDS`
+  block in the script adds the breed word on its own, taking the value from the game's own generic
+  breed name where there is one (`loc_breed_berzerker_generic_name` = "Ragers" = 狂暴者) and
+  otherwise the official name minus the faction word the source leaves out (Scab Mauler 血痂重锤兵 →
+  重锤兵). A breed list writes the plural too ("Maulers, Crushers and Bulwarks"), so the plural is a
+  second spelling with the same value; the plural of a *full* official name is still left to the
+  engine, because several target languages inflect it (ru Дробитель / Дробители). `Captain` (连长,
+  the Chinese client's wording for the boss) and `Twins` (双子, the community's — the game leaves the
+  Karnak twins' names untranslated) are in that block for the same reason.
 * Use **Test glossary** in the options to see masking/restoring in the log.
 * A space a service leaves next to a placeholder is removed when it would end up **between two Han
   or kana characters**: a placeholder reads to a service as a Latin-shaped token, so `Show decimals`
@@ -667,7 +679,8 @@ luajit tools\check_glossary.lua                   # load it and exercise masking
 It reads the game's own localisation exports (`translations/export/<lang>.lua`), carries over
 values the current exports no longer have (Ukrainian, which the game never shipped), and adds the
 hand-verified blocks for the wording the game has no string for: core mechanics, general UI
-labels, language names and autonyms. Editing the generated file by hand is lost on the next run,
+labels, language names, autonyms and the short breed names a mod UI writes (`SHORT_BREEDS`).
+Editing the generated file by hand is lost on the next run,
 and `check_glossary.lua` is what proves the result still masks what it should — including that a
 term in another script is not matched inside a longer run of that script, and that a term ending
 in punctuation ("Chinese (Simplified)") is not eaten by its shorter prefix.
@@ -848,13 +861,22 @@ return {
   normal and intended. (There is deliberately no option to override this.)
 * The `src` marker is what separates the two kinds of text: **an entry with no `src` is hand
   written** and a machine translation never overwrites it while its source text is unchanged;
-  one with `src` says which engine wrote it, and it is also that entry's history.
+  one with `src` says which engine wrote it, and it is also that entry's history. `src` is
+  **bookkeeping, not a setting**: writing it on every entry marks nothing as hand written (that is
+  what `manual` is for) and throws away the record of which lines a machine wrote. The first file a
+  player handed to an AI came back with `src = "manual"` on all 80 entries; the mod still treats
+  those as hand written, which is why the file header now spells all of this out.
+* Every file carries that explanation in its own header, including a line addressed to an AI editor
+  — edit `text` only, and keep Warhammer 40,000: Darktide's official terminology exactly as the game
+  shows it. The file is what gets handed to someone else, so the documentation lives in it.
 * `manual = true` is an **instruction, not a state**: on the next start the mod reads it as
-  "every entry in this file has been checked by hand", removes the engine markers from all of
-  them, writes the file back and puts the flag to `false` again - so nobody deletes markers
-  entry by entry. Set it again whenever the same treatment is wanted. `manual` does **not**
-  skip the mod: the file is still read and validated on every launch, and keys a mod update
-  adds (or whose source changed) are queued for translation as usual.
+  "every entry in this file has been checked by hand", removes the `src` line from all of them
+  (whatever it says — an engine name, or `"manual"` as an outside editor writes it), writes the
+  file back and puts the flag to `false` again — so nobody deletes markers
+  entry by entry. The file is written back even when there was nothing left to remove, so the flag
+  cannot stay armed for the next start. Set it again whenever the same treatment is wanted. `manual`
+  does **not** skip the mod: the file is still read and validated on every launch, and keys a mod
+  update adds (or whose source changed) are queued for translation as usual.
 * When a hand written entry goes out of date, the fresh translation is stored, the old text is
   kept next to it as `text_prev`, and that one entry gets a `src` again - which is how a file
   shows at a glance what is still yours and what the engine rewrote.
@@ -924,6 +946,18 @@ refused` accounts for all 41), and a stored answer always names where it came fr
 is what tells a later run whether a human or an engine wrote it.
 
 ## Testing without launching the game
+
+`tools\run_checks.ps1` runs every check on this page, one command, with a timing per check:
+
+```
+powershell -File tools\run_checks.ps1                 # all of them; ~1 s of real work
+powershell -File tools\run_checks.ps1 -List           # what is in the list
+powershell -File tools\run_checks.ps1 -Only store,glossary
+powershell -File tools\run_checks.ps1 -Skip core,fixtures
+```
+
+It adds nothing to what the checks assert (each one is still the reference); it exits 0 only when
+all of them passed, which is what makes "everything is green" one line instead of thirteen.
 
 `src/at_core.c` builds a native core (`bin/at_core.dll`) plus a command line front end
 (`bin/at_cli.exe`), so the networking/translation core can be exercised on its own. Build both
