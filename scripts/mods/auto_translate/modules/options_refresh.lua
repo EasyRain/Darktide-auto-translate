@@ -207,6 +207,42 @@ function M.install_hook(mod)
     return true
 end
 
+-- Renaming a category has to take DMF's own copies with it.
+--
+-- DMF builds the category list and then stamps each setting it owns with the category's display name
+-- (`template.category = category.display_name`, mod_options.lua:756 - the same for the mod toggles at
+-- :732), and whenever the screen opens it looks every setting's category up BY THAT STRING
+-- (`categories[setting.category].settings[...]`, dmf_options_view.lua:250 _map_validations, reached
+-- from on_enter:211 - after this module's build hook has run).
+--
+-- A category renamed on its own therefore leaves every one of its settings pointing at a name no
+-- category has, and the settings screen dies with "attempt to index a nil value" the moment it is
+-- opened. That is the crash Nexus reported on 0.2.3 and 0.2.4: the label was re-localised (or
+-- restored to the author's language when the switch is off) and the snapshots were not. The two have
+-- to move together - which is also why this is one function used by both the template patch and the
+-- on-screen patch, whose category entries are the very same tables.
+--
+-- Returns whether the rename happened and how many settings moved with it.
+local function rename_category(templates, category, title)
+    local old = type(category) == "table" and category.display_name or nil
+    if type(old) ~= "string" or type(title) ~= "string" or title == "" or title == old then
+        return false, 0
+    end
+    category.display_name = title
+
+    local moved = 0
+    local settings = type(templates) == "table" and templates.settings or nil
+    if type(settings) == "table" then
+        for _, setting in ipairs(settings) do
+            if type(setting) == "table" and setting.category == old then
+                setting.category = title
+                moved = moved + 1
+            end
+        end
+    end
+    return true, moved
+end
+
 -- The left-hand list as it is being drawn right now.
 --
 -- The category rows are widgets built at on_enter out of the name copies, and the label is baked into
@@ -225,6 +261,7 @@ function M.reapply_live(mod, view)
     end
 
     local updated = 0
+    local settings_moved = 0
     for i = 1, #rows do
         local row = rows[i]
         local entry = type(row) == "table" and row.entry or nil
@@ -233,13 +270,16 @@ function M.reapply_live(mod, view)
         -- The toggle-mods category has no mod_name: it is DMF's own row and keeps its own wording.
         if type(target) == "table" and type(target.localize) == "function" then
             local title = mod_name_in(name, target, entry.display_name)
-            if title and entry.display_name ~= title then
-                entry.display_name = title
+            -- rename_category, not a plain assignment: the live entry *is* the template category, so
+            -- the settings' category snapshots have to follow here too (see the function).
+            local renamed, moved = rename_category(view._options_templates, entry, title)
+            if renamed then
                 local widget = row.widget
                 if type(widget) == "table" and type(widget.content) == "table" then
                     widget.content.text = title
                 end
                 updated = updated + 1
+                settings_moved = settings_moved + moved
             end
         end
     end
@@ -513,6 +553,7 @@ function M.reapply_templates(mod, view, quiet)
     end
 
     local updated = 0
+    local settings_moved = 0
     local categories, toggles, sample = 0, 0, nil
     local function assign(target, field, value)
         if value and target[field] ~= nil and target[field] ~= value then
@@ -542,7 +583,13 @@ function M.reapply_templates(mod, view, quiet)
         if category.mod_name and not sample then
             sample = category
         end
-        assign(category, "display_name", title)
+        -- The name goes through rename_category, which moves the settings' category snapshots with it;
+        -- the description is not a lookup key anywhere, so a plain assignment is enough.
+        local renamed, moved = rename_category(templates, category, title)
+        if renamed then
+            updated = updated + 1
+            settings_moved = settings_moved + moved
+        end
         assign(category, "description", description)
     end
 
@@ -560,6 +607,32 @@ function M.reapply_templates(mod, view, quiet)
         end
     end
 
+    -- A last look at DMF's precondition (see rename_category): every setting has to point at a category
+    -- that exists, because dmf_options_view looks them up by that name a few lines later in its own
+    -- on_enter and dies with "attempt to index a nil value" when one does not. Renaming keeps the two
+    -- in step, so this is expected to be zero - it is here to name the culprit if some *other* mod ever
+    -- leaves an orphan behind, rather than leaving the player with nothing but DMF's error.
+    local known = {}
+    for _, category in ipairs(templates.categories or {}) do
+        if type(category) == "table" and type(category.display_name) == "string" then
+            known[category.display_name] = true
+        end
+    end
+    local orphans, first_orphans = 0, {}
+    for _, setting in ipairs(templates.settings or {}) do
+        if type(setting) == "table" and not known[setting.category] then
+            orphans = orphans + 1
+            if #first_orphans < 3 then
+                first_orphans[#first_orphans + 1] = string.format("%s (category %s)",
+                    tostring(setting.setting_id or setting.search_id), tostring(setting.category))
+            end
+        end
+    end
+    if orphans > 0 then
+        util.info(mod, "settings screen: %d row(s) point at a category DMF does not have - %s",
+            orphans, table.concat(first_orphans, ", "))
+    end
+
     -- The first three builds always report, changed or not: "0 patched" on a fresh build says the list
     -- was already right, while no line at all says the build never happened - and telling those two
     -- apart is the whole question when a player reports that the list did not follow.
@@ -570,8 +643,8 @@ function M.reapply_templates(mod, view, quiet)
         local name = sample and (sample.mod_name or sample.search_id) or "-"
         local target = name ~= "-" and dmf.mods and dmf.mods[name] or nil
         local resolved = type(target) == "table" and mod_name_in(target) or nil
-        util.info(mod, "settings screen build: %d categor%s, %d mod toggle(s), %d patched; sample %s: shown=%s, localize(name key)=%s, readable=%s",
-            categories, categories == 1 and "y" or "ies", toggles, updated, tostring(name),
+        util.info(mod, "settings screen build: %d categor%s, %d mod toggle(s), %d patched, %d row(s) re-homed; sample %s: shown=%s, localize(name key)=%s, readable=%s",
+            categories, categories == 1 and "y" or "ies", toggles, updated, settings_moved, tostring(name),
             tostring(sample and sample.display_name), tostring(resolved),
             tostring(type(target) == "table" and target.get_readable_name and target:get_readable_name() or nil))
     end

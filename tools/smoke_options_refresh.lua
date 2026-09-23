@@ -337,6 +337,82 @@ check("the row follows the switch anyway", refresh.reapply_live(nil, odd_view), 
 check("to the source name", odd_view._category_data[1].widget.content.text, "Unlock UI FPS")
 check("and the cached key is reused", refresh.name_keys.odd_mod, "mod_pretty_name")
 
+-- ---- 10) a renamed category takes DMF's category snapshots with it ------------------------------
+-- DMF stamps every setting it owns with the category's display name (`template.category =
+-- category.display_name`, mod_options.lua:756) and, when the screen opens, looks each setting's
+-- category up BY THAT STRING (`categories[setting.category].settings[...]`, dmf_options_view.lua:250
+-- _map_validations). Renaming the category alone therefore left every snapshot pointing at a name no
+-- category had, and the settings screen died with "attempt to index a nil value" - the crash Nexus
+-- reported on 0.2.3 and 0.2.4.
+local function dmf_can_map_every_setting(view)
+    local templates = view._options_templates or {}
+    local by_display_name = {}
+    for _, category in ipairs(templates.categories or {}) do
+        by_display_name[category.display_name] = { settings = {} }
+    end
+    for _, setting in ipairs(templates.settings or {}) do
+        if not by_display_name[setting.category] then
+            return false, tostring(setting.category)
+        end
+    end
+    return true
+end
+
+local snap_view = {
+    _options_templates = {
+        categories = {
+            { mod_name = "some_mod", display_name = "Ability Timer", description = "HUD countdown timer." },
+            -- A second category with no mod behind it: its settings must not move when the first one is
+            -- renamed (and `wording` finds no name for it, so it is not renamed either).
+            { mod_name = "unlisted_mod", display_name = "Some Other Mod" },
+            -- DMF's own toggle-mods page, which every mod toggle belongs to.
+            { display_name = "Toggle Mods", is_toggle_mods_category = true },
+        },
+        settings = {
+            { type = "mod_toggle", search_id = "quiet_mod", display_name = "Ability Timer", tooltip_text = "HUD countdown timer.", category = "Toggle Mods" },
+            { setting_id = "bar_color", display_name = "Bar Color", category = "Ability Timer" },
+            { setting_id = "bar_width", display_name = "Width", category = "Ability Timer" },
+            { setting_id = "unrelated", display_name = "Other", category = "Some Other Mod" },
+        },
+    },
+}
+check("the fixture is DMF shaped to begin with", dmf_can_map_every_setting(snap_view), true)
+
+lang = "zh-cn"
+refresh.reapply_templates(nil, snap_view)
+check("the category is renamed", snap_view._options_templates.categories[1].display_name, "技能计时器")
+check("and DMF can still map every setting", dmf_can_map_every_setting(snap_view), true)
+check("its settings point at the new name",
+    snap_view._options_templates.settings[2].category, "技能计时器")
+check("the second one too", snap_view._options_templates.settings[3].category, "技能计时器")
+check("another category's setting is left alone",
+    snap_view._options_templates.settings[4].category, "Some Other Mod")
+
+lang = "en"
+refresh.reapply_templates(nil, snap_view)
+check("restoring the source language keeps it map-able", dmf_can_map_every_setting(snap_view), true)
+check("and the settings followed back", snap_view._options_templates.settings[2].category, "Ability Timer")
+
+-- The live patch renames the same category tables (DMF's `_category_data[i].entry` *is* the template
+-- category), so it has to keep them consistent too - this is the path a player takes by flipping the
+-- switch with the screen open.
+local live_category = { mod_name = "some_mod", display_name = "Ability Timer" }
+local live_templates = {
+    categories = { live_category },
+    settings = { { setting_id = "bar_color", display_name = "Bar Color", category = "Ability Timer" } },
+}
+local live_snap_view = {
+    _options_templates = live_templates,
+    _category_data = {
+        { entry = live_category, widget = { content = { text = "Ability Timer" } } },
+    },
+}
+lang = "zh-cn"
+check("the live row is patched", refresh.reapply_live(nil, live_snap_view), 1)
+check("and its settings moved with it", dmf_can_map_every_setting(live_snap_view), true)
+check("to the translated name", live_templates.settings[1].category, "技能计时器")
+check("while the row shows it", live_snap_view._category_data[1].widget.content.text, "技能计时器")
+
 print("")
 if failures > 0 then
     print(string.format("%d FAILURE(S)", failures))
