@@ -116,6 +116,32 @@ check("text_is_safe(short but complete)",
 check("text_is_safe(label unaffected)",
     online.text_is_safe("Ammo", "彈"), true)
 
+-- Two strings the real service translated *completely* and the flat quarter-of-the-source rule
+-- refused on 2026-09-24 (BetterBots, both never stored, so both showed English in game). Measured
+-- against the live endpoint: 17 characters for 72 (23.6%) and 7 for 30 (23.3%). The bar is a sixth
+-- for the compacting targets (zh-cn/zh-tw/ja/ko) now and a quarter for everything else, so the
+-- truncation above (12.8%) is still refused while these two are accepted.
+check("text_is_safe(complete but compact, 23.6%)",
+    online.text_is_safe("Stops several bots from using the same kind of ability at the same time.",
+                        "阻止多个机器人同时使用同一种技能。", "zh-cn"), true)
+check("text_is_safe(complete but compact, 23.3% and exactly at the exemption edge)",
+    online.text_is_safe("Health stations and med-crates", "医疗站和医疗箱", "zh-cn"), true)
+check("the same two as ja/ko are compacting targets too",
+    online.text_is_safe("Health stations and med-crates", "医療ステーションと医療箱", "ja"), true)
+-- Outside those targets the quarter still holds: the *same* strings that pass for zh-cn are refused
+-- for a Latin target, because a Latin answer that keeps a quarter of the source dropped content.
+check("a non-compacting target keeps the quarter",
+    online.text_is_safe("Health stations and med-crates", "医疗站和医疗箱", "de"), false)
+check("and one that only dropped a little, too",
+    online.text_is_safe("Health stations and med-crates", "Kits", "de"), false)
+check("and the truncation is refused for a compacting target as well",
+    online.text_is_safe(long_en, "請與此相關的好奇心相匹配,", "zh-cn"), false)
+-- The reason says characters and names the target: it used to print byte counts as "characters",
+-- so a 17-character Chinese answer read as "51 characters for 72".
+check("the refusal reason counts characters, not bytes",
+    (select(2, online.text_is_safe(long_en, "請與此相關的好奇心相匹配,", "zh-cn"))):find("13 of 97 characters", 1, true) ~= nil,
+    true)
+
 -- ---------------------------------------------------------------------------
 -- Batching short strings (the offline engine's answer to "a lone label has no
 -- context": measured, "Right" alone came back as "這樣的情況", while the same word

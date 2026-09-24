@@ -297,25 +297,50 @@ end
 -- A translation that keeps only a fraction of the source is not a translation.
 --
 -- The offline model truncates: "Match curios whose Health blessing is at least this
--- percent (max roll 21). 0 disables this check." (102 characters) came back as
+-- percent (max roll 21). 0 disables this check." (97 characters) came back as
 -- "請與此相關的好奇心相匹配," (13), with "curios" read as "curiosity" - two thirds of the
 -- sentence simply gone, and nothing above noticed because the format-specifier check
 -- has nothing to compare when the source carries no specifiers.
 --
--- The bar is deliberately low, because Chinese, Japanese and Korean are far more
--- compact than English: a fourth of the character count means content was dropped, not
--- that the target language is concise. Short strings are exempt - a label is short by
--- nature - which is also why this cannot replace the guards above.
-local function too_short(source, translated)
+-- The bar depends on where the text is going, because the compaction is the target language's:
+-- Chinese, Japanese and Korean are far more compact than English, so a *complete* Chinese
+-- sentence regularly lands at a fifth to a quarter of the English character count. Measured
+-- against the real service on two BetterBots strings:
+--
+--     "Stops several bots from using the same kind of ability at the same time."  (72)
+--         -> "阻止多个机器人同时使用同一种技能。"                                (17)  23.6%
+--     "Health stations and med-crates"                                            (30)
+--         -> "医疗站和医疗箱"                                                     (7)  23.3%
+--
+-- Both complete and correct, and both were refused by the flat quarter-of-the-source rule
+-- that used to be here - which is also why one of them (`healing_deferral_mode_...`, exactly
+-- 30 characters) slipped past the short-string exemption below. A sixth is the bar for those
+-- targets now; the truncation above is 13.4% and still refused, and a Latin target that drops
+-- to 23.3% is still refused as well.
+--
+-- Short strings are exempt either way - a label is short by nature - which is also why this
+-- cannot replace the guards above.
+local CJK_TARGETS = {
+    ["zh-cn"] = true,
+    ["zh-tw"] = true,
+    ja = true,
+    ko = true,
+}
+
+-- A sixth of the source for the compacting targets, a quarter for everyone else.
+local function too_short(source, translated, lang)
     local source_chars = char_count(source)
     if source_chars < 30 then
         return false
     end
-    return char_count(translated) * 4 < source_chars
+    local divisor = CJK_TARGETS[lang] and 6 or 4
+    return char_count(translated) * divisor < source_chars
 end
 
 -- Returns true when the translation is safe to store, or false plus a reason.
-function M.text_is_safe(source, translated)
+-- `lang` is the target language: the length bar depends on it (see too_short). It is optional so
+-- that callers which only guard the format specifiers can still call this with two arguments.
+function M.text_is_safe(source, translated, lang)
     if type(source) ~= "string" or type(translated) ~= "string" or translated == "" then
         return false, "empty translation"
     end
@@ -324,9 +349,12 @@ function M.text_is_safe(source, translated)
         return false, "the model could not represent part of the text (unknown tokens)"
     end
 
-    if too_short(source, translated) then
-        return false, string.format("the translation dropped most of the text (%d characters for %d)",
-                                    #translated, #source)
+    if too_short(source, translated, lang) then
+        -- Characters, not bytes: the message used to print '#' (bytes), so a 17-character
+        -- Chinese answer for a 72-character sentence read as "51 characters for 72" and looked
+        -- like a mild shortening instead of the fifth it is.
+        return false, string.format("the translation dropped most of the text (%d of %d characters, target %s)",
+                                    char_count(translated), char_count(source), tostring(lang or "?"))
     end
 
     local src_counts, src_total = scan_format(source)
@@ -1857,7 +1885,7 @@ function accept_translation(mod, req, raw, src)
         return true
     end
 
-    local safe, why = M.text_is_safe(item.en, restored)
+    local safe, why = M.text_is_safe(item.en, restored, M.state.lang)
     if not safe then
         return false, why, false, "unsafe"
     end
@@ -2328,7 +2356,7 @@ local function batch_part_refusal(item, masked, part, tokens)
     if restored == masked then
         return "the batch left it unchanged"
     end
-    local safe, why = M.text_is_safe(item.en, restored)
+    local safe, why = M.text_is_safe(item.en, restored, M.state.lang)
     if not safe then
         return why
     end
