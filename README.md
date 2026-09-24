@@ -1008,6 +1008,7 @@ python tools\check_localization.py               # 138 keys × 12 languages
 luajit tools\smoke_online.lua                    # loads modules/online.lua with stubs, runs 262 assertions
 luajit tools\smoke_export.lua                    # the string-cache harvest: what it keeps, drops and rewrites
 luajit tools\smoke_store.lua                     # hand-written vs machine markers in a translation file
+luajit tools\smoke_hud.lua                       # the progress HUD's line splitting (long warnings)
 luajit tools\smoke_injector.lua                  # merging into other mods' tables, and taking it back out
 luajit tools\smoke_options_refresh.lua           # option texts: translated, and back to the source language
 luajit tools\check_stores.lua [translations-dir] # the played-with stores: placeholders, markers, line breaks

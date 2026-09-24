@@ -29,6 +29,7 @@ $checks = @(
     @{ name = 'online';    hint = 'providers, batching, options tree';     cmd = { & $lua tools\smoke_online.lua } },
     @{ name = 'export';    hint = 'the string-cache harvest';              cmd = { & $lua tools\smoke_export.lua } },
     @{ name = 'store';     hint = 'hand written vs machine entries';       cmd = { & $lua tools\smoke_store.lua } },
+    @{ name = 'hud';       hint = 'the progress HUD splits long lines';    cmd = { & $lua tools\smoke_hud.lua } },
     @{ name = 'injector';  hint = 'merging into other mods, and back out'; cmd = { & $lua tools\smoke_injector.lua } },
     @{ name = 'options';   hint = 'option texts, translated and restored'; cmd = { & $lua tools\smoke_options_refresh.lua } },
     @{ name = 'glossary';  hint = 'the generated term table, end to end';  cmd = { & $lua tools\check_glossary.lua } },

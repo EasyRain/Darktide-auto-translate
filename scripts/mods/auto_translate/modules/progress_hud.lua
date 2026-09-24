@@ -38,6 +38,110 @@ local TEXT = { 255, 233, 236, 226 }
 local TEXT_DIM = { 210, 172, 178, 172 }
 local TEXT_WARN = { 255, 226, 138, 90 }
 
+-- One row of text at most this many rows tall, and how wide a row may be.
+--
+-- The engine wraps text inside the box it is given, but the cursor below only advances one row - so a
+-- line that wrapped drew over the next one. A player watching the warning line ("last error: the
+-- translation dropped most of the text (17 of 97 characters, target zh-cn)", about 90 characters)
+-- saw exactly that. The box is much wider now (it costs nothing visually: the text is right aligned,
+-- so only the wrap limit moves) and anything still too long is split here, so each row of ours is
+-- drawn on its own line and the cursor knows how much room it needs.
+--
+-- `budget` is in "Latin character widths": a Han, kana or Hangul glyph is about 1.8 of those in this
+-- font. Deliberately a little generous, so the engine has nothing left to wrap.
+local MAX_ROWS = 3
+
+local function char_at(text, i)
+    local b = text:byte(i)
+    if not b then
+        return nil, i + 1
+    end
+    local len = 1
+    if b >= 0xF0 then
+        len = 4
+    elseif b >= 0xE0 then
+        len = 3
+    elseif b >= 0xC0 then
+        len = 2
+    end
+    return text:sub(i, i + len - 1), i + len
+end
+
+local function row_weight(text)
+    local total, i = 0, 1
+    while i <= #text do
+        local ch
+        ch, i = char_at(text, i)
+        if not ch then
+            break
+        end
+        local b = ch:byte(1)
+        total = total + ((b and b >= 0xE0) and 1.8 or 1)
+    end
+    return total
+end
+
+local function split_line(text, budget)
+    text = tostring(text or "")
+    if text == "" or not budget or budget < 8 then
+        return { text }
+    end
+
+    local rows = {}
+    local row, weight, last_space = "", 0, nil
+    local i = 1
+    while i <= #text do
+        local ch
+        ch, i = char_at(text, i)
+        if not ch then
+            break
+        end
+        local b = ch:byte(1)
+        local cost = (b and b >= 0xE0) and 1.8 or 1
+        if ch == " " then
+            last_space = #row + 1
+        end
+
+        if weight + cost > budget and #row > 0 then
+            if last_space and last_space > 1 and last_space <= #row then
+                rows[#rows + 1] = (row:sub(1, last_space - 1):gsub("%s+$", ""))
+                row = row:sub(last_space + 1)
+                weight = row_weight(row)
+            else
+                rows[#rows + 1] = row
+                row = ""
+                weight = 0
+            end
+            last_space = nil
+        end
+
+        row = row .. ch
+        weight = weight + cost
+    end
+    row = row:gsub("%s+$", "")
+    if row ~= "" then
+        rows[#rows + 1] = row
+    end
+    if #rows == 0 then
+        rows[1] = text
+    end
+
+    -- A wall of text cannot be allowed to grow down the screen: keep the first rows and say so.
+    if #rows > MAX_ROWS then
+        local kept = {}
+        for n = 1, MAX_ROWS do
+            kept[n] = rows[n]
+        end
+        kept[MAX_ROWS] = kept[MAX_ROWS] .. "\226\128\166"   -- U+2026, byte-wise for Lua 5.1
+        rows = kept
+    end
+    return rows
+end
+
+function M.split_line_for_tests(text, budget)
+    return split_line(text, budget)
+end
+
 function M.init(m, u, o, d)
     mod = m
     util = u
@@ -198,7 +302,11 @@ local function draw(self, ui_renderer, input_service, dt, t)
 
     local font_size = math.floor(17 * scale + 0.5)
     local line_height = font_size + 4
-    local width = math.floor(330 * scale + 0.5)
+    -- Wide enough for a sentence, but never more than a share of the screen: the text is right
+    -- aligned, so widening the box changes where wrapping may happen and nothing else.
+    local width = math.max(math.floor(330 * scale + 0.5),
+        math.min(math.floor(screen_width * 0.6), math.floor(820 * scale + 0.5)))
+    local budget = math.floor(width / (font_size * 0.55))
 
     -- Top-right corner. It used to sit bottom-right, where it covered the ammo and
     -- weapon readouts; the top-right of the HUD is empty, so nothing is hidden.
@@ -222,13 +330,17 @@ local function draw(self, ui_renderer, input_service, dt, t)
 
         local cursor = y
         for _, line in ipairs(lines) do
-            text_pos[1] = x
-            text_pos[2] = cursor
-            text_box[1] = width
-            text_box[2] = line_height
-            UIRenderer.draw_text(ui_renderer, line.text, font_size, font, text_pos, text_box,
-                line.color, options)
-            cursor = cursor + line_height
+            -- Each row we break out is drawn as its own line, so the cursor below advances past it
+            -- and the engine has nothing left to wrap into the next one.
+            for _, row in ipairs(split_line(line.text, budget)) do
+                text_pos[1] = x
+                text_pos[2] = cursor
+                text_box[1] = width
+                text_box[2] = line_height
+                UIRenderer.draw_text(ui_renderer, row, font_size, font, text_pos, text_box,
+                    line.color, options)
+                cursor = cursor + line_height
+            end
         end
 
         UIRenderer.end_pass(ui_renderer)
