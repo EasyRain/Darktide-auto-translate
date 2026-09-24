@@ -163,7 +163,14 @@ local function compose(t)
     elseif status.cooldown and status.cooldown > 0 then
         lines[#lines + 1] = { text = mod:localize("hud_cooldown", status.cooldown), color = TEXT_WARN }
     elseif status.last_error then
-        lines[#lines + 1] = { text = mod:localize("hud_error", tostring(status.last_error)), color = TEXT_WARN }
+        -- The reason is an English sentence written for the log (it carries the numbers, and a
+        -- service's own sentence cannot be translated by us): the HUD says what it means in the
+        -- player's language, and the log keeps the exact wording. See online.reason_key.
+        local key = online and online.reason_key and online.reason_key(status.last_error)
+        lines[#lines + 1] = {
+            text = key and mod:localize(key) or mod:localize("hud_error", tostring(status.last_error)),
+            color = TEXT_WARN,
+        }
     else
         lines[#lines + 1] = { text = mod:localize("hud_finished", status.done or 0), color = TEXT_DIM }
     end

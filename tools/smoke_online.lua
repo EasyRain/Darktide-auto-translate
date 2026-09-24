@@ -1875,6 +1875,33 @@ do
         end
     end
     check("refusals: and the park says the source text is kept and marked", said_parked, true)
+
+    -- The HUD line used to show the English reason verbatim (that is written for the log: it carries
+    -- the numbers, and a service's sentence cannot be translated by us). What the player sees is now
+    -- a localization key, so it reads in their own language.
+    check("reason: a too-short refusal maps to its key",
+        online.reason_key("the translation dropped most of the text (17 of 97 characters, target zh-cn)"),
+        "hud_reason_too_short")
+    check("reason: placeholders (any of the three wordings)",
+        online.reason_key("format placeholder '%d' is missing or changed"), "hud_reason_placeholders")
+    check("reason: and the stray-percent one",
+        online.reason_key("translation has 2 stray '%' the source does not have"), "hud_reason_placeholders")
+    check("reason: placeholders that differ", online.reason_key("format placeholders differ (source 2, translation 1)"),
+        "hud_reason_placeholders")
+    check("reason: the glossary guard", online.reason_key("3 glossary term(s) were dropped by the service"),
+        "hud_reason_glossary")
+    check("reason: a batch left unchanged", online.reason_key("the batch left it unchanged"), "hud_reason_unchanged")
+    check("reason: the offline model", online.reason_key("offline model: the core refused the text"),
+        "hud_reason_model")
+    check("reason: an empty answer", online.reason_key("empty translation"), "hud_reason_empty")
+    check("reason: a missing key", online.reason_key("no API key"), "hud_reason_no_key")
+    check("reason: no provider left", online.reason_key("no usable provider left"), "hud_reason_no_provider")
+    -- A service's own sentence, or a WinHTTP error, has no translation here: it becomes the generic
+    -- line and the exact text stays in the log.
+    check("reason: a service sentence falls back to the generic line",
+        online.reason_key("Bad request. Reason: Value for 'source_lang' not supported."), "hud_error_generic")
+    check("reason: and so does a network error", online.reason_key("12029 cannot connect"), "hud_error_generic")
+    check("reason: nothing to say stays nothing", online.reason_key(nil), nil)
 end
 
 print(string.format("%d failure(s) in total", failures))

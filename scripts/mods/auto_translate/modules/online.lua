@@ -1514,6 +1514,9 @@ local function finish(mod, reason)
     if (M.state.parked or 0) > 0 then
         util.info(mod, "%d key(s) were parked: the engine refused them %d times, and their source text is stored in the translation files with a 'refused' marker - another engine picks them up again",
             M.state.parked, MAX_REFUSALS)
+        -- One notice per run, and it says the two things a player can do about it (the HUD line only
+        -- shows the count). The reasons stay in the log, in English, because they carry the numbers.
+        util.popup(mod, "refused_notice", M.state.parked)
     end
 
     -- One message per run, and it says what the player has to do: mod option texts
@@ -2107,6 +2110,42 @@ M.budget_refusal_for_tests = budget_refusal
 M.max_refusals = MAX_REFUSALS
 M.max_local_refusals = MAX_REFUSALS   -- the name the tests used while this was the offline model's alone
 M.is_fully_protected_for_tests = is_fully_protected
+
+-- Which localization key says what a refusal reason means, for the HUD line and the notices.
+--
+-- The reasons themselves are English sentences written for the log: they carry the numbers (how many
+-- characters, which placeholder) and, for a service, the sentence the service sent - which this mod
+-- cannot translate. So the player gets a short line in their own language and the log keeps the exact
+-- wording. Anything not recognised is one of those service or network messages.
+local REASON_KEYS = {
+    { "empty translation", "hud_reason_empty" },
+    { "the model could not represent", "hud_reason_unknown_tokens" },
+    { "the translation dropped most of the text", "hud_reason_too_short" },
+    { "stray '%'", "hud_reason_placeholders" },
+    { "format placeholder", "hud_reason_placeholders" },
+    { "glossary term", "hud_reason_glossary" },
+    { "the batch left it unchanged", "hud_reason_unchanged" },
+    { "offline model", "hud_reason_model" },
+    { "the offline engine refused", "hud_reason_model" },
+    { "no API key", "hud_reason_no_key" },
+    { "no usable provider", "hud_reason_no_provider" },
+}
+
+function M.reason_key(reason)
+    local text = tostring(reason or "")
+    if text == "" then
+        return nil
+    end
+    for _, entry in ipairs(REASON_KEYS) do
+        if text:find(entry[1], 1, true) then
+            return entry[2]
+        end
+    end
+    return "hud_error_generic"
+end
+
+-- The English reason behind a key, for the log lines that still want the detail.
+M.reason_keys_for_tests = REASON_KEYS
 -- The native core is loaded lazily and cannot be loaded outside the game (the DLL is x64 and
 -- the smoke test's ffi.load refuses), so the test button's whole request/reply path - the one
 -- whose reply was stranded because the collection was gated on a run being in progress - can
