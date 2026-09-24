@@ -884,6 +884,16 @@ return {
   whose source changed) are queued for translation as usual. What is *not* checked is the text
   itself — hand written or machine, it is injected as written — so placeholders, `%`-specifiers,
   line breaks and leftover `⟦⟧` markers are what `luajit tools\check_stores.lua` is for.
+* **A string an engine gave up on gets an entry of its own** instead of vanishing: after three
+  refusals — one budget, shared by the offline model, the API service and the keyless endpoints — the
+  entry is written with the *source* text as its `text`, `src` saying `refused`, and `refused_by` /
+  `refusals` recording who gave up and how often. Nothing is injected from it (the game shows the
+  source either way); it is there to be edited — write a translation into `text` and the markers go
+  on the next write, which turns the entry into a hand written one that machines leave alone.
+  Switching engine puts the key back in the queue for that engine, so a string the API services
+  cannot do is still tried by the offline model and the other way round. *Clear local translations*
+  removes these records, and so does `manual = true` — their text is the source, not a checked
+  translation.
 * When a hand written entry goes out of date, the fresh translation is stored, the old text is
   kept next to it as `text_prev`, and that one entry gets a `src` again - which is how a file
   shows at a glance what is still yours and what the engine rewrote.

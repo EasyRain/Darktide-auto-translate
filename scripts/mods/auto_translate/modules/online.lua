@@ -1120,7 +1120,7 @@ M.state = {
     skipped = 0,
     live = 0,
     unchanged = 0,
-    parked = 0,           -- keys the offline engine gave up on (see MAX_LOCAL_REFUSALS)
+    parked = 0,           -- keys the engine in use gave up on (see MAX_REFUSALS)
     last_error = nil,
 }
 
@@ -1512,8 +1512,8 @@ local function finish(mod, reason)
             M.state.unchanged)
     end
     if (M.state.parked or 0) > 0 then
-        util.info(mod, "%d key(s) were parked: the offline model refused them %d times, so they are left alone until another engine translates this language",
-            M.state.parked, MAX_LOCAL_REFUSALS)
+        util.info(mod, "%d key(s) were parked: the engine refused them %d times, and their source text is stored in the translation files with a 'refused' marker - another engine picks them up again",
+            M.state.parked, MAX_REFUSALS)
     end
 
     -- One message per run, and it says what the player has to do: mod option texts
@@ -2052,30 +2052,60 @@ end
 -- Written straight to the store (and marked dirty) so the budget survives a crash, a
 -- restart or a reload - a count that lived only in memory would be reset by exactly the
 -- events that make a player reload the translations.
-local function note_local_refusal(mod, item)
+local function note_refusal(mod, item)
     local data = data_for(item.mod_id, M.state.lang)
     local total = store.note_refusal(data, item.key, item.en, item.hash, M.state.engine)
     mark_dirty(item.mod_id, M.state.lang)
     return total
 end
 
--- How many times the offline model may refuse one string before the key is parked.
+-- How many times one engine may refuse one string before the key is parked for that engine.
 --
--- A refusal is a content problem: the same model asked the same way will answer the same
--- way, so the alternative to a budget is either retrying it on every launch forever or
--- dropping it silently. Three tries, then the refusal is written to the store
--- (store.note_refusal) and the scanner leaves the key alone *for that engine*: switching
--- to the API - or to the other model - picks it up again, which is exactly when a retry
--- can produce something better.
-local MAX_LOCAL_REFUSALS = 3
+-- A refusal is a content problem, and the answer to a content problem is the same on the next
+-- ask: the offline model is deterministic, and a service's wording for a string does not change
+-- between runs either. So the alternative to a budget is retrying on every launch forever (three
+-- requests per string, per run, for a service that already said no) or dropping it silently.
+--
+-- This used to be the offline model's alone: the API and the keyless endpoints counted a refusal
+-- and moved on, so the same strings were asked again on every single run - reported by a player
+-- whose two BetterBots strings were refused on every launch. Every engine spends the same budget
+-- now; switching engine (or service) picks the key up again, which is exactly when a retry can
+-- produce something better.
+local MAX_REFUSALS = 3
 
--- Whether the local engine should try this string again after `refusals` refusals.
+-- Whether the engine should try this string again after `refusals` refusals.
 local function retry_after_refusal(refusals)
-    return (tonumber(refusals) or 0) < MAX_LOCAL_REFUSALS
+    return (tonumber(refusals) or 0) < MAX_REFUSALS
+end
+
+-- Counts one refusal of `item` by the engine in use and decides what happens to it: back into the
+-- queue while the budget lasts, parked for this engine once it is spent. Returns true when the
+-- caller should stop handling the item (it has been put back).
+--
+-- The park writes the source text into the store with a marker (store.note_refusal), so the
+-- refusal is visible in the file and hand-editable; the scanner reads it and leaves the key to
+-- other engines.
+local function budget_refusal(mod, item, reason)
+    local refusals = note_refusal(mod, item)
+    if retry_after_refusal(refusals) then
+        util.info(mod, "%s:%s was refused (%d of %d) by '%s'; trying it again",
+            item.mod_id, item.key, refusals, MAX_REFUSALS, tostring(M.state.engine))
+        q_unshift(item)
+        return true
+    end
+
+    M.state.last_error = reason
+    M.state.refused = M.state.refused + 1
+    M.state.parked = (M.state.parked or 0) + 1
+    util.info(mod, "%s:%s refused %d times by '%s' (%s); parked, the source text is stored and marked",
+        item.mod_id, item.key, refusals, tostring(M.state.engine), tostring(reason))
+    return false
 end
 
 M.retry_after_refusal_for_tests = retry_after_refusal
-M.max_local_refusals = MAX_LOCAL_REFUSALS
+M.budget_refusal_for_tests = budget_refusal
+M.max_refusals = MAX_REFUSALS
+M.max_local_refusals = MAX_REFUSALS   -- the name the tests used while this was the offline model's alone
 M.is_fully_protected_for_tests = is_fully_protected
 -- The native core is loaded lazily and cannot be loaded outside the game (the DLL is x64 and
 -- the smoke test's ffi.load refuses), so the test button's whole request/reply path - the one
@@ -2193,24 +2223,16 @@ function fail_item(mod, req, reason, http_status, transport, code, quiet_provide
     -- model that is actually broken is caught in dispatch() (not ready -> finish), so
     -- this cannot spin forever.
     if req.kind == "local" then
-        -- Count the refusal (in the store, so it survives the run) and try again until the
-        -- budget is used up. What is *not* done any more is translating the string again
-        -- without the glossary masking: measured, that mostly traded a missing term for a
-        -- wrong script variant and lost the official terminology, and a refusal is the
-        -- honest outcome for a string this model cannot do.
-        local refusals = note_local_refusal(mod, item)
-        if retry_after_refusal(refusals) then
-            util.info(mod, "%s:%s was refused (%d of %d); trying it again",
-                item.mod_id, item.key, refusals, MAX_LOCAL_REFUSALS)
-            q_unshift(item)
-            return
-        end
-
-        M.state.last_error = reason
-        M.state.refused = M.state.refused + 1
-        M.state.parked = (M.state.parked or 0) + 1
-        util.info(mod, "%s:%s refused %d times by '%s' (%s); parked until another engine translates this language",
-            item.mod_id, item.key, refusals, tostring(M.state.engine), tostring(reason))
+        -- The offline engine has no provider to blame and no quota to respect, and what it does
+        -- with a string it cannot translate is the same thing every other engine does now: count
+        -- the refusal (in the store, so it survives the run), try again while the budget lasts,
+        -- then park the key with the source text kept as a marker.
+        --
+        -- What is *not* done any more is translating the string again without the glossary
+        -- masking: measured, that mostly traded a missing term for a wrong script variant and lost
+        -- the official terminology, and a refusal is the honest outcome for a string this model
+        -- cannot do.
+        budget_refusal(mod, item, reason)
         return
     end
 
@@ -2275,8 +2297,11 @@ function fail_item(mod, req, reason, http_status, transport, code, quiet_provide
             M.state.running = false
         end
     else
-        M.state.refused = M.state.refused + 1
-        util.info(mod, "refused %s:%s (%s)", item.mod_id, item.key, tostring(reason))
+        -- A refusal from a service (or any other engine): the answer arrived, and the guards said
+        -- no. Same budget as the offline model - three tries, then the key is parked for this
+        -- engine with its source text stored as the marker - instead of asking the same service
+        -- for the same string on every launch.
+        budget_refusal(mod, item, reason)
     end
 end
 

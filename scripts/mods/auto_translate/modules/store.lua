@@ -79,6 +79,12 @@ local function entry_is_manual(entry)
     if entry.src == "manual" then
         return true
     end
+    -- A refusal record (see note_refusal) keeps the *source* text as its `text`. When that text is
+    -- no longer the source, somebody replaced it by hand: that translation is theirs from then on
+    -- (a machine must not overwrite it, and the marker goes on the next write).
+    if entry.src == "refused" then
+        return entry_has_text(entry) and entry.text ~= entry.en
+    end
     return (entry.src == nil or entry.src == "") and entry_has_text(entry)
 end
 
@@ -101,6 +107,11 @@ local function machine_src(entry)
         return nil
     end
     local src = entry.src
+    if src == "refused" then
+        -- The marker means "this text is the source, kept because the engine refused the string".
+        -- Once the text is something else the player wrote it: hand written, and the marker goes.
+        return entry.text == entry.en and "refused" or nil
+    end
     if type(src) == "string" and src ~= "" and src ~= "manual" then
         return src
     end
@@ -115,14 +126,27 @@ end
 -- The state the header documents for a hand written entry is *no* src line, so leaving "manual"
 -- behind made the instruction look like it had done nothing - reported by a player whose file still
 -- had all 80 markers after flipping the flag.
+--
+-- A refusal record is the one entry the instruction *removes* rather than cleans: its `text` is the
+-- source string, not a translation, so "I have hand checked this file" cannot cover it, and keeping
+-- the English text as if it were hand written would freeze the key for ever. Dropping it puts the
+-- key back to pending, which is what a player asking to start over means.
 local function strip_markers(data)
     local stripped = 0
-    for _, entry in pairs(data.entries) do
-        if type(entry) == "table" and type(entry.src) == "string" and entry.src ~= "" then
+    local drop = nil
+    for key, entry in pairs(data.entries) do
+        if type(entry) == "table" and entry.src == "refused" then
+            drop = drop or {}
+            drop[#drop + 1] = key
+            stripped = stripped + 1
+        elseif type(entry) == "table" and type(entry.src) == "string" and entry.src ~= "" then
             entry.src = nil
             entry.text_prev_src = nil
             stripped = stripped + 1
         end
+    end
+    for _, key in ipairs(drop or {}) do
+        data.entries[key] = nil
     end
     return stripped
 end
@@ -166,6 +190,11 @@ local function header_lines(mod_id, lang)
         "--          marks nothing as hand written, it only throws away the record of which lines a",
         "--          machine wrote. Leave it alone (or use the flag above).",
         "--   ts     when the entry was last written, unix time. Informational.",
+        "--",
+        "-- An entry whose src line says `refused` is a string every engine has given up on (three",
+        "-- tries, counted in `refusals`): `text` is then the *source* text, not a translation, and the",
+        "-- entry stops being asked for. Another engine picks it up again, and if you write a",
+        "-- translation there yourself the markers go away and it counts as hand written from then on.",
         "--",
         "-- If this file is handed to an AI to improve the translations: edit `text` only, and keep",
         "-- Warhammer 40,000: Darktide's official terminology exactly as the game shows it - the game's",
@@ -293,6 +322,13 @@ function M.serialize(mod_id, lang, data)
             local src = machine_src(e)
             if src then
                 out[#out + 1] = "            src = " .. lua_quote(src) .. ","
+                -- A refusal record also carries who gave up and how often; without them the next
+                -- start would spend the budget again (and the file would not say why the text is
+                -- the source).
+                if src == "refused" and type(e.refused_by) == "string" and e.refused_by ~= "" then
+                    out[#out + 1] = "            refused_by = " .. lua_quote(e.refused_by) .. ","
+                    out[#out + 1] = "            refusals = " .. tostring(math.floor(tonumber(e.refusals) or 0)) .. ","
+                end
             end
             if tonumber(e.ts) and tonumber(e.ts) > 0 then
                 out[#out + 1] = "            ts = " .. tostring(math.floor(e.ts)) .. ","
@@ -342,10 +378,17 @@ function M.lookup(data, key, en, hash)
         return nil
     end
 
+    -- A refusal record keeps the source text so the entry is visible and hand-editable (see
+    -- note_refusal). It is not a translation, so nothing is served from it - unless the text is no
+    -- longer the source, which means the player replaced it: then it is a hand written entry.
+    if e.src == "refused" and e.text == e.en then
+        return nil, "refused by " .. tostring(e.refused_by or "?")
+    end
+
     -- No marker means hand written (see the file header): that is how the engine tells its own work
     -- from the player's, and it is what keeps a hand written entry from being overwritten.
     local src = e.src
-    if src == nil or src == "" then
+    if src == nil or src == "" or src == "refused" then
         src = "manual"
     end
 
@@ -470,8 +513,9 @@ end
 -- again by any other engine - which is what makes switching to the API redo the work
 -- instead of silently keeping the old result.
 --
--- The marker lives on an entry with no `text`, so lookup() keeps treating the key as
--- untranslated; only the scanner reads the marker, and only to decide "pending" versus
+-- The marker lives on the entry's `text`: a refusal keeps the *source* string there and marks it
+-- with `src = "refused"`, so the entry shows up in the file (and can be hand-edited) while lookup()
+-- still refuses to serve it. Only the scanner reads the marker, and only to decide "pending" versus
 -- "parked for the engine in use".
 -- ---------------------------------------------------------------------------
 
@@ -496,13 +540,22 @@ function M.note_refusal(data, key, en, hash, engine)
     entry.refusals = (tonumber(entry.refusals) or 0) + 1
     entry.en = en or entry.en
     entry.hash = hash or entry.hash
+    -- The source text is kept as the entry's `text` with `src = "refused"` saying it is not a
+    -- translation. That is what a player asked for: the refusal shows up in the file (the game shows
+    -- the English either way), the entry is there to hand-edit, and the pair of markers says who
+    -- gave up and how often. lookup() never serves it, so nothing is injected from it.
+    if type(entry.en) == "string" and entry.en ~= "" then
+        entry.text = entry.en
+        entry.src = "refused"
+    end
     entry.ts = now()
     return entry.refusals
 end
 
--- The engine that gave up on this key, or nil. Only reported while the entry has no
--- usable translation and the source text is unchanged: a changed source deserves a fresh
--- attempt, and a stored translation is not a failure any more.
+-- The engine that gave up on this key, or nil. Only reported while the entry carries no
+-- translation - no text at all (the shape written before 0.2.7) or the source text kept as a
+-- refusal marker (note_refusal) - and while the source text is unchanged: a changed source
+-- deserves a fresh attempt, and a stored translation is not a failure any more.
 function M.parked_for(data, key, hash)
     if type(data) ~= "table" or type(data.entries) ~= "table" then
         return nil
@@ -511,7 +564,7 @@ function M.parked_for(data, key, hash)
     if type(e) ~= "table" then
         return nil
     end
-    if type(e.text) == "string" and e.text ~= "" then
+    if type(e.text) == "string" and e.text ~= "" and e.text ~= e.en then
         return nil
     end
     if type(e.hash) == "string" and e.hash ~= "" and e.hash ~= hash then

@@ -1831,5 +1831,51 @@ do
     check("the check found the call sites", #wanted > 5, true)
 end
 
+-- The refusal budget belongs to every engine now. The offline model always had it; the API and the
+-- keyless endpoints used to count a refusal and move on, so a string the guards refuse was asked for
+-- again on every launch (measured: two BetterBots strings, refused by DeepL on every run). One
+-- budget, and the park keeps the source text as a marker in the file (store.note_refusal).
+do
+    local calls, counts = {}, {}
+    local stub_store = {
+        load = function() return { enabled = true, entries = {} } end,
+        note_refusal = function(_, key, en, hash, engine)
+            calls[#calls + 1] = { key = key, engine = engine }
+            counts[key] = (counts[key] or 0) + 1
+            return counts[key]
+        end,
+    }
+    local lines = {}
+    online.init({ info = function(_, fmt, ...) lines[#lines + 1] = string.format(fmt, ...) end,
+                  warn = function() end, log = function() end, popup = function() end },
+                stub_store, fake_glossary, { api_provider = function() return "deepl" end,
+                                             resolve = function() return "online_api" end }, nil, nil)
+    online.state.engine = "online_api"
+    online.state.parked = 0
+    online.state.refused = 0
+
+    check("refusals: one budget, shared by every engine", online.max_refusals, 3)
+    check("refusals: two tries still retry", online.retry_after_refusal_for_tests(2), true)
+    check("refusals: the third parks", online.retry_after_refusal_for_tests(3), false)
+
+    local item = { mod_id = "m", key = "k", en = "Health stations and med-crates", hash = "h30" }
+    check("refusals: the first one puts the item back",
+        online.budget_refusal_for_tests({}, item, "the translation dropped most of the text"), true)
+    check("refusals: so does the second",
+        online.budget_refusal_for_tests({}, item, "the translation dropped most of the text"), true)
+    check("refusals: the third parks it",
+        online.budget_refusal_for_tests({}, item, "the translation dropped most of the text"), false)
+    check("refusals: every try was recorded against the engine in use",
+        #calls == 3 and calls[1].engine == "online_api" and calls[3].key == "k", true)
+    check("refusals: the run counts one parked key", online.state.parked, 1)
+    local said_parked = false
+    for _, line in ipairs(lines) do
+        if line:find("source text is stored and marked", 1, true) then
+            said_parked = true
+        end
+    end
+    check("refusals: and the park says the source text is kept and marked", said_parked, true)
+end
+
 print(string.format("%d failure(s) in total", failures))
 os.exit(failures == 0 and 0 or 1)

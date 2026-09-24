@@ -111,7 +111,7 @@ if #langs == 0 then
     os.exit(1)
 end
 
-local files, entries_total = 0, 0
+local files, entries_total, refused_total = 0, 0, 0
 for _, lang in ipairs(langs) do
     local names = {}
     if lfs_ok then
@@ -201,7 +201,17 @@ for _, lang in ipairs(langs) do
 
                         -- warnings
                         if text == en then
-                            soft_issue("%s: identical to the source (fine for names / untranslated strings)", where_)
+                            if entry.src == "refused" then
+                                -- Not an identity entry: the engine gave up on this string and the
+                                -- source is kept as the text with a marker, so it is visible and
+                                -- hand-editable (see store.note_refusal). Reported, not counted as
+                                -- the "proper name" case below.
+                                refused_total = refused_total + 1
+                                soft_issue("%s: refused by %s after %s try/tries (source kept as the text)",
+                                    where_, tostring(entry.refused_by or "?"), tostring(entry.refusals or "?"))
+                            else
+                                soft_issue("%s: identical to the source (fine for names / untranslated strings)", where_)
+                            end
                         end
                         if cjk_space_cjk(text) then
                             soft_issue("%s: space between two Han characters", where_)
@@ -228,6 +238,10 @@ end
 print("")
 print(string.format("%d file(s), %d entr%s checked: %d hard problem(s), %d warning(s)",
     files, entries_total, entries_total == 1 and "y" or "ies", hard, soft))
+if refused_total > 0 then
+    print(string.format("%d entr%s refused by an engine (the source is kept as the text, marked 'refused'; another engine or a hand edit picks them up)",
+        refused_total, refused_total == 1 and "y" or "ies"))
+end
 if hard > 0 or (strict and soft > 0) then
     os.exit(1)
 end
