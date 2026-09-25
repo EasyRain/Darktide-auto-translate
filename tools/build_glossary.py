@@ -21,7 +21,7 @@ sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULT_EXPORT = os.path.join(REPO, 'translations', 'export')
-DEFAULT_UKREF = os.environ.get('AT_UK_REF', r'D:\DshWorkSpace\Darktide\.loc_ref')
+DEFAULT_UKREF = os.environ.get('AT_UK_REF', r'D:\DshWorkSpace\Darktide\refs\localizations')
 
 
 def _arg(flag, default):
