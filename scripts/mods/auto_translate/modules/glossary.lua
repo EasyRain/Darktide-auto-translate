@@ -46,6 +46,10 @@ for _, word in ipairs({
     "out", "above", "below", "near", "far", "over", "under", "inside", "outside",
     -- state and choice
     "on", "off", "all", "none", "default", "done", "applied", "selected", "enabled", "disabled",
+    -- "other" and "confirm" came in with the hand written labels for the same three words: real mod
+    -- text uses both in prose ("Compared against the other side", "Confirm Name (Enter)"), so they are
+    -- masked only where the whole string is the label.
+    "other", "confirm",
     -- what a settings row does
     "apply", "cancel", "reset", "save", "load", "open", "show", "hide", "select", "search",
     "sort", "order", "add", "edit", "delete", "remove", "clear", "test", "use", "set", "toggle",

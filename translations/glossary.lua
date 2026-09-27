@@ -36,6 +36,13 @@ return {
         -- wording, checked against the export where the export has the term
         { en = "Rampage!", ["zh-cn"] = "怒火冲天！", ["zh-tw"] = "怒火沖天！" },
         { en = "Rampage", ["zh-cn"] = "怒火冲天", ["zh-tw"] = "怒火沖天" },
+        { en = "Grimoire", ["zh-cn"] = "魔法书", ["zh-tw"] = "魔法書" },
+        { en = "Scripture", ["zh-cn"] = "圣经", ["zh-tw"] = "聖經" },
+        { en = "Corruption", ["zh-cn"] = "腐化", ["zh-tw"] = "腐化" },
+        { en = "Wounds", ["zh-cn"] = "创伤", ["zh-tw"] = "創傷" },
+        { en = "Coherency", ["zh-cn"] = "连携", ["zh-tw"] = "連攜" },
+        { en = "Mourningstar", ["zh-cn"] = "哀星号", ["zh-tw"] = "哀星號" },
+        { en = "Havoc Rank", ["zh-cn"] = "浩劫军衔", ["zh-tw"] = "浩劫軍銜" },
 
         -- short breed names a mod UI writes, and their plural: the official row is the
         -- full name ("Scab Mauler"), so a string that says only "Mauler" never matched it
@@ -110,6 +117,9 @@ return {
         { en = "Toggle", ["zh-cn"] = "切换", ["zh-tw"] = "切換", ja = "切り替え", ko = "전환", ru = "переключить", de = "umschalten", fr = "basculer", es = "alternar", it = "alterna", pl = "przełącz", ["pt-br"] = "alternar", uk = "перемкнути", nl = "schakelen", sv = "växla", tr = "değiştir", ar = "تبديل" },
         { en = "Hotkey", ["zh-cn"] = "快捷键", ["zh-tw"] = "快捷鍵", ja = "ホットキー", ko = "단축키", ru = "горячая клавиша", de = "Tastenkürzel", fr = "raccourci", es = "tecla rápida", it = "tasto di scelta rapida", pl = "skrót klawiszowy", ["pt-br"] = "tecla de atalho", uk = "гаряча клавіша", nl = "sneltoets", sv = "snabbtangent", tr = "kısayol tuşu", ar = "مفتاح اختصار" },
         { en = "Font", ["zh-cn"] = "字体", ["zh-tw"] = "字體", ja = "フォント", ko = "글꼴", ru = "шрифт", de = "Schriftart", fr = "police", es = "fuente", it = "carattere", pl = "czcionka", ["pt-br"] = "fonte", uk = "шрифт", nl = "lettertype", sv = "typsnitt", tr = "yazı tipi", ar = "خط" },
+        { en = "On", ["zh-cn"] = "开启", ["zh-tw"] = "開啟" },
+        { en = "Other", ["zh-cn"] = "其他", ["zh-tw"] = "其他" },
+        { en = "Confirm", ["zh-cn"] = "确认", ["zh-tw"] = "確認" },
 
         -- language names: the English spelling -> the name in the target language
         { en = "English", ["zh-cn"] = "英语", ["zh-tw"] = "英語", ja = "英語", ko = "영어", ru = "английский", de = "Englisch", fr = "anglais", es = "inglés", it = "inglese", pl = "angielski", ["pt-br"] = "inglês", uk = "англійська", nl = "Engels", sv = "engelska", tr = "İngilizce", ar = "الإنجليزية" },

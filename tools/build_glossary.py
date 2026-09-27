@@ -284,6 +284,26 @@ MISSING_LOC = [
     ("Rampage!",       {"zh-cn": "怒火冲天！", "zh-tw": "怒火沖天！"}),
     ("Rampage",        {"zh-cn": "怒火冲天", "zh-tw": "怒火沖天"}),
     ("Stimm Supply",   {"zh-cn": "兴奋剂补给", "zh-tw": "興奮劑補給"}),
+
+    # ---- game concepts a mod UI names in English, where the collected key list has no string yet ----
+    #
+    # Measured on hud_studio (2026-09-27), all six with the engine's own answer next to it:
+    # "Grimoire" came back as 魔典 (the game's word for the pickup is 魔法书; the giveaway in any text
+    # is that holding it corrupts the whole team), "Corruption" as 腐败 (the game says 腐化),
+    # "Wounds" as 伤口 (the wound pips the game calls 创伤), "Coherency" as 连贯性 (the game's own
+    # sentences say 连携的友军), "Mourningstar" as 晨星 (the hub is 哀星号, loc_hud_presence_hub) and
+    # "Havoc Rank" as 浩劫排名 (the game's word is 浩劫 + 军衔). "Scripture" happened to come out right
+    # (圣经) and is pinned here so it cannot drift into 经文.
+    #
+    # Chinese only: the values above are the wording a player of the Chinese client reads, and for the
+    # other languages the engine's own rendering of these common words is not what goes wrong here.
+    ("Grimoire",       {"zh-cn": "魔法书", "zh-tw": "魔法書"}),
+    ("Scripture",      {"zh-cn": "圣经", "zh-tw": "聖經"}),
+    ("Corruption",     {"zh-cn": "腐化", "zh-tw": "腐化"}),
+    ("Wounds",         {"zh-cn": "创伤", "zh-tw": "創傷"}),
+    ("Coherency",      {"zh-cn": "连携", "zh-tw": "連攜"}),
+    ("Mourningstar",   {"zh-cn": "哀星号", "zh-tw": "哀星號"}),
+    ("Havoc Rank",     {"zh-cn": "浩劫军衔", "zh-tw": "浩劫軍銜"}),
 ]
 
 # ---- short names a mod UI writes for a breed ----
@@ -400,6 +420,19 @@ UI = [
     ("Toggle",     {"zh-cn": "切换", "zh-tw": "切換", "ja": "切り替え", "ko": "전환", "ru": "переключить", "de": "umschalten", "fr": "basculer", "es": "alternar", "it": "alterna", "pl": "przełącz", "pt-br": "alternar", "uk": "перемкнути", "nl": "schakelen", "sv": "växla", "tr": "değiştir", "ar": "تبديل"}),
     ("Hotkey",     {"zh-cn": "快捷键", "zh-tw": "快捷鍵", "ja": "ホットキー", "ko": "단축키", "ru": "горячая клавиша", "de": "Tastenkürzel", "fr": "raccourci", "es": "tecla rápida", "it": "tasto di scelta rapida", "pl": "skrót klawiszowy", "pt-br": "tecla de atalho", "uk": "гаряча клавіша", "nl": "sneltoets", "sv": "snabbtangent", "tr": "kısayol tuşu", "ar": "مفتاح اختصار"}),
     ("Font",       {"zh-cn": "字体", "zh-tw": "字體", "ja": "フォント", "ko": "글꼴", "ru": "шрифт", "de": "Schriftart", "fr": "police", "es": "fuente", "it": "carattere", "pl": "czcionka", "pt-br": "fonte", "uk": "шрифт", "nl": "lettertype", "sv": "typsnitt", "tr": "yazı tipi", "ar": "خط"}),
+
+    # Three labels the game does localise (loc_settings_menu_on / loc_setting_checkbox_on = 开 / 开启,
+    # loc_settings_menu_group_other_settings = 其他, loc_popup_button_confirm = 确认), but which the
+    # term filter drops as ordinary words - so they reach the glossary from here or not at all. All
+    # three are in the module's LABEL_ONLY_WORDS: "other" and "confirm" were added with them, because
+    # real mod text uses both in prose ("Compared against the other side", "Confirm Name") and masking
+    # those would cost more than it gains.
+    #
+    # Chinese only on purpose: this is the wording a Chinese client reads, and for the other languages
+    # the engine renders these three everyday words correctly on its own.
+    ("On",         {"zh-cn": "开启", "zh-tw": "開啟"}),
+    ("Other",      {"zh-cn": "其他", "zh-tw": "其他"}),
+    ("Confirm",    {"zh-cn": "确认", "zh-tw": "確認"}),
 ]
 
 # ---- language names ----
