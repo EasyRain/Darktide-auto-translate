@@ -34,15 +34,15 @@ return {
 
         -- game terms whose own loc key is not in the collected key list (yet); the game's
         -- wording, checked against the export where the export has the term
-        { en = "Rampage!", ["zh-cn"] = "怒火冲天！", ["zh-tw"] = "怒火沖天！" },
+        { en = "Rampage!", ["zh-cn"] = "怒火冲天！", ["zh-tw"] = "怒火沖天！", ja = "大暴れだ！", ko = "날뛰자!", ru = "Буйство!", de = "Randale!", fr = "Carnage !", es = "¡Estampida!", it = "Furia!", pl = "Rzeźnia!", ["pt-br"] = "Fúria!" },
         { en = "Rampage", ["zh-cn"] = "怒火冲天", ["zh-tw"] = "怒火沖天" },
-        { en = "Grimoire", ["zh-cn"] = "魔法书", ["zh-tw"] = "魔法書" },
-        { en = "Scripture", ["zh-cn"] = "圣经", ["zh-tw"] = "聖經" },
-        { en = "Corruption", ["zh-cn"] = "腐化", ["zh-tw"] = "腐化" },
-        { en = "Wounds", ["zh-cn"] = "创伤", ["zh-tw"] = "創傷" },
-        { en = "Coherency", ["zh-cn"] = "连携", ["zh-tw"] = "連攜" },
-        { en = "Mourningstar", ["zh-cn"] = "哀星号", ["zh-tw"] = "哀星號" },
-        { en = "Havoc Rank", ["zh-cn"] = "浩劫军衔", ["zh-tw"] = "浩劫軍銜" },
+        { en = "Grimoire", ["zh-cn"] = "魔法书", ["zh-tw"] = "法術書", ja = "グリモア", ko = "그리모어", ru = "Гримуар", de = "Grimoire", fr = "Grimoire", es = "Grimorio", it = "Grimorio", pl = "Grymuar", ["pt-br"] = "Grimório" },
+        { en = "Scripture", ["zh-cn"] = "圣经", ["zh-tw"] = "聖書", ja = "聖書", ko = "경전", ru = "Писания", de = "Schriften", fr = "Textes sacrés", es = "Escrituras", it = "Scritture", pl = "Pisma", ["pt-br"] = "Escrituras" },
+        { en = "Corruption", ["zh-cn"] = "腐化", ["zh-tw"] = "腐敗", ja = "腐敗", ko = "부패", ru = "Скверна", de = "Verderbnis", fr = "Corruption", es = "Corrupción", it = "Corruzione", pl = "Splugawienie", ["pt-br"] = "Corrupção" },
+        { en = "Coherency", ["zh-cn"] = "连携", ["zh-tw"] = "協同", ja = "周囲", ko = "단결", ru = "Сплоченность", de = "Kohärenz", fr = "Syntonie", es = "Coherencia", it = "Sintonia", pl = "Spójność", ["pt-br"] = "Coerência" },
+        { en = "Wounds", ["zh-cn"] = "伤口", ["zh-tw"] = "傷口", ja = "負傷", ko = "부상", ru = "Ранение", de = "Wunde", fr = "Blessure", es = "Herida", it = "Ferita", pl = "Rana", ["pt-br"] = "Ferimento" },
+        { en = "Mourningstar", ["zh-cn"] = "哀星号", ["zh-tw"] = "哀星號", ja = "モーニングスター", ko = "모어닝스타", ru = "Моунингстар", de = "Mourningstar", fr = "Mourningstar", es = "Mourningstar", it = "Mourningstar", pl = "Mourningstar", ["pt-br"] = "Mourningstar" },
+        { en = "Havoc Rank", ["zh-cn"] = "浩劫等级", ["zh-tw"] = "浩劫等級" },
 
         -- short breed names a mod UI writes, and their plural: the official row is the
         -- full name ("Scab Mauler"), so a string that says only "Mauler" never matched it
@@ -117,9 +117,9 @@ return {
         { en = "Toggle", ["zh-cn"] = "切换", ["zh-tw"] = "切換", ja = "切り替え", ko = "전환", ru = "переключить", de = "umschalten", fr = "basculer", es = "alternar", it = "alterna", pl = "przełącz", ["pt-br"] = "alternar", uk = "перемкнути", nl = "schakelen", sv = "växla", tr = "değiştir", ar = "تبديل" },
         { en = "Hotkey", ["zh-cn"] = "快捷键", ["zh-tw"] = "快捷鍵", ja = "ホットキー", ko = "단축키", ru = "горячая клавиша", de = "Tastenkürzel", fr = "raccourci", es = "tecla rápida", it = "tasto di scelta rapida", pl = "skrót klawiszowy", ["pt-br"] = "tecla de atalho", uk = "гаряча клавіша", nl = "sneltoets", sv = "snabbtangent", tr = "kısayol tuşu", ar = "مفتاح اختصار" },
         { en = "Font", ["zh-cn"] = "字体", ["zh-tw"] = "字體", ja = "フォント", ko = "글꼴", ru = "шрифт", de = "Schriftart", fr = "police", es = "fuente", it = "carattere", pl = "czcionka", ["pt-br"] = "fonte", uk = "шрифт", nl = "lettertype", sv = "typsnitt", tr = "yazı tipi", ar = "خط" },
-        { en = "On", ["zh-cn"] = "开启", ["zh-tw"] = "開啟" },
-        { en = "Other", ["zh-cn"] = "其他", ["zh-tw"] = "其他" },
-        { en = "Confirm", ["zh-cn"] = "确认", ["zh-tw"] = "確認" },
+        { en = "On", ["zh-cn"] = "开启", ["zh-tw"] = "開啟", ja = "オン", ko = "켜기", ru = "Вкл.", de = "An", fr = "Activé", es = "Activado", it = "On", pl = "Wł.", ["pt-br"] = "Ligado" },
+        { en = "Other", ["zh-cn"] = "其他", ["zh-tw"] = "其他", ja = "その他", ko = "기타", ru = "Другое", de = "Sonstiges", fr = "Autres", es = "Otros", it = "Altro", pl = "Pozostałe", ["pt-br"] = "Outros" },
+        { en = "Confirm", ["zh-cn"] = "确认", ["zh-tw"] = "確認", ja = "確定", ko = "확인", ru = "Принять", de = "Bestätigen", fr = "Confirmer", es = "Confirmar", it = "Conferma", pl = "Potwierdź", ["pt-br"] = "Confirmar" },
 
         -- language names: the English spelling -> the name in the target language
         { en = "English", ["zh-cn"] = "英语", ["zh-tw"] = "英語", ja = "英語", ko = "영어", ru = "английский", de = "Englisch", fr = "anglais", es = "inglés", it = "inglese", pl = "angielski", ["pt-br"] = "inglês", uk = "англійська", nl = "Engels", sv = "engelska", tr = "İngilizce", ar = "الإنجليزية" },

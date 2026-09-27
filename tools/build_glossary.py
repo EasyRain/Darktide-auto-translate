@@ -281,29 +281,54 @@ MISSING_LOC = [
     # Hive Scum (Broker) combat abilities. The game spells the name with its own exclamation mark,
     # and the mod writes the English that way too ("Rampage!"), so both spellings are listed: the
     # matcher prefers the longer term where it applies.
-    ("Rampage!",       {"zh-cn": "怒火冲天！", "zh-tw": "怒火沖天！"}),
+    #
+    # The 12 language values are the game's own shout, read out of the strings bundle ("Rampage!" =
+    # 怒火冲天！ / 大暴れだ！ / Буйство! / Randale! / …), so they are the ability's wording and not a
+    # translation of it.
+    #
+    # The bare "Rampage" row stays Chinese only on purpose: the game's own bare "Rampage" is a
+    # *different* string - the Nurgle blessing/perk, 狂暴 / 暴走 / Randale / Carnage / … - while a mod
+    # that lists abilities writes the ability without its exclamation mark. Giving that row the
+    # blessing's ten other spellings would mix the two up, so it keeps the hand decided Chinese.
+    ("Rampage!",       {"zh-cn": "怒火冲天！", "zh-tw": "怒火沖天！", "ja": "大暴れだ！", "ko": "날뛰자!", "ru": "Буйство!", "de": "Randale!", "fr": "Carnage !", "es": "¡Estampida!", "it": "Furia!", "pl": "Rzeźnia!", "pt-br": "Fúria!"}),
     ("Rampage",        {"zh-cn": "怒火冲天", "zh-tw": "怒火沖天"}),
     ("Stimm Supply",   {"zh-cn": "兴奋剂补给", "zh-tw": "興奮劑補給"}),
 
     # ---- game concepts a mod UI names in English, where the collected key list has no string yet ----
     #
-    # Measured on hud_studio (2026-09-27), all six with the engine's own answer next to it:
-    # "Grimoire" came back as 魔典 (the game's word for the pickup is 魔法书; the giveaway in any text
-    # is that holding it corrupts the whole team), "Corruption" as 腐败 (the game says 腐化),
-    # "Wounds" as 伤口 (the wound pips the game calls 创伤), "Coherency" as 连贯性 (the game's own
-    # sentences say 连携的友军), "Mourningstar" as 晨星 (the hub is 哀星号, loc_hud_presence_hub) and
-    # "Havoc Rank" as 浩劫排名 (the game's word is 浩劫 + 军衔). "Scripture" happened to come out right
-    # (圣经) and is pinned here so it cannot drift into 经文.
+    # Every value below is the game's own wording for that concept, read out of the localization
+    # strings bundle (extracted with the localization-search workflow: 2.2M strings, all 12
+    # languages) rather than translated by hand:
     #
-    # Chinese only: the values above are the wording a player of the Chinese client reads, and for the
-    # other languages the engine's own rendering of these common words is not what goes wrong here.
-    ("Grimoire",       {"zh-cn": "魔法书", "zh-tw": "魔法書"}),
-    ("Scripture",      {"zh-cn": "圣经", "zh-tw": "聖經"}),
-    ("Corruption",     {"zh-cn": "腐化", "zh-tw": "腐化"}),
-    ("Wounds",         {"zh-cn": "创伤", "zh-tw": "創傷"}),
-    ("Coherency",      {"zh-cn": "连携", "zh-tw": "連攜"}),
-    ("Mourningstar",   {"zh-cn": "哀星号", "zh-tw": "哀星號"}),
-    ("Havoc Rank",     {"zh-cn": "浩劫军衔", "zh-tw": "浩劫軍銜"}),
+    #   Grimoire      the pickup that corrupts the team while it is carried - the giveaway in any text
+    #                 (hud_studio's .mod block, BetterBots' "carry grimoires"): 魔法书 / 法術書 /
+    #                 グリモア / 그리모어 / Гримуар / Grimoire / Grimorio / Grymuar / Grimório. The zh-tw
+    #                 *barks* say 魔典 and 魔導書; the item itself is 法術書.
+    #   Scripture     the other pickup: 圣经 / 聖書 / 성경... the game's own rows are 圣经 / 聖書 /
+    #                 聖書 / 경전 / Писания / Schriften / Textes sacrés / Escrituras / Scritture /
+    #                 Pisma / Escrituras.
+    #   Corruption    the mechanic a grimoire applies: 腐化 / 腐敗 / 腐敗 / 부패 / Скверна / Verderbnis /
+    #                 Corruption / Corrupción / Corruzione / Splugawienie / Corrupção.
+    #   Coherency     the aura the team keeps: 连携 / 協同 / 周囲 / 단결 / Сплоченность / Kohärenz /
+    #                 Syntonie / Coherencia / Sintonia / Spójność / Coerência.
+    #   Wounds        the wound pips: 伤口 / 傷口 / 負傷 / 부상 / Ранение / Wunde / Blessure / Herida /
+    #                 Ferita / Rana / Ferimento. Deliberately NOT 创伤: the game uses 创伤 for Trauma
+    #                 ("Trauma Force Staff" = 创伤力场杖), and the earlier hand value was wrong.
+    #   Mourningstar  the hub (loc_hud_presence_hub = "The Mourningstar" = 哀星号): 哀星号 / 哀星號 /
+    #                 モーニングスター / 모어닝스타 / Моунингстар, and the proper noun stays as written in
+    #                 de/fr/es/it/pl/pt-br - the game prints it with an article inside a sentence
+    #                 ("Die Mourningstar"), which is not a drop-in term.
+    #   Havoc Rank    Chinese only: the game has no such string, and the family it belongs to is
+    #                 Havoc = 浩劫 with Assignment Rank = 任务等级, so 浩劫等级 is the wording that
+    #                 matches. For the other languages "Havoc" is already a term and their own word
+    #                 for rank follows it, which is what the sentence needs anyway.
+    ("Grimoire",       {"zh-cn": "魔法书", "zh-tw": "法術書", "ja": "グリモア", "ko": "그리모어", "ru": "Гримуар", "de": "Grimoire", "fr": "Grimoire", "es": "Grimorio", "it": "Grimorio", "pl": "Grymuar", "pt-br": "Grimório"}),
+    ("Scripture",      {"zh-cn": "圣经", "zh-tw": "聖書", "ja": "聖書", "ko": "경전", "ru": "Писания", "de": "Schriften", "fr": "Textes sacrés", "es": "Escrituras", "it": "Scritture", "pl": "Pisma", "pt-br": "Escrituras"}),
+    ("Corruption",     {"zh-cn": "腐化", "zh-tw": "腐敗", "ja": "腐敗", "ko": "부패", "ru": "Скверна", "de": "Verderbnis", "fr": "Corruption", "es": "Corrupción", "it": "Corruzione", "pl": "Splugawienie", "pt-br": "Corrupção"}),
+    ("Coherency",      {"zh-cn": "连携", "zh-tw": "協同", "ja": "周囲", "ko": "단결", "ru": "Сплоченность", "de": "Kohärenz", "fr": "Syntonie", "es": "Coherencia", "it": "Sintonia", "pl": "Spójność", "pt-br": "Coerência"}),
+    ("Wounds",         {"zh-cn": "伤口", "zh-tw": "傷口", "ja": "負傷", "ko": "부상", "ru": "Ранение", "de": "Wunde", "fr": "Blessure", "es": "Herida", "it": "Ferita", "pl": "Rana", "pt-br": "Ferimento"}),
+    ("Mourningstar",   {"zh-cn": "哀星号", "zh-tw": "哀星號", "ja": "モーニングスター", "ko": "모어닝스타", "ru": "Моунингстар", "de": "Mourningstar", "fr": "Mourningstar", "es": "Mourningstar", "it": "Mourningstar", "pl": "Mourningstar", "pt-br": "Mourningstar"}),
+    ("Havoc Rank",     {"zh-cn": "浩劫等级", "zh-tw": "浩劫等級"}),
 ]
 
 # ---- short names a mod UI writes for a breed ----
@@ -428,11 +453,14 @@ UI = [
     # real mod text uses both in prose ("Compared against the other side", "Confirm Name") and masking
     # those would cost more than it gains.
     #
-    # Chinese only on purpose: this is the wording a Chinese client reads, and for the other languages
-    # the engine renders these three everyday words correctly on its own.
-    ("On",         {"zh-cn": "开启", "zh-tw": "開啟"}),
-    ("Other",      {"zh-cn": "其他", "zh-tw": "其他"}),
-    ("Confirm",    {"zh-cn": "确认", "zh-tw": "確認"}),
+    # The values are the game's own, all 12 languages. "On" is the one word where the game has two
+    # spellings: the checkbox row (开启 / 開啟 / Avec / Sí / …) and the settings-menu row (开 / 開 /
+    # Activé / Activado / …). Chinese takes the checkbox row (it pairs with 关闭), French and Spanish
+    # take the menu row - "Avec" and "Sí" read as "with" and "yes" next to a label - and every other
+    # language is identical in both rows.
+    ("On",         {"zh-cn": "开启", "zh-tw": "開啟", "ja": "オン", "ko": "켜기", "ru": "Вкл.", "de": "An", "fr": "Activé", "es": "Activado", "it": "On", "pl": "Wł.", "pt-br": "Ligado"}),
+    ("Other",      {"zh-cn": "其他", "zh-tw": "其他", "ja": "その他", "ko": "기타", "ru": "Другое", "de": "Sonstiges", "fr": "Autres", "es": "Otros", "it": "Altro", "pl": "Pozostałe", "pt-br": "Outros"}),
+    ("Confirm",    {"zh-cn": "确认", "zh-tw": "確認", "ja": "確定", "ko": "확인", "ru": "Принять", "de": "Bestätigen", "fr": "Confirmer", "es": "Confirmar", "it": "Conferma", "pl": "Potwierdź", "pt-br": "Confirmar"}),
 ]
 
 # ---- language names ----
