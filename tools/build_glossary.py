@@ -330,21 +330,37 @@ MISSING_LOC = [
     #                 モーニングスター / 모어닝스타 / Моунингстар, and the proper noun stays as written in
     #                 de/fr/es/it/pl/pt-br - the game prints it with an article inside a sentence
     #                 ("Die Mourningstar"), which is not a drop-in term.
-    #   Havoc Rank    the game has no string of this spelling: it words the Havoc progression as
-    #                 "Havoc Clearance Level" (loc row "Havoc Clearance Level increased!"), which every
-    #                 language carries - 浩劫许可等级 / 浩劫許可等級 / ハヴォッククリアランスレベル /
-    #                 파괴 허가 레벨 / Уровень допуска верной смерти / Verwüstung-Abschlusslevel /
-    #                 Niveau d'autorisation de dévastation / Nivel de permiso de pandemonio /
-    #                 Livello di autorizzazione Scompiglio / Poziom dostępu spustoszenia /
-    #                 Nível de conclusão de Devastação. That wording is what this row carries, so a mod
-    #                 label ("Havoc Rank") lands on the phrase the game itself prints for it.
+    #   Havoc Rank    the game has no string of this spelling, and the Havoc family has two official
+    #                 concepts behind it, neither of which the export carries:
+    #                   * "Assignment Rank" = the rank a Havoc assignment gives (任务等级 / 任務級別 /
+    #                     任務ランク / 임무 랭크 / Ранг задания / Auftragsrang / Rang de mission /
+    #                     Rango de encargo / Rango dell'incarico / Ranga zadania / Ranque de tarefa)
+    #                   * "Clearance Level" = the clearance ladder (许可等级 / 許可等級 /
+    #                     クリアランスレベル / 허가 레벨 / Уровень допуска / Abschlusslevel /
+    #                     Niveau d'autorisation / Nivel de permiso / Livello di autorizzazione /
+    #                     Poziom dostępu / Nível de conclusão)
+    #                 The label says "Rank", so this row takes the assignment-rank wording with the
+    #                 Havoc prefix, spelled the way the game's own compound row does it
+    #                 ("Unlocks Havoc Assignment Rank {rank}"): 浩劫任务等级 / 浩劫任務級別 /
+    #                 ハヴォック任務ランク / 파괴 임무 랭크 / Ранг задания верной смерти /
+    #                 Verwüstung-Auftragsrang / Rang de mission de dévastation /
+    #                 Rango de encargo de pandemonio / Rango dell'incarico Scompiglio /
+    #                 Ranga zadania spustoszenia / Ranque de tarefa de Devastação. Both plain concepts
+    #                 are terms of their own below, so mod text that spells them out also lands right.
+    #
+    #                 Not rank names: "Havoc Exemplar", "Havoc Vanguard", "Havoc Master" and
+    #                 "Havoc Mastery ({tier})" are achievements and titles (the {tier} placeholder is
+    #                 the giveaway), so they are deliberately not in the glossary - a rank label must
+    #                 not resolve to a title.
     ("Grimoire",       {"zh-cn": "魔法书", "zh-tw": "法術書", "ja": "グリモア", "ko": "그리모어", "ru": "Гримуар", "de": "Grimoire", "fr": "Grimoire", "es": "Grimorio", "it": "Grimorio", "pl": "Grymuar", "pt-br": "Grimório"}),
     ("Scripture",      {"zh-cn": "圣经", "zh-tw": "聖書", "ja": "聖書", "ko": "경전", "ru": "Писания", "de": "Schriften", "fr": "Textes sacrés", "es": "Escrituras", "it": "Scritture", "pl": "Pisma", "pt-br": "Escrituras"}),
     ("Corruption",     {"zh-cn": "腐化", "zh-tw": "腐敗", "ja": "腐敗", "ko": "부패", "ru": "Скверна", "de": "Verderbnis", "fr": "Corruption", "es": "Corrupción", "it": "Corruzione", "pl": "Splugawienie", "pt-br": "Corrupção"}),
     ("Coherency",      {"zh-cn": "连携", "zh-tw": "協同", "ja": "周囲", "ko": "단결", "ru": "Сплоченность", "de": "Kohärenz", "fr": "Syntonie", "es": "Coherencia", "it": "Sintonia", "pl": "Spójność", "pt-br": "Coerência"}),
     ("Wounds",         {"zh-cn": "伤口", "zh-tw": "傷口", "ja": "負傷", "ko": "부상", "ru": "Ранение", "de": "Wunde", "fr": "Blessure", "es": "Herida", "it": "Ferita", "pl": "Rana", "pt-br": "Ferimento"}),
     ("Mourningstar",   {"zh-cn": "哀星号", "zh-tw": "哀星號", "ja": "モーニングスター", "ko": "모어닝스타", "ru": "Моунингстар", "de": "Mourningstar", "fr": "Mourningstar", "es": "Mourningstar", "it": "Mourningstar", "pl": "Mourningstar", "pt-br": "Mourningstar"}),
-    ("Havoc Rank",     {"zh-cn": "浩劫许可等级", "zh-tw": "浩劫許可等級", "ja": "ハヴォッククリアランスレベル", "ko": "파괴 허가 레벨", "ru": "Уровень допуска верной смерти", "de": "Verwüstung-Abschlusslevel", "fr": "Niveau d'autorisation de dévastation", "es": "Nivel de permiso de pandemonio", "it": "Livello di autorizzazione Scompiglio", "pl": "Poziom dostępu spustoszenia", "pt-br": "Nível de conclusão de Devastação"}),
+    ("Havoc Rank",     {"zh-cn": "浩劫任务等级", "zh-tw": "浩劫任務級別", "ja": "ハヴォック任務ランク", "ko": "파괴 임무 랭크", "ru": "Ранг задания верной смерти", "de": "Verwüstung-Auftragsrang", "fr": "Rang de mission de dévastation", "es": "Rango de encargo de pandemonio", "it": "Rango dell'incarico Scompiglio", "pl": "Ranga zadania spustoszenia", "pt-br": "Ranque de tarefa de Devastação"}),
+    ("Assignment Rank", {"zh-cn": "任务等级", "zh-tw": "任務級別", "ja": "任務ランク", "ko": "임무 랭크", "ru": "Ранг задания", "de": "Auftragsrang", "fr": "Rang de mission", "es": "Rango de encargo", "it": "Rango dell'incarico", "pl": "Ranga zadania", "pt-br": "Ranque de tarefa"}),
+    ("Clearance Level", {"zh-cn": "许可等级", "zh-tw": "許可等級", "ja": "クリアランスレベル", "ko": "허가 레벨", "ru": "Уровень допуска", "de": "Abschlusslevel", "fr": "Niveau d'autorisation", "es": "Nivel de permiso", "it": "Livello di autorizzazione", "pl": "Poziom dostępu", "pt-br": "Nível de conclusão"}),
 ]
 
 # ---- short names a mod UI writes for a breed ----
