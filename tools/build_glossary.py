@@ -330,17 +330,21 @@ MISSING_LOC = [
     #                 モーニングスター / 모어닝스타 / Моунингстар, and the proper noun stays as written in
     #                 de/fr/es/it/pl/pt-br - the game prints it with an article inside a sentence
     #                 ("Die Mourningstar"), which is not a drop-in term.
-    #   Havoc Rank    Chinese only: the game has no such string, and the family it belongs to is
-    #                 Havoc = 浩劫 with Assignment Rank = 任务等级, so 浩劫等级 is the wording that
-    #                 matches. For the other languages "Havoc" is already a term and their own word
-    #                 for rank follows it, which is what the sentence needs anyway.
+    #   Havoc Rank    the game has no string of this spelling: it words the Havoc progression as
+    #                 "Havoc Clearance Level" (loc row "Havoc Clearance Level increased!"), which every
+    #                 language carries - 浩劫许可等级 / 浩劫許可等級 / ハヴォッククリアランスレベル /
+    #                 파괴 허가 레벨 / Уровень допуска верной смерти / Verwüstung-Abschlusslevel /
+    #                 Niveau d'autorisation de dévastation / Nivel de permiso de pandemonio /
+    #                 Livello di autorizzazione Scompiglio / Poziom dostępu spustoszenia /
+    #                 Nível de conclusão de Devastação. That wording is what this row carries, so a mod
+    #                 label ("Havoc Rank") lands on the phrase the game itself prints for it.
     ("Grimoire",       {"zh-cn": "魔法书", "zh-tw": "法術書", "ja": "グリモア", "ko": "그리모어", "ru": "Гримуар", "de": "Grimoire", "fr": "Grimoire", "es": "Grimorio", "it": "Grimorio", "pl": "Grymuar", "pt-br": "Grimório"}),
     ("Scripture",      {"zh-cn": "圣经", "zh-tw": "聖書", "ja": "聖書", "ko": "경전", "ru": "Писания", "de": "Schriften", "fr": "Textes sacrés", "es": "Escrituras", "it": "Scritture", "pl": "Pisma", "pt-br": "Escrituras"}),
     ("Corruption",     {"zh-cn": "腐化", "zh-tw": "腐敗", "ja": "腐敗", "ko": "부패", "ru": "Скверна", "de": "Verderbnis", "fr": "Corruption", "es": "Corrupción", "it": "Corruzione", "pl": "Splugawienie", "pt-br": "Corrupção"}),
     ("Coherency",      {"zh-cn": "连携", "zh-tw": "協同", "ja": "周囲", "ko": "단결", "ru": "Сплоченность", "de": "Kohärenz", "fr": "Syntonie", "es": "Coherencia", "it": "Sintonia", "pl": "Spójność", "pt-br": "Coerência"}),
     ("Wounds",         {"zh-cn": "伤口", "zh-tw": "傷口", "ja": "負傷", "ko": "부상", "ru": "Ранение", "de": "Wunde", "fr": "Blessure", "es": "Herida", "it": "Ferita", "pl": "Rana", "pt-br": "Ferimento"}),
     ("Mourningstar",   {"zh-cn": "哀星号", "zh-tw": "哀星號", "ja": "モーニングスター", "ko": "모어닝스타", "ru": "Моунингстар", "de": "Mourningstar", "fr": "Mourningstar", "es": "Mourningstar", "it": "Mourningstar", "pl": "Mourningstar", "pt-br": "Mourningstar"}),
-    ("Havoc Rank",     {"zh-cn": "浩劫等级", "zh-tw": "浩劫等級"}),
+    ("Havoc Rank",     {"zh-cn": "浩劫许可等级", "zh-tw": "浩劫許可等級", "ja": "ハヴォッククリアランスレベル", "ko": "파괴 허가 레벨", "ru": "Уровень допуска верной смерти", "de": "Verwüstung-Abschlusslevel", "fr": "Niveau d'autorisation de dévastation", "es": "Nivel de permiso de pandemonio", "it": "Livello di autorizzazione Scompiglio", "pl": "Poziom dostępu spustoszenia", "pt-br": "Nível de conclusão de Devastação"}),
 ]
 
 # ---- short names a mod UI writes for a breed ----

@@ -38,7 +38,7 @@ return {
         { en = "Coherency", ["zh-cn"] = "连携", ["zh-tw"] = "協同", ja = "周囲", ko = "단결", ru = "Сплоченность", de = "Kohärenz", fr = "Syntonie", es = "Coherencia", it = "Sintonia", pl = "Spójność", ["pt-br"] = "Coerência" },
         { en = "Wounds", ["zh-cn"] = "伤口", ["zh-tw"] = "傷口", ja = "負傷", ko = "부상", ru = "Ранение", de = "Wunde", fr = "Blessure", es = "Herida", it = "Ferita", pl = "Rana", ["pt-br"] = "Ferimento" },
         { en = "Mourningstar", ["zh-cn"] = "哀星号", ["zh-tw"] = "哀星號", ja = "モーニングスター", ko = "모어닝스타", ru = "Моунингстар", de = "Mourningstar", fr = "Mourningstar", es = "Mourningstar", it = "Mourningstar", pl = "Mourningstar", ["pt-br"] = "Mourningstar" },
-        { en = "Havoc Rank", ["zh-cn"] = "浩劫等级", ["zh-tw"] = "浩劫等級" },
+        { en = "Havoc Rank", ["zh-cn"] = "浩劫许可等级", ["zh-tw"] = "浩劫許可等級", ja = "ハヴォッククリアランスレベル", ko = "파괴 허가 레벨", ru = "Уровень допуска верной смерти", de = "Verwüstung-Abschlusslevel", fr = "Niveau d'autorisation de dévastation", es = "Nivel de permiso de pandemonio", it = "Livello di autorizzazione Scompiglio", pl = "Poziom dostępu spustoszenia", ["pt-br"] = "Nível de conclusão de Devastação" },
 
         -- short breed names a mod UI writes, and their plural: the official row is the
         -- full name ("Scab Mauler"), so a string that says only "Mauler" never matched it
