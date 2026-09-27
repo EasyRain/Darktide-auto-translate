@@ -188,6 +188,64 @@ local MIN_INTERVAL_API = 0.25
 -- through the rest of the queue (the same idea as Lingua's 300 s cooldown).
 local QUOTA_COOLDOWN = 300
 
+-- The rate-limit path (HTTP 429). A rate limit is nearly always transient: the service wants
+-- fewer requests per second, not five minutes of silence. So the queue waits a few seconds (the
+-- "rate_limit_pause" slider, default 3) *and* the pace backs off - the request interval doubles
+-- up to BACKOFF_MAX and halves again after a run of answers. Measured on a DeepL free key: 225
+-- keys went out at 0.25 s per request and the 429 arrived at ~4 requests/s, so slowing the pace
+-- removes the cause instead of only waiting out the symptom.
+--
+-- The long cooldown is kept for the cases where waiting is the only answer: HTTP 403 (a key
+-- problem) and a 429 that repeats after the backoff has already grown (three in a row).
+local RATE_LIMIT_PAUSE = 3            -- fallback when the slider cannot be read
+local RATE_LIMIT_PAUSE_MAX = 300      -- hand-edited settings are clamped to this
+local RATE_LIMIT_STREAK_HARD = 3      -- this many 429s in a row -> QUOTA_COOLDOWN instead
+local BACKOFF_MAX = 8                 -- interval ceiling: API 0.25 s -> 2 s, free 1 s -> 8 s
+local BACKOFF_DECAY_AFTER = 20        -- answered requests before the interval halves again
+
+local backoff = 1                     -- multiplier on the per-engine request interval
+local backoff_ok = 0                  -- answers since the last backoff change
+local rate_limit_streak = 0           -- 429s in a row, cleared by any answer
+local rate_limit_notified = false     -- one rate-limit notice per run
+
+-- How long to wait after a 429, from the player's slider and clamped: the settings file is a text
+-- file a player can edit, and a negative or absent value must not turn into a busy loop.
+local function rate_limit_pause(mod)
+    local value
+    if mod and type(mod.get) == "function" then
+        local ok, got = pcall(mod.get, mod, "rate_limit_pause")
+        if ok then
+            value = tonumber(got)
+        end
+    end
+    if not value then
+        return RATE_LIMIT_PAUSE
+    end
+    return math.max(1, math.min(RATE_LIMIT_PAUSE_MAX, math.floor(value)))
+end
+
+-- One rate limit: the pace backs off and the streak grows. Returns true when waiting longer is
+-- the only answer left, in which case the caller uses QUOTA_COOLDOWN rather than the slider.
+local function note_rate_limit()
+    rate_limit_streak = rate_limit_streak + 1
+    backoff_ok = 0
+    backoff = math.min(backoff * 2, BACKOFF_MAX)
+    return rate_limit_streak >= RATE_LIMIT_STREAK_HARD
+end
+
+-- A service that answered: the streak is over, and after a run of answers the pace comes back.
+local function note_rate_limit_ok()
+    rate_limit_streak = 0
+    if backoff <= 1 then
+        return
+    end
+    backoff_ok = backoff_ok + 1
+    if backoff_ok >= BACKOFF_DECAY_AFTER then
+        backoff_ok = 0
+        backoff = math.max(1, backoff / 2)
+    end
+end
+
 local LOG_EVERY = 25
 
 -- How much of a reply this layer keeps, and the ceiling the core clamps it to (AT_MAX_BODY).
@@ -892,6 +950,9 @@ local function note_provider_success(name)
     end
     -- A provider that answered means the outage the tier retry was waiting out is over.
     tier_retries = 0
+    -- ... and that the rate limit is over too: forget the streak and, after a run of answers,
+    -- give the request pace back (see note_rate_limit).
+    note_rate_limit_ok()
 end
 
 -- Which endpoint to try first is learned, because a fixed order cannot be right for both
@@ -1046,14 +1107,16 @@ local function drain_results(mod)
 end
 
 -- True when the provider copes with the game's rich-text markup on its own.
--- DeepL passes "{#color(162,158,145)}Citadel Rakarth Flesh{#reset()}" through
--- intact and translates the words (verified against the live API), so masking the
--- tags would only add placeholders it can drop. The free Google endpoints return
--- such a string untranslated, so for them the tags stay masked.
 --
--- The local model is not markup-safe either (NLLB happily mangles braces), so it is
--- deliberately absent from this table and gets the masked text.
-local MARKUP_SAFE = { deepl = true }
+-- Empty on purpose: DeepL used to be trusted here because it passed
+-- "{#color(162,158,145)}Citadel Rakarth Flesh{#reset()}" through intact, but on 2026-09-27 a live
+-- run stored "{#颜色(151,151,151)}[默认]{#reset()}" for "{#color(151,151,151)}[Default]{#reset()}"
+-- (hud_studio) - it translates the words *inside* the tag name when the tag is short, which breaks
+-- the markup and is invisible in the game until the text is drawn. Masking the tags costs one
+-- placeholder per tag and the unmask step puts the original bytes back, so every provider is
+-- masked now. Nothing is lost when a provider would have kept the markup: masking it is a no-op
+-- for the visible words.
+local MARKUP_SAFE = {}
 
 -- ---------------------------------------------------------------------------
 -- Local model engine
@@ -1276,13 +1339,40 @@ local function providers_for(mod, engine, lang)
     return {}
 end
 
-local function min_interval(engine)
+local function base_interval(engine)
     return engine == "online_api" and MIN_INTERVAL_API or MIN_INTERVAL_FREE
+end
+
+-- The pace actually used: the engine's own interval times whatever backoff the rate limiter asked
+-- for (1 while the service is answering normally).
+local function min_interval(engine)
+    return base_interval(engine) * backoff
 end
 
 -- Exposed because the two numbers encode a rule, not a preference: the free endpoints are the
 -- ones that get cut off by a burst, so they must be the slower of the two.
 M.min_interval_for_tests = min_interval
+M.base_interval_for_tests = base_interval
+
+-- Exposed so the smoke test can drive the rate-limit path without a network: these are the same
+-- functions the 429 branch calls.
+M.rate_limit_for_tests = {
+    note = note_rate_limit,
+    ok = note_rate_limit_ok,
+    pause = rate_limit_pause,
+    state = function() return backoff, backoff_ok, rate_limit_streak end,
+    reset = function()
+        backoff, backoff_ok, rate_limit_streak, rate_limit_notified = 1, 0, 0, false
+    end,
+    defaults = {
+        pause = RATE_LIMIT_PAUSE,
+        max_pause = RATE_LIMIT_PAUSE_MAX,
+        hard_streak = RATE_LIMIT_STREAK_HARD,
+        backoff_cap = BACKOFF_MAX,
+        decay_after = BACKOFF_DECAY_AFTER,
+        cooldown = QUOTA_COOLDOWN,
+    },
+}
 
 -- The learned free-tier order, and the write that learns it.
 M.providers_for_tests = providers_for
@@ -1303,6 +1393,9 @@ function M.start(mod, report, lang)
     local gap = engines.gap(engine, lang)
 
     M.stop(mod)
+    -- One rate-limit notice per run (the notice is the only place the player is told the run is
+    -- waiting rather than stuck), and a clean backoff for a run that may use another engine.
+    rate_limit_notified = false
 
     if engine == nil then
         util.warn(mod, "no translation engine is available (no API key, no downloaded model, and no free provider for this language)")
@@ -2129,6 +2222,7 @@ local REASON_KEYS = {
     { "the offline engine refused", "hud_reason_model" },
     { "no API key", "hud_reason_no_key" },
     { "no usable provider", "hud_reason_no_provider" },
+    { "character quota", "hud_reason_quota" },
 }
 
 function M.reason_key(reason)
@@ -2284,11 +2378,42 @@ function fail_item(mod, req, reason, http_status, transport, code, quiet_provide
         end
     end
 
-    if http_status == 429 or http_status == 403 then
+    -- HTTP 456 is DeepL's "you used up the monthly character quota": waiting cannot help, and
+    -- running the rest of the queue would only burn the refusal budget and park every key, so the
+    -- run stops and the notice says the two things a player can do about it.
+    if http_status == 456 then
+        M.state.last_error = "the service's character quota is used up"
+        util.warn(mod, "the service reports its character quota is used up (HTTP 456); stopping this run")
+        q_unshift(item)
+        M.state.running = false
+        util.popup(mod, "quota_exhausted")
+        return
+    end
+
+    -- 429: a short breather and a slower pace instead of a five-minute silence (see
+    -- RATE_LIMIT_PAUSE). Only a 429 that repeats after the backoff has grown takes the long one.
+    if http_status == 429 then
+        local hard = note_rate_limit()
+        local pause = hard and QUOTA_COOLDOWN or rate_limit_pause(mod)
+        cooldown_until = elapsed + pause
+        if not rate_limit_notified then
+            rate_limit_notified = true
+            util.popup(mod, "rate_limited_notice", pause)
+        end
+        util.warn(mod,
+            "service is rate limiting (HTTP 429); pausing %d s, then one request every %.2f s (backoff x%d)",
+            pause, min_interval(M.state.engine), backoff)
+        q_unshift(item) -- retried once the pause expires
+        M.state.provider = nil
+        return
+    end
+
+    -- 403 is a key or permission problem: waiting is all this layer can do, and the log says which.
+    if http_status == 403 then
         cooldown_until = elapsed + QUOTA_COOLDOWN
-        util.warn(mod, "service is rate limiting (HTTP %d); pausing translation for %d s",
-            http_status, QUOTA_COOLDOWN)
-        q_unshift(item) -- retried once the cooldown expires
+        util.warn(mod, "the service refused the key (HTTP 403); pausing translation for %d s",
+            QUOTA_COOLDOWN)
+        q_unshift(item)
         M.state.provider = nil
         return
     end

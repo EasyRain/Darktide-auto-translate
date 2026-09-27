@@ -1902,6 +1902,39 @@ do
         online.reason_key("Bad request. Reason: Value for 'source_lang' not supported."), "hud_error_generic")
     check("reason: and so does a network error", online.reason_key("12029 cannot connect"), "hud_error_generic")
     check("reason: nothing to say stays nothing", online.reason_key(nil), nil)
+    check("reason: an exhausted quota", online.reason_key("the service's character quota is used up"),
+        "hud_reason_quota")
+
+    -- The rate-limit path (0.2.7): a 429 waits the slider's seconds and slows the request pace
+    -- instead of sleeping five minutes, and the pace comes back after a run of answers.
+    local rl = online.rate_limit_for_tests
+    rl.reset()
+    check("rate limit: the slider decides the wait", rl.pause({ get = function() return 7 end }), 7)
+    check("rate limit: a hand-edited 0 is clamped up", rl.pause({ get = function() return 0 end }), 1)
+    check("rate limit: an absurd value is clamped down", rl.pause({ get = function() return 99999 end }),
+        rl.defaults.max_pause)
+    check("rate limit: a missing setting uses the default", rl.pause({}), rl.defaults.pause)
+    check("rate limit: a raising getter does not raise", rl.pause({ get = function() error("boom") end }),
+        rl.defaults.pause)
+    check("rate limit: the first 429 does not take the long cooldown", rl.note(), false)
+    check("rate limit: and doubles the API interval", online.min_interval_for_tests("online_api"), 0.5)
+    check("rate limit: the free tier backs off with it", online.min_interval_for_tests("online_free"), 2.0)
+    local _, _, streak
+    rl.note()
+    check("rate limit: a second 429 doubles it again", online.min_interval_for_tests("online_api"), 1.0)
+    check("rate limit: the third one asks for the long cooldown", rl.note(), true)
+    check("rate limit: the interval is capped", online.min_interval_for_tests("online_api"), 2.0)
+    rl.ok()
+    _, _, streak = rl.state()
+    check("rate limit: an answer clears the streak", streak, 0)
+    check("rate limit: one answer does not restore the pace", online.min_interval_for_tests("online_api"), 2.0)
+    for _ = 1, rl.defaults.decay_after - 1 do rl.ok() end
+    check("rate limit: a run of answers halves it", online.min_interval_for_tests("online_api"), 1.0)
+    for _ = 1, rl.defaults.decay_after do rl.ok() end
+    check("rate limit: and the next run halves it again", online.min_interval_for_tests("online_api"), 0.5)
+    for _ = 1, rl.defaults.decay_after * 4 do rl.ok() end
+    check("rate limit: never below the engine's own interval", online.min_interval_for_tests("online_api"), 0.25)
+    rl.reset()
 end
 
 print(string.format("%d failure(s) in total", failures))

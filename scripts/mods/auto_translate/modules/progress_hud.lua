@@ -258,14 +258,17 @@ local function compose(t)
         -- The offline model is read from disk in the background; say so, because
         -- otherwise the counter sits at 0 and looks stuck.
         lines[#lines + 1] = { text = mod:localize("hud_model_loading"), color = TEXT_DIM }
+    elseif status.cooldown and status.cooldown > 0 then
+        -- A rate-limit wait is part of a run that is still active, so this has to be checked
+        -- before the running branch: otherwise the line keeps saying "N left" and the player sees
+        -- a stall rather than a countdown.
+        lines[#lines + 1] = { text = mod:localize("hud_cooldown", status.cooldown), color = TEXT_WARN }
     elseif status.running then
         local detail = mod:localize("hud_left", status.left or 0)
         if (status.failed or 0) > 0 or (status.refused or 0) > 0 then
             detail = detail .. "  " .. mod:localize("hud_failures", status.failed or 0, status.refused or 0)
         end
         lines[#lines + 1] = { text = detail, color = TEXT_DIM }
-    elseif status.cooldown and status.cooldown > 0 then
-        lines[#lines + 1] = { text = mod:localize("hud_cooldown", status.cooldown), color = TEXT_WARN }
     elseif status.last_error then
         -- The reason is an English sentence written for the log (it carries the numbers, and a
         -- service's own sentence cannot be translated by us): the HUD says what it means in the

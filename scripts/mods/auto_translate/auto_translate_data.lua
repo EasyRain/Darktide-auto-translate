@@ -212,6 +212,18 @@ return {
                         default_value = "",
                         max_length = 128,
                     },
+                    {
+                        -- How long the queue waits after a service rate limit (HTTP 429) before it
+                        -- tries again. The request interval doubles on its own at the same time
+                        -- (online.lua), so this is only the breather a player may want to make
+                        -- longer on a free plan; after three rate limits in a row the run takes the
+                        -- long cooldown instead, whatever this is set to.
+                        setting_id = "rate_limit_pause",
+                        type = "numeric",
+                        default_value = 3,
+                        range = { 1, 60 },
+                        decimals_number = 0,
+                    },
                 },
             },
 

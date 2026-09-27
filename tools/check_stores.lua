@@ -176,8 +176,12 @@ for _, lang in ipairs(langs) do
                         end
                         a, b = collect(en, "{%#[^}]*}"), collect(text, "{%#[^}]*}")
                         if table.concat(a, "|") ~= table.concat(b, "|") then
-                            hard_issue("%s: rich-text tag counts differ: source %d, text %d",
-                                where_, #a, #b)
+                            -- Print the tags themselves, not just how many there are: the counts are
+                            -- equal whenever a tag came back *changed* ("{#color(...)}" translated
+                            -- into "{#颜色(...)}"), which is exactly the case that matters, and a
+                            -- "source 2, text 2" line said nothing about it.
+                            hard_issue("%s: rich-text tags differ: source (%s) vs text (%s)",
+                                where_, table.concat(a, " "), table.concat(b, " "))
                         end
                         a, b = collect(en, "{%w+:[^}]*}"), collect(text, "{%w+:[^}]*}")
                         if table.concat(a, "|") ~= table.concat(b, "|") then
