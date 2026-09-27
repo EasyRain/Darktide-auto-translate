@@ -240,19 +240,31 @@ print('string cache: %d extra term(s) from %s'
 # Ukrainian, which the game never shipped.
 
 # ---- hand verified core mechanics (no game loc key exists for these) ----
+#
+# Values are the game's own wording, read out of the localization strings bundle (the
+# localization-search index, game-data/index/localization.sqlite): exact strings where the game has
+# one, and for "Unknown" the game's UNKNOWN row with the capitalization normalised, because the game
+# prints that one in a HUD placeholder in all caps ("UNBEKANNT") which reads wrong as a label.
+#
+# The rows for Ability, Aura, Blitz, Keystone and Stimm Supply are still listed but are skipped by the
+# shadow check at the emission site: a collection round has since resolved the keys that carry them
+# (loc_glossary_term_class_ability, loc_glossary_term_aura, loc_tactical_overlay_build_blitz,
+# loc_glossary_talent_keystone, loc_talent_broker_ability_stimm_field), and the export - which has
+# all 12 languages for each - is authoritative for its own strings.
 HAND = [
-    ("Ability",  {"zh-cn": "能力", "zh-tw": "能力", "ja": "アビリティ", "ko": "능력"}),
-    ("Aura",     {"zh-cn": "光环", "zh-tw": "光環", "ja": "オーラ", "ko": "오라"}),
-    ("Blitz",    {"zh-cn": "闪击", "zh-tw": "閃擊", "ja": "電撃", "ko": "대공세"}),
-    ("Keystone", {"zh-cn": "楔石", "zh-tw": "楔石", "ja": "キーストーン", "ko": "키스톤"}),
-    ("Melee",    {"zh-cn": "近战", "zh-tw": "近戰", "ja": "近接", "ko": "근접", "uk": "Ближній бій"}),
-    ("Ranged",   {"zh-cn": "远程", "zh-tw": "遠程", "ja": "遠隔", "ko": "원거리"}),
-    ("None",     {"zh-cn": "无", "zh-tw": "無", "ja": "なし", "ko": "없음"}),
-    ("Unknown",  {"zh-cn": "未知", "zh-tw": "未知", "ja": "不明", "ko": "알 수 없음"}),
+    ("Ability",  {"zh-cn": "能力", "zh-tw": "技能", "ja": "アビリティ", "ko": "능력", "ru": "Способность", "de": "Fähigkeit", "fr": "Capacité", "es": "Habilidad", "it": "Abilità", "pl": "Zdolność", "pt-br": "Habilidade"}),
+    ("Aura",     {"zh-cn": "光环", "zh-tw": "光環", "ja": "オーラ", "ko": "오라", "ru": "Аура", "de": "Aura", "fr": "Aura", "es": "Aura", "it": "Aura", "pl": "Aura", "pt-br": "Aura"}),
+    ("Blitz",    {"zh-cn": "闪击", "zh-tw": "閃擊", "ja": "ブリッツ", "ko": "대공세", "ru": "Блиц", "de": "Blitz", "fr": "Blitz", "es": "Bombardeo", "it": "Incursione", "pl": "Szybki Atak", "pt-br": "Bombardeio"}),
+    ("Keystone", {"zh-cn": "楔石", "zh-tw": "鑰石", "ja": "キーストーン", "ko": "키스톤", "ru": "Ключевой талант", "de": "Schlüsselstein", "fr": "Clé de voûte", "es": "Piedra angular", "it": "Chiave di volta", "pl": "Filar", "pt-br": "Pedra fundamental"}),
+    ("Melee",    {"zh-cn": "近战", "zh-tw": "近戰", "ja": "近接", "ko": "근접", "ru": "Ближний бой", "de": "Nahkampf", "fr": "Mêlée", "es": "Cuerpo a cuerpo", "it": "Corpo a corpo", "pl": "Melee", "pt-br": "Corpo a corpo", "uk": "Ближній бій"}),
+    ("Ranged",   {"zh-cn": "远程", "zh-tw": "遠程武器", "ja": "遠隔", "ko": "원거리", "ru": "Дальний бой", "de": "Fernkampf", "fr": "À distance", "es": "A distancia", "it": "A distanza", "pl": "Dystansowe", "pt-br": "Longo alcance"}),
+    ("None",     {"zh-cn": "无", "zh-tw": "無", "ja": "なし", "ko": "없음", "ru": "Нет", "de": "Keine", "fr": "Aucun(e)", "es": "Ninguna", "it": "Nessuna", "pl": "Brak", "pt-br": "Nenhum"}),
+    ("Unknown",  {"zh-cn": "未知", "zh-tw": "未知", "ja": "不明", "ko": "알 수 없음", "ru": "Неизвестно", "de": "Unbekannt", "fr": "Inconnu", "es": "Desconocido", "it": "Sconosciuto", "pl": "Nieznany", "pt-br": "Desconhecido"}),
     # community names for the same classes (the game's own wording is Arbitrator /
-    # Skitarius, but mods often write Arbites / Skitarii)
-    ("Arbites",  {"zh-cn": "法务官", "zh-tw": "法務官", "uk": "Арбітр"}),
-    ("Skitarii", {"zh-cn": "护教军士兵", "zh-tw": "護教軍士兵", "uk": "Скітарій"}),
+    # Skitarius, but mods often write Arbites / Skitarii) - the values are that wording,
+    # which the game itself also uses in strings like "Arbites Class"
+    ("Arbites",  {"zh-cn": "法务官", "zh-tw": "法務官", "ja": "裁定者", "ko": "조정관", "ru": "Арбитратор", "de": "Arbitrator", "fr": "Arbitrator", "es": "Arbitrador", "it": "Arbitrator", "pl": "Arbitrator", "pt-br": "Árbitro", "uk": "Арбітр"}),
+    ("Skitarii", {"zh-cn": "护教军", "zh-tw": "護教軍", "ja": "スキタリ", "ko": "스키타리", "ru": "Скитарий", "de": "Skitarii", "fr": "Skitarii", "es": "Skitarii", "it": "Gli Skitarii", "pl": "Skitarii", "pt-br": "Skitarii", "uk": "Скітарій"}),
 ]
 
 # ---- game terms whose loc key is not in the collected key list (yet) ----
@@ -371,23 +383,27 @@ MISSING_LOC = [
 #     engines turn the bare "Twins" into 双生.
 #   * "Disabler" has no string anywhere in the game; 控制型敌人 is the wording the Chinese mod UIs use.
 SHORT_BREEDS = [
-    # what a mod writes      its plural            zh-cn        zh-tw            where the value is from
-    ("Mauler",      "Maulers",      {"zh-cn": "重锤兵",     "zh-tw": "重錘兵"}),      # Scab Mauler 血痂重锤兵
-    ("Sniper",      "Snipers",      {"zh-cn": "狙击手",     "zh-tw": "狙擊手"}),      # Scab Sniper 血痂狙击手
-    ("Rager",       "Ragers",       {"zh-cn": "狂暴者",     "zh-tw": "暴怒者"}),      # berzerker generic name 狂暴者 / 暴怒者
-    ("Flamer",      "Flamers",      {"zh-cn": "火焰兵",     "zh-tw": "噴火兵"}),      # flamer generic name 火焰兵 / 噴火兵
-    ("Bomber",      "Bombers",      {"zh-cn": "轰炸者",     "zh-tw": "轟炸者"}),      # Scab Bomber 血痂轰炸者
-    ("Tox Bomber",  "Tox Bombers",  {"zh-cn": "剧毒轰炸者", "zh-tw": "劇毒轟炸者"}),  # Dreg Tox Bomber 渣滓剧毒轰炸者
-    ("Pox Burster", "Pox Bursters", {"zh-cn": "瘟疫爆破手", "zh-tw": "瘟疫爆者"}),    # Poxburster (the mod writes a space)
-    ("Gunner",      "Gunners",      {"zh-cn": "炮手",       "zh-tw": "槍手"}),        # gunner generic name 炮手 / 槍手
-    ("Stalker",     "Stalkers",     {"zh-cn": "潜行者",     "zh-tw": "潛行者"}),      # Scab Stalker 血痂潜行者
-    ("Vanguard",    "Vanguards",    {"zh-cn": "先锋",       "zh-tw": "先鋒"}),        # Scab Vanguard 疤痂先锋 (the game's own typo)
-    ("Shotgunner",  "Shotgunners",  {"zh-cn": "霰弹枪手",   "zh-tw": "霰彈槍手"}),    # shocktrooper generic name 霰弹枪手 / 霰彈槍手
-    ("Trapper",     "Trappers",     {"zh-cn": "陷阱手",     "zh-tw": "陷阱兵"}),      # Scab Trapper 血痂陷阱手
-    ("Hound",       "Hounds",       {"zh-cn": "猎犬",       "zh-tw": "獵犬"}),        # Pox Hound 瘟疫猎犬
-    ("Monstrosity", "Monstrosities", {"zh-cn": "怪物",      "zh-tw": "巨獸"}),        # Monstrosity Hunter 怪物猎手 / 巨獸獵人
-    ("Captain",     "Captains",     {"zh-cn": "连长",       "zh-tw": "連長"}),        # the boss, as the Chinese client's dialogue has it
-    ("Twins",       None,           {"zh-cn": "双子",       "zh-tw": "雙子"}),        # community wording (the game keeps Rodin/Rinda)
+    # what a mod writes      its plural            the game's wording, all 11 target languages
+    # The values come from the localization index: the breed's own display row where the game has a
+    # short form (Mauler!, Sniper, Vanguard, Pox Burster), otherwise its full display name minus the
+    # faction word (Scab Mauler 血痂重锤兵, Dreg Stalker 渣滓潜行者), otherwise the generic plural row
+    # (Ragers / Flamers / Gunners / Shotgunners - those four plurals are emitted by the export).
+    ("Mauler",      "Maulers",      {"zh-cn": "重锤兵", "zh-tw": "重錘兵", "ja": "マウラー", "ko": "마울러", "ru": "Палач", "de": "Schläger", "fr": "Mutileur", "es": "Despedazador", "it": "Mazzolatore", "pl": "Miażdżyciel", "pt-br": "Algoz"}),
+    ("Sniper",      "Snipers",      {"zh-cn": "狙击手", "zh-tw": "狙擊手", "ja": "スナイパー", "ko": "저격수", "ru": "Снайпер", "de": "Scharfschütze", "fr": "Sniper", "es": "Francotirador", "it": "Cecchino", "pl": "Snajper", "pt-br": "Franco atirador"}),  # the game's plural row is left untranslated in every language, so one wording covers both
+    ("Rager",       "Ragers",       {"zh-cn": "狂暴者", "zh-tw": "暴怒者", "ja": "レイジャー", "ko": "레이거", "ru": "Буйный", "de": "Berserker", "fr": "Furax", "es": "Furia", "it": "Furioso", "pl": "Wściekun", "pt-br": "Furioso"}),      # Dreg Rager; the plural comes from the export
+    ("Flamer",      "Flamers",      {"zh-cn": "火焰兵", "zh-tw": "噴火兵", "ja": "フレイマー", "ko": "플레이머", "ru": "Огнеметчик", "de": "Flammenwerfer", "fr": "Incendiaire", "es": "Lanzallamas", "it": "Sparafiamme", "pl": "Spalacz", "pt-br": "Flamejante"}),      # the plural comes from the export
+    ("Bomber",      "Bombers",      {"zh-cn": "轰炸者", "zh-tw": "轟炸者", "ja": "ボマー", "ko": "폭탄병", "ru": "Взрывун", "de": "Bomber", "fr": "Bombardier", "es": "Bombardero", "it": "Bombardiere", "pl": "Bombowiec", "pt-br": "Granadeiro"}),      # Scab Bomber 血痂轰炸者
+    ("Tox Bomber",  "Tox Bombers",  {"zh-cn": "剧毒轰炸者", "zh-tw": "劇毒轟炸者", "ja": "トックス・ボマー", "ko": "독성 폭탄병", "ru": "Токсичный взрывун", "de": "Gift-Bomber", "fr": "Bombardier toxique", "es": "Bombardero Tóxico", "it": "Bombardiere tossico", "pl": "Toksybombowiec", "pt-br": "Granadeiro Tóxico"}),  # Dreg Tox Bomber
+    ("Pox Burster", "Pox Bursters", {"zh-cn": "瘟疫爆破者", "zh-tw": "瘟疫爆破者", "ja": "ポックスバースター", "ko": "폭스 버스터", "ru": "Чумной Взрывун", "de": "Pockenspeier", "fr": "Explosible vérolé", "es": "Reventador de plaga", "it": "Spargipeste", "pl": "Rozpylacz wysypki", "pt-br": "Estourador de peste"}),    # the game spells it both "Pox Burster" and "Poxburster"
+    ("Gunner",      "Gunners",      {"zh-cn": "炮手", "zh-tw": "槍手", "ja": "ガンナー", "ko": "거너", "ru": "Пулеметчик", "de": "Kanonier", "fr": "Mitrailleur", "es": "Artillero", "it": "Cannoniere", "pl": "Strzelec", "pt-br": "Atirador"}),        # the plural comes from the export
+    ("Stalker",     "Stalkers",     {"zh-cn": "潜行者", "zh-tw": "潛行者", "ja": "ストーカー", "ko": "스토커", "ru": "Охотник", "de": "Schleicher", "fr": "Stalker", "es": "Acechadora", "it": "Persecutore", "pl": "Tropiciel", "pt-br": "Perseguidor"}),      # Dreg Stalker minus the faction word
+    ("Vanguard",    "Vanguards",    {"zh-cn": "先锋", "zh-tw": "先鋒", "ja": "先駆け", "ko": "선봉", "ru": "Авангард", "de": "Vorhut", "fr": "Avant-garde", "es": "Vanguardia", "it": "Avanguardia", "pl": "Straż przednia", "pt-br": "Vanguarda"}),        # Scab Vanguard 疤痂先锋 (the game's own typo)
+    ("Shotgunner",  "Shotgunners",  {"zh-cn": "霰弹枪手", "zh-tw": "霰彈槍手", "ja": "ショットガンナー", "ko": "샷거너", "ru": "Стрелок", "de": "Schroter", "fr": "Plombeur", "es": "Escopetero", "it": "Fuciliere", "pl": "Strzelbowy", "pt-br": "Escopeteiro"}),    # the plural comes from the export
+    ("Trapper",     "Trappers",     {"zh-cn": "陷阱手", "zh-tw": "陷阱兵", "ja": "トラッパー", "ko": "트래퍼", "ru": "Ловушечник", "de": "Jäger", "fr": "Trappeur", "es": "Trampero", "it": "Cacciatore", "pl": "Sidlarz", "pt-br": "Caçador"}),      # Scab Trapper 血痂陷阱手 (the bark uses feminine forms)
+    ("Hound",       "Hounds",       {"zh-cn": "猎犬", "zh-tw": "獵犬", "ja": "ハウンド", "ko": "하운드", "ru": "Гончая", "de": "Hund", "fr": "Cerbère", "es": "Perro", "it": "Segugio", "pl": "Ogar", "pt-br": "Cão"}),        # Pox Hound 瘟疫猎犬
+    ("Monstrosity", "Monstrosities", {"zh-cn": "怪物", "zh-tw": "巨獸", "ja": "バケモノ", "ko": "흉물", "ru": "Чудовище", "de": "Monstrosität", "fr": "Monstruosité", "es": "Monstruosidad", "it": "Mostruosità", "pl": "Szkaradztwo", "pt-br": "Monstruosidade"}),        # Monstrosity Hunter 怪物猎手 / 巨獸獵人
+    ("Captain",     "Captains",     {"zh-cn": "连长", "zh-tw": "連長", "ja": "キャプテン", "ko": "캡틴", "ru": "Капитан", "de": "Captain", "fr": "Capitaine", "es": "Capitán", "it": "Capitano", "pl": "Kapitan", "pt-br": "Capitão"}),        # the boss: Chinese keeps the dialogue word, the rest is the game's own "Captain"
+    ("Twins",       None,           {"zh-cn": "双子", "zh-tw": "雙子"}),        # no string to read (the game keeps Rodin/Rinda), so the community wording stays Chinese only
     ("Disabler",    "Disablers",    {"zh-cn": "控制型敌人", "zh-tw": "控制型敵人"}),  # no official string anywhere
 ]
 
@@ -602,7 +618,16 @@ lines.append('        -- hand verified core mechanics (no game loc key exists fo
 # below cannot write the same source word a second time - which is why the file used to carry
 # a duplicate of every hand-written term, and one more after every re-run.
 emitted = set()
+hand_used = 0
+hand_shadowed = []
 for en, vals in HAND:
+    if en.lower() in exported_keys:
+        # A collection round has resolved the key that carries this term, and the export carries all
+        # 12 languages for it - the same shadow rule the blocks below use, so the hand row steps
+        # aside instead of overriding the game's own (and more complete) row.
+        hand_shadowed.append(en)
+        continue
+    hand_used += 1
     emitted.add(en.lower())
     parts = ['en = ' + quote(en)]
     for lang in LANG_ORDER:
@@ -713,7 +738,10 @@ lines.append('')
 io.open(OUT, 'w', encoding='utf-8', newline='\n').write('\n'.join(lines))
 
 print('generated %d terms (%d hand verified mechanics + %d uncollected game terms + %d hand written UI labels + %d language names + %d autonyms), skipped %d keys'
-      % (len(terms), len(HAND), missing_used, ui_used, langs_used, len(AUTONYMS), len(skipped)))
+      % (len(terms), hand_used, missing_used, ui_used, langs_used, len(AUTONYMS), len(skipped)))
+if hand_shadowed:
+    print('hand verified mechanics the export now has (kept the game wording): %s'
+          % ', '.join(hand_shadowed))
 if missing_shadowed:
     print('uncollected game terms the export now has (kept the game wording): %s'
           % ', '.join(missing_shadowed))

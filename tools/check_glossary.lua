@@ -341,9 +341,11 @@ do
         (through("Crushers", "zh-cn")), "Crushers")
     -- The full official name is still the longer, more specific term.
     check("the full official name still wins", (through("Scab Mauler", "zh-cn")), "血痂重锤兵")
-    -- Only the two Chinese columns were verified, so anywhere else the short name stays out of the
-    -- way instead of forcing a wording nobody checked.
-    check("and is left alone where it has no value", (through("Mauler", "ru")), "Mauler")
+    -- Every breed the game has a word for now carries all 11 target languages, so the "no value for
+    -- this language" rule needs a term that really has none: "Twins" is the boss pair, which the game
+    -- never localises (it keeps Rodin/Rinda), so only the two Chinese columns exist.
+    check("a breed with a value masks in every language", (through("Mauler", "ru")), "Палач")
+    check("and is left alone where it has no value", (through("Twins", "ru")), "Twins")
 
     -- A multi-word term that merely starts with a label-only word is a name of its own.
     check("a multi-word name keeps masking",
