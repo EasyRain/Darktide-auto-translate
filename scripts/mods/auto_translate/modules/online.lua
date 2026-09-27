@@ -1108,14 +1108,14 @@ end
 
 -- True when the provider copes with the game's rich-text markup on its own.
 --
--- Empty on purpose: DeepL used to be trusted here because it passed
--- "{#color(162,158,145)}Citadel Rakarth Flesh{#reset()}" through intact, but on 2026-09-27 a live
--- run stored "{#颜色(151,151,151)}[默认]{#reset()}" for "{#color(151,151,151)}[Default]{#reset()}"
--- (hud_studio) - it translates the words *inside* the tag name when the tag is short, which breaks
--- the markup and is invisible in the game until the text is drawn. Masking the tags costs one
--- placeholder per tag and the unmask step puts the original bytes back, so every provider is
--- masked now. Nothing is lost when a provider would have kept the markup: masking it is a no-op
--- for the visible words.
+-- Empty on purpose. DeepL did pass "{#color(162,158,145)}Citadel Rakarth Flesh{#reset()}" through
+-- intact, so an earlier build trusted it - but a trust list is only as good as the last
+-- measurement, and masking costs one placeholder per tag whose loss the guard turns into a refusal
+-- (visible in the log) instead of a silently broken tag (visible only on screen).
+--
+-- The bug that prompted this was ours, not DeepL's: see glossary.mask. The terms used to be masked
+-- *before* the tags, so "{#color(151,151,151)}" became "{#⟦0⟧(151,151,151)}" and unmask wrote the
+-- Chinese word for "Color" into the tag *name* (hud_studio, 2026-09-27).
 local MARKUP_SAFE = {}
 
 -- ---------------------------------------------------------------------------

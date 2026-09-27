@@ -218,6 +218,24 @@ do
     local masked = glossary.mask("Deutsch", "zh-cn", false)
     check("a whole-term string masks to one placeholder", masked:find("^⟦%d+⟧$") ~= nil, true)
 
+    -- Rich-text markup must not be reached by the term pass. "Color" is a UI term, so masking
+    -- terms first used to turn "{#color(151,151,151)}" into "{#⟦0⟧(151,151,151)}", and unmask then
+    -- wrote the Chinese word into the tag *name* - a tag that only breaks when the text is drawn.
+    -- Measured on hud_studio (2026-09-27): two keys came back as "{#颜色(151,151,151)}".
+    do
+        local tag = "{#color(151,151,151)}Default{#reset()}"
+        local masked_tag, tokens_tag = glossary.mask(tag, "zh-cn", true)
+        local restored_tag, missing_tag = glossary.unmask(masked_tag, tokens_tag)
+        check("a tag is one token, its words are not terms", #tokens_tag, 2)
+        check("the tag keeps its own spelling in the token", tokens_tag[1].term, "{#color(151,151,151)}")
+        check("a tag round trips byte for byte", restored_tag, tag)
+        check("and nothing is counted missing", missing_tag, 0)
+
+        local kept, tokens_kept = glossary.mask(tag, "zh-cn", false)
+        check("with markup left to the provider the tag is untouched", kept, tag)
+        check("and no token was made for it", #tokens_kept, 0)
+    end
+
     -- The space a service leaves next to a placeholder. A placeholder reads as a Latin-shaped
     -- token, so the service separates it from the text around it - measured on a real store:
     -- "Show decimals" came back as "显示 小数位", and 15 of that file's 109 entries carried such a

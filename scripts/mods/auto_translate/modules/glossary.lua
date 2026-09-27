@@ -208,6 +208,38 @@ function M.mask(text, lang, mask_markup)
     local tokens = {}
     local result = text
 
+    -- Rich-text markup is taken out of the text *before* the terms are masked, and that order is
+    -- the whole point: "Color" is itself a UI term, so masking terms first turned
+    -- "{#color(151,151,151)}" into "{#⟦0⟧(151,151,151)}" - and unmask then wrote the Chinese word
+    -- into the *tag name* ({#颜色(151,151,151)}), a broken tag that only becomes visible when the
+    -- text is drawn. Masking the tags first also hides their contents from the term pass, which is
+    -- right: a tag is markup, not text the player reads.
+    --
+    -- With mask_markup the tags become tokens, and the caller's unmask puts them back. Without it
+    -- (a provider trusted to keep markup on its own) the tags are held aside under a
+    -- control-character sentinel that no term pattern can match, then restored verbatim before
+    -- returning - the reply then carries the original tags, which is what "trusted with markup"
+    -- has to mean.
+    local held = nil
+    if mask_markup == false then
+        held = {}
+        result = result:gsub(MARKUP, function(tag)
+            held[#held + 1] = tag
+            return "\1" .. #held .. "\1"
+        end)
+    else
+        local seen_tags = {}
+        result = result:gsub(MARKUP, function(tag)
+            local index = seen_tags[tag]
+            if not index then
+                tokens[#tokens + 1] = { term = tag, source = tag, markup = true }
+                index = #tokens
+                seen_tags[tag] = index
+            end
+            return PLACEHOLDER_OPEN .. (index - 1) .. PLACEHOLDER_CLOSE
+        end)
+    end
+
     local list = type(lang) == "string" and by_language[lang] or nil
     if list and #list > 0 then
         for _, item in ipairs(list) do
@@ -245,18 +277,9 @@ function M.mask(text, lang, mask_markup)
         end
     end
 
-    -- Markup goes into the same token list, so one unmask() restores everything.
-    -- Identical tags share a token to keep the placeholder count down.
-    if mask_markup ~= false then
-        local seen = {}
-        result = result:gsub(MARKUP, function(tag)
-            local index = seen[tag]
-            if not index then
-                tokens[#tokens + 1] = { term = tag, source = tag, markup = true }
-                index = #tokens
-                seen[tag] = index
-            end
-            return PLACEHOLDER_OPEN .. (index - 1) .. PLACEHOLDER_CLOSE
+    if held then
+        result = result:gsub("\1(%d+)\1", function(index)
+            return held[tonumber(index)] or ""
         end)
     end
 
