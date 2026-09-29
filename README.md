@@ -673,6 +673,7 @@ them would wreck prose. `tools/check_glossary.lua` fails if one ever appears in 
 ```
 python tools\build_glossary.py                    # regenerate from the index + the hand-verified blocks
 luajit tools\check_glossary.lua                   # load it and exercise masking through the module
+luajit tools\check_languages.lua                  # the fixes, in all 12 languages (~12k term round trips)
 ```
 
 It reads the game's own localisation out of the **localisation index**
@@ -935,7 +936,7 @@ is what tells a later run whether a human or an engine wrote it.
 `tools\run_checks.ps1` runs every check on this page, one command, with a timing per check:
 
 ```
-powershell -File tools\run_checks.ps1                 # all of them; ~1 s of real work
+powershell -File tools\run_checks.ps1                 # all of them; `langs` is the slow one at ~23 s
 powershell -File tools\run_checks.ps1 -List           # what is in the list
 powershell -File tools\run_checks.ps1 -Only store,glossary
 powershell -File tools\run_checks.ps1 -Skip core,fixtures
