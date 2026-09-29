@@ -189,11 +189,30 @@ STOP_WORDS = {
     'option', 'options', 'setting', 'settings', 'button', 'buttons', 'key', 'keys', 'test',
 }
 
+# Weapon mark designations ("Mk VII", "Mk IIa", and the paired "Mk I & Mk V" of the slab shield).
+# They arrived with the 2026-09-29 key discovery (loc_weapon_mark_*, 132 keys) and read the same in
+# ten of the twelve languages: only zh-cn drops the space ("Mk.VII") and ru spells it out
+# ("Мод. VII"). Masking a mark therefore buys nothing a reader would notice and costs 29 entries in
+# a table whose job is protecting *names* - the player asked for them to be left out (2026-09-29).
+# The keys stay in translations/term_keys.lua, so re-enabling this is one line.
+MARK_DESIGNATION = re.compile(
+    r'^(?:Mk|MK|Mark)\.?\s*[IVXLivxl0-9]+[a-z]?'
+    r'(?:\s*(?:&|and|\+)\s*(?:Mk|MK|Mark)\.?\s*[IVXLivxl0-9]+[a-z]?)?$', re.I)
+# Values that are not words a player reads, but records the localization carries: the developers'
+# own placeholders ("-- aura description --"), a truncated list entry ("1 more"), a bare mark label
+# ("M1") and the lowercase operation ids the Havoc screens use internally ("no quarter", "spy hunt",
+# "vox ghosts"). Masking any of those would either do nothing or rewrite ordinary English, and every
+# one of them also had no Ukrainian, which is how they were found (2026-09-29).
+PLACEHOLDER = re.compile(r'^(?:--.*--|\d+ more|[A-Za-z]?\d+)$')
+LOWERCASE_ID = re.compile(r'^[^A-Z]*\s[^A-Z]*$')
+
 
 def is_term(text):
     if not text or len(text) < 2 or len(text) > 30:
         return False
     if text[-1] in '.!:;':
+        return False
+    if MARK_DESIGNATION.match(text) or PLACEHOLDER.match(text) or LOWERCASE_ID.match(text):
         return False
     if re.search(r'[{}%<>|]', text):
         return False
@@ -220,6 +239,48 @@ for k in sorted(data.keys()):
             terms[key] = dict(langs)
         continue
     terms[key] = dict(langs)
+
+# ---- Ukrainian the community translation does not cover ----
+#
+# The game ships no Ukrainian: every uk value here comes from the community translation (Nexus 618),
+# matched by loc key. That file is stale (its files date from 2026-08-20) and keyed by its own key
+# names, so the update's content and a fistful of older terms have no uk at all.
+# translations/uk_extra.lua holds the recovered and the hand-written values for them; see
+# tools/fill_uk_gaps.py, whose report says which pass produced each one.
+UK_EXTRA = {}
+_UK_EXTRA_PATH = os.path.join(REPO, 'translations', 'uk_extra.lua')
+if os.path.exists(_UK_EXTRA_PATH):
+    for _en, _uk in re.findall(r'\["((?:[^"\\]|\\.)*)"\]\s*=\s*"((?:[^"\\]|\\.)*)"',
+                               io.open(_UK_EXTRA_PATH, encoding='utf-8').read()):
+        UK_EXTRA[unescape_lua(_en).lower()] = unescape_lua(_uk)
+
+
+def with_uk(en, vals):
+    """The same values with a Ukrainian value filled in where the community has none.
+
+    Two sources, in order: translations/uk_extra.lua (values recovered for, or written by, this
+    project) and the generated table's own entry for the same English word. The second matters for
+    the hand-written blocks: "On", "Other", "Confirm" and "Rampage!" are hand rows, so the community
+    value attached to the *index* entry never reached them, and they were the last four terms
+    without Ukrainian (measured 2026-09-29).
+    """
+    if vals.get('uk'):
+        return vals
+    key = unescape_lua(en).lower()
+    extra = UK_EXTRA.get(key) or (terms.get(key) or {}).get('uk')
+    if not extra:
+        return vals
+    merged = dict(vals)
+    merged['uk'] = extra
+    return merged
+
+
+_filled = 0
+for _key, _langs in terms.items():
+    if 'uk' not in _langs and _key in UK_EXTRA:
+        _langs['uk'] = UK_EXTRA[_key]
+        _filled += 1
+print('uk: %d term(s) took their Ukrainian from translations/uk_extra.lua' % _filled)
 
 # ---- carry over whatever a previous run produced (see parse_existing) ----
 #
@@ -585,6 +646,13 @@ for text in AUTONYMS:
 for en, vals in parse_existing(OUT).items():
     if en in hand_keys:
         continue
+    # The previous file is not a way back in for a word this build rejects. Its keys are lowercased,
+    # so the test has to accept that form (it does - the mark pattern is case-insensitive), and
+    # without this gate every rejected term returned on the next run: the mark designations removed
+    # on 2026-09-29 came back as "mk vii" entries because the generated section had dropped them and
+    # this loop set them down again. Values for the terms that *are* still terms are unaffected.
+    if not is_term(en):
+        continue
     entry = terms.setdefault(en, {})
     for lang, value in vals.items():
         entry.setdefault(lang, value)
@@ -633,6 +701,7 @@ emitted = set()
 hand_used = 0
 hand_shadowed = []
 for en, vals in HAND:
+    vals = with_uk(en, vals)
     if en.lower() in exported_keys:
         # A collection round has resolved the key that carries this term, and the export carries all
         # 12 languages for it - the same shadow rule the blocks below use, so the hand row steps
@@ -655,6 +724,7 @@ lines.append('        -- wording, checked against the export where the export ha
 missing_used = 0
 missing_shadowed = []
 for en, vals in MISSING_LOC:
+    vals = with_uk(en, vals)
     if en.lower() in exported_keys:
         missing_shadowed.append(en)
         continue
@@ -673,6 +743,7 @@ lines.append('        -- full name ("Scab Mauler"), so a string that says only "
 breed_shadowed = []
 breed_used = 0
 for en, plural, vals in SHORT_BREEDS:
+    vals = with_uk(en, with_uk(plural or en, vals))
     for spelling in [en] + ([plural] if plural else []):
         if spelling.lower() in exported_keys:
             breed_shadowed.append(spelling)
@@ -692,6 +763,7 @@ lines.append('        -- hand written interface labels (general UI words, 16 lan
 ui_used = 0
 ui_shadowed = []
 for en, vals in UI:
+    vals = with_uk(en, vals)
     if en.lower() in exported_keys:
         ui_shadowed.append(en)
         continue
@@ -708,6 +780,7 @@ lines.append('        -- language names: the English spelling -> the name in the
 langs_used = 0
 lang_shadowed = []
 for en, vals in LANGS:
+    vals = with_uk(en, vals)
     if en.lower() in exported_keys:
         lang_shadowed.append(en)
         continue
