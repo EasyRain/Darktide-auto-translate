@@ -12,3 +12,6 @@ bin/
 *.exp
 *.lib
 *.pdb
+# Python bytecode from running or importing the tools (a diagnostic imported fill_uk_gaps as a module)
+__pycache__/
+*.pyc
