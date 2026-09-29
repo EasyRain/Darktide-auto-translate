@@ -90,9 +90,15 @@ local lfs_ok, lfs = pcall(require, "lfs")
 local function entries_of(path) return path end
 
 local langs = {}
+-- `export/` is not a language: it holds the term collector's per-language term exports and harvest
+-- caches (a `terms` table, not a store's `entries`). The game folder grows one during a collection
+-- round - twelve <lang>.lua plus twelve cache_<lang>.lua - and this script used to walk them as if
+-- they were stores and report "no entries table" for each (24 hard problems, 2026-09-29).
+local NOT_A_LANGUAGE = { export = true, scratch = true }
 if lfs_ok then
     for lang in lfs.dir(dir) do
-        if lang ~= "." and lang ~= ".." and lfs.attributes(dir .. "/" .. lang, "mode") == "directory" then
+        if lang ~= "." and lang ~= ".." and not NOT_A_LANGUAGE[lang]
+            and lfs.attributes(dir .. "/" .. lang, "mode") == "directory" then
             langs[#langs + 1] = lang
         end
     end
@@ -100,7 +106,9 @@ else
     -- no lfs: take the language folders from a listing the caller can provide
     local p = io.popen('dir /b /ad "' .. dir .. '"')
     if p then
-        for line in p:lines() do langs[#langs + 1] = line end
+        for line in p:lines() do
+            if not NOT_A_LANGUAGE[line] then langs[#langs + 1] = line end
+        end
         p:close()
     end
 end
