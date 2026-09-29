@@ -103,6 +103,13 @@ def main() -> int:
     cands = candidates(known) - known
     print("known %d key(s), %d candidate(s) to test" % (len(known), len(cands)))
 
+    if not args.index.is_file():
+        # Same guidance build_glossary.py gives: the index is the one input this needs, and a bare
+        # sqlite3 traceback ("unable to open database file") says nothing about how to get it.
+        print("the index is missing: %s" % args.index)
+        print("build it first - see game-data/README.md (extract, convert, build_index)")
+        return 2
+
     con = sqlite3.connect("file:%s?mode=ro" % args.index, uri=True)
     rows = con.execute("SELECT hash FROM localization").fetchall()
     present = {row[0] for row in rows}
