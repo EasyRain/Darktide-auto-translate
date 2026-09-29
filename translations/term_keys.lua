@@ -13,9 +13,10 @@
 return {
     -- The exporter collects a language once per version. This is bumped on every
     -- regeneration so the next launch picks the new keys up.
-    version = 5,
+    version = 6,
     keys = {
-        -- weapons and gear (77)
+        -- weapons and gear (81)
+        "loc_alias_view_hotkey_inventory",
         "loc_contracts_view_general_goods_random_melee_weapon",
         "loc_contracts_view_general_goods_random_ranged_weapon",
         "loc_glossary_armour_type_resistant",
@@ -55,6 +56,7 @@ return {
         "loc_talent_veteran_weapon_switch_replenish_stamina",
         "loc_talent_veteran_weapon_switch_replenish_toughness",
         "loc_talent_veteran_weapon_switch_stamina_reduction",
+        "loc_tg_weapon_special_powermaul_p3",
         "loc_trait_bespoke_armor_penetration_against_staggered",
         "loc_trait_bespoke_armor_rend_on_activated_attacks",
         "loc_trait_bespoke_armor_rend_on_projectile_hit",
@@ -86,6 +88,8 @@ return {
         "loc_weapon_mark_dual_stubpistols_p1_m1",
         "loc_weapon_mark_needlepistol_p1_m1",
         "loc_weapon_mark_needlepistol_p1_m2",
+        "loc_weapon_special",
+        "loc_weapon_special_objective",
         "loc_weapon_special_special_attack",
         "loc_weapon_stats_display_armored",
         "loc_weapon_stats_display_berzerker",
@@ -93,7 +97,7 @@ return {
         "loc_weapon_stats_display_dodge_distance",
         "loc_weapon_stats_display_super_armor",
         "loc_weapon_stats_display_unarmored",
-        -- missions and places (21)
+        -- missions and places (22)
         "loc_contracts_task_label_complete_mission_no_death",
         "loc_contracts_task_label_complete_missions",
         "loc_expeditions_currency_name_hud",
@@ -115,7 +119,8 @@ return {
         "loc_mission_type_06_name",
         "loc_mission_type_07_name",
         "loc_social_menu_roster_players_from_previous_missions",
-        -- classes and abilities (452)
+        "loc_zone_expeditions",
+        -- classes and abilities (454)
         "loc_ability_frag_grenade",
         "loc_ability_ogryn_charge",
         "loc_ability_ogryn_charge_description_new",
@@ -142,6 +147,7 @@ return {
         "loc_class_cryptic_title",
         "loc_class_ogryn_title",
         "loc_class_psyker_title",
+        "loc_class_selection_button_back",
         "loc_class_veteran_name",
         "loc_class_veteran_title",
         "loc_class_zealot_title",
@@ -253,6 +259,7 @@ return {
         "loc_talent_buff_toughness_on_stimm",
         "loc_talent_cleave_boost_medium",
         "loc_talent_crit_chance_low",
+        "loc_talent_cryptic_power_keyword",
         "loc_talent_damage_aura",
         "loc_talent_damage_aura_improved_new",
         "loc_talent_execution_order_perma_buff",
@@ -576,7 +583,7 @@ return {
         "loc_pickup_crafting_material_small_diamantine",
         "loc_pickup_crafting_material_small_plasteel",
         "loc_vendor_view_title",
-        -- interface words (209)
+        -- interface words (215)
         "loc_alf_dmf_ext_reset_tab",
         "loc_body_shop_view_display_name",
         "loc_breed_display_name_cultist_vanguard",
@@ -600,6 +607,7 @@ return {
         "loc_options_view_display_name",
         "loc_pickup_deployable_ammo_crate_01",
         "loc_pickup_pocketable_1",
+        "loc_pickup_pocketable_medical_crate_01",
         "loc_pickup_syringe_pocketable_2",
         "loc_pickup_syringe_pocketable_3",
         "loc_pickup_syringe_pocketable_4",
@@ -619,6 +627,8 @@ return {
         "loc_scoreboard_view_social_profile",
         "loc_setting_checkbox_off",
         "loc_setting_checkbox_on",
+        "loc_setting_com_wheel_double_tap",
+        "loc_setting_com_wheel_single_tap",
         "loc_setting_keybinding_press_new_button",
         "loc_settings_menu_close_menu",
         "loc_settings_menu_group_other_settings",
@@ -638,6 +648,7 @@ return {
         "loc_stats_display_mobility_stat",
         "loc_stats_display_warp_resist_stat",
         "loc_training_ground_view",
+        "loc_training_grounds_view_display_name",
         "loc_trait_bespoke_ammo_refill_from_reserve_on_crit",
         "loc_trait_bespoke_ammo_spent_from_reserve_on_crit",
         "loc_trait_bespoke_count_as_dodge_vs_ranged_on_close_kill",

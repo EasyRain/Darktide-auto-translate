@@ -42,6 +42,35 @@ online.init(util, store, glossary, engines, injector, custom)
 local exporter = mod:io_dofile(BASE .. "exporter")
 exporter.init(util)
 
+-- Automation hook for the terminology rounds.
+--
+-- Why: the game only loads one language per launch (switching it means Steam plus a restart,
+-- measured 2026-09-16), so a full collection is twelve launches. A LuaExec client can drive the
+-- rounds from inside one running game instead - switch the language with the game's own
+-- Manager.localization:debug_set_language(), then ask for one export per language:
+--
+--     dt-cli exec 'return get_mod("auto_translate").at_collect_round("en")'
+--
+-- It runs exactly the export the startup path runs, for the language it is told, and returns a
+-- one-line status. It refuses to do anything unless the collect_terms setting is on - that switch
+-- stays the permission - and it reports the language the game itself thinks it is in, so a caller
+-- can see that a switch did not take.
+function mod.at_collect_round(lang)
+    if not mod:get("collect_terms") then
+        return "collect_terms is off"
+    end
+    local target = tostring(lang or "")
+    if target == "" then
+        return "at_collect_round needs a language code"
+    end
+    local ok, written = pcall(exporter.run, mod, target)
+    if not ok then
+        return "error: " .. tostring(written)
+    end
+    return string.format("%s for '%s' (game language reads as '%s')",
+        written and "exported" or "nothing to do", target, tostring(util.game_language()))
+end
+
 -- The model downloader: owns the file sequence, the progress state and the notices; the
 -- transfer itself is native (src/at_download.c).
 local download = mod:io_dofile(BASE .. "download")

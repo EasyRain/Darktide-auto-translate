@@ -54,11 +54,22 @@ function Set-SettingLine {
     if ($bom) { $text = $text.Substring(1) }
     $newline = if ($text.Contains("`r`n")) { "`r`n" } else { "`n" }
     $lines = $text -split "`r?`n"
-    $pattern = '^' + [regex]::Escape($Indent) + [regex]::Escape($Name) + '\s*=\s*"[^"]*"\s*$'
+    # Two shapes are in the wild, and the file's own shape decides: the game's user_settings.config
+    # writes `name = "value"`, while Steam's app manifest is VDF and writes `"name"<TAB><TAB>"value"`.
+    # This used to only know the first, which silently stopped matching when Steam wrote the second
+    # (measured 2026-09-29: the manifest had `"language"` + two tabs + `"schinese"`, in both
+    # UserConfig and MountedConfig, and the round script threw "no 'language' line at indent").
+    $assign = '^' + [regex]::Escape($Indent) + [regex]::Escape($Name) + '\s*=\s*"[^"]*"\s*$'
+    $vdf = '^' + [regex]::Escape($Indent) + '"' + [regex]::Escape($Name) + '"\s+"[^"]*"\s*$'
     $changed = 0
     for ($i = 0; $i -lt $lines.Count; $i++) {
-        if ($lines[$i] -match $pattern) {
+        if ($lines[$i] -match $assign) {
             $lines[$i] = "$Indent$Name = `"$Value`""
+            $changed++
+        } elseif ($lines[$i] -match $vdf) {
+            # Keep the tabs Steam wrote; both UserConfig and MountedConfig carry the value and both
+            # have to agree, or the game takes whichever one it reads first.
+            $lines[$i] = "$Indent`"$Name`"`t`t`"$Value`""
             $changed++
         }
     }
@@ -79,7 +90,7 @@ if ($Via -eq "config") {
 } else {
     $manifest = Join-Path $SteamApps "appmanifest_$AppId.acf"
     Copy-Item $manifest "$manifest.bak-langround" -Force
-    $n = Set-SettingLine -Path $manifest -Name "language" -Value $STEAM_CODES[$Language] -Indent "`t"
+    $n = Set-SettingLine -Path $manifest -Name "language" -Value $STEAM_CODES[$Language] -Indent "`t`t"
     Write-Output "  set UserConfig language = `"$($STEAM_CODES[$Language])`" ($n line(s)) in $manifest"
     Write-Output "  note: Steam owns this file while it runs and may write its own value back"
 }
