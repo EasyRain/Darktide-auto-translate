@@ -137,6 +137,22 @@ if (Test-Path $dataSource) {
     }
 }
 
+# Mirror, do not just copy: a Lua file that the repository no longer has must not stay in the game
+# folder. modules/exporter.lua did exactly that when the runtime term export was removed
+# (2026-09-29) - nothing loads a file DMF is not asked for, but a stale module is the first thing
+# that misleads the next debugging session, and the game folder is what a player actually runs.
+$repoScripts = Join-Path $RepoRoot "scripts\mods\$name"
+$gameScripts = Join-Path $GameMods "$name\scripts\mods\$name"
+if ((Test-Path $repoScripts) -and (Test-Path $gameScripts)) {
+    $strays = Get-ChildItem -Path $gameScripts -Recurse -File -Filter *.lua | Where-Object {
+        -not (Test-Path (Join-Path $repoScripts $_.FullName.Substring($gameScripts.Length).TrimStart('\')))
+    }
+    foreach ($stray in $strays) {
+        Remove-Item $stray.FullName -Force
+        Write-Output ("note: removed the deployed {0} - the repository no longer has it" -f $stray.FullName.Replace("$GameMods\", ""))
+    }
+}
+
 if ($decoys -or (Test-Path $decoyModules)) {
     Write-Output ""
     Write-Output "note: stray Lua at the mod root (unused by the game, remove if it is a stale copy):"
