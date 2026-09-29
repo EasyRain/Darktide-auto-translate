@@ -39,38 +39,6 @@ local custom = mod:io_dofile(BASE .. "custom")
 local online = mod:io_dofile(BASE .. "online")
 online.init(util, store, glossary, engines, injector, custom)
 
-local exporter = mod:io_dofile(BASE .. "exporter")
-exporter.init(util)
-
--- Automation hook for the terminology rounds.
---
--- Why: the game only loads one language per launch (switching it means Steam plus a restart,
--- measured 2026-09-16), so a full collection is twelve launches. A LuaExec client can drive the
--- rounds from inside one running game instead - switch the language with the game's own
--- Manager.localization:debug_set_language(), then ask for one export per language:
---
---     dt-cli exec 'return get_mod("auto_translate").at_collect_round("en")'
---
--- It runs exactly the export the startup path runs, for the language it is told, and returns a
--- one-line status. It refuses to do anything unless the collect_terms setting is on - that switch
--- stays the permission - and it reports the language the game itself thinks it is in, so a caller
--- can see that a switch did not take.
-function mod.at_collect_round(lang)
-    if not mod:get("collect_terms") then
-        return "collect_terms is off"
-    end
-    local target = tostring(lang or "")
-    if target == "" then
-        return "at_collect_round needs a language code"
-    end
-    local ok, written = pcall(exporter.run, mod, target)
-    if not ok then
-        return "error: " .. tostring(written)
-    end
-    return string.format("%s for '%s' (game language reads as '%s')",
-        written and "exported" or "nothing to do", target, tostring(util.game_language()))
-end
-
 -- The model downloader: owns the file sequence, the progress state and the notices; the
 -- transfer itself is native (src/at_download.c).
 local download = mod:io_dofile(BASE .. "download")
@@ -487,15 +455,9 @@ local function reinject_finished()
     util.info(mod, "re-injected %d newly translated key(s); no restart needed", report.stats.ready)
 end
 
--- How often update() looks at the game's string cache (see exporter.harvest_cache). It only
--- writes when the cache has produced key names the key list does not have, which a browsing
--- player does a handful of times per session, so a minute is often enough and never noisy.
-local CACHE_HARVEST_INTERVAL = 60
-local harvest_timer = 0
-
 function mod.update(dt)
     -- A mod that has been switched off (its own master switch, or DMF's toggle) does nothing: no
-    -- queue to advance, no cache to harvest.
+    -- queue to advance.
     if not active() then
         return
     end
@@ -536,17 +498,6 @@ function mod.update(dt)
         end
     end
 
-    -- The game's string cache grows as the player opens talent trees and menus; looking at it
-    -- now and then is what names the keys no key list guessed. Writing only happens when there
-    -- is something new, so a session that changes nothing costs one table walk a minute - and it
-    -- stays out of the way entirely while collecting is switched off.
-    harvest_timer = harvest_timer + (dt or 0)
-    if harvest_timer >= CACHE_HARVEST_INTERVAL then
-        harvest_timer = 0
-        if mod:get("collect_terms") then
-            pcall(exporter.harvest_cache, mod, util.game_language())
-        end
-    end
 end
 
 -- DMF calls this once every mod has finished loading (localization registry ready).
@@ -555,43 +506,6 @@ function mod.on_all_mods_loaded()
     if not ok then
         util.warn(mod, "startup pipeline error: %s", tostring(err))
     end
-
-    -- The whole-language terminology collection. Every launch looks the key list up in the CURRENT
-    -- game language and writes translations/export/<language>.lua - but only when that file is
-    -- missing or older than the key list's version, which is the first check the exporter makes. So
-    -- a normal launch does nothing (one log line), and bumping `version` in
-    -- translations/term_keys.lua collects once per language: launch, switch language in Steam,
-    -- launch again. That is how the game's own wording for equipment, slots, missions and talents
-    -- gets in - and it can only be collected from inside the game, because the strings live in the
-    -- bundles rather than on disk.
-    --
-    -- It is behind a switch, off by default: collecting is something you turn on for a round, and
-    -- the files it writes are the glossary's input rather than anything the game reads.
-    if mod:get("collect_terms") then
-        local collected, collect_err = pcall(exporter.run, mod, util.game_language())
-        if not collected then
-            util.warn(mod, "term export error: %s", tostring(collect_err))
-        end
-
-        -- Key names the key list does not have, read from the strings this session has already
-        -- resolved. At this point that is mostly what the launch itself did; the timer in update()
-        -- picks up the rest as the player opens menus. See exporter.harvest_cache.
-        pcall(exporter.harvest_cache, mod, util.game_language())
-    else
-        util.log(mod, "term collection is off ('Collect terms'): nothing is written to translations/export/")
-    end
-
-    -- One line in the log that answers whether a *full* dump is possible: if the game's
-    -- localization manager keeps its table reachable, the key list stops mattering and no future
-    -- term change ever needs another collection run. Log only; nothing is written - and the answer
-    -- is known (it is not), so it only runs with debug logging on.
-    if mod:get("debug_logging") then
-        pcall(exporter.describe_localization, mod)
-    end
-
-    -- exporter.probe_languages() answered its question on 2026-09-16 and is no longer called: the
-    -- localizers are bound to the language loaded at startup, so a session cannot collect another
-    -- language. See the function's comment for the measurement.
 end
 
 -- Mod options: "Reload translation files"
@@ -909,19 +823,6 @@ mod.on_setting_changed = function(setting_id)
             end
         else
             stand_down("master switch off")
-        end
-    elseif setting_id == "collect_terms" then
-        if mod:get("collect_terms") then
-            -- Switching it on collects straight away rather than at the next launch: the export only
-            -- needs the language the game is already running in.
-            local lang = util.game_language()
-            local ok, err = pcall(exporter.run, mod, lang)
-            if not ok then
-                util.warn(mod, "term export error: %s", tostring(err))
-            end
-            pcall(exporter.harvest_cache, mod, lang)
-        else
-            util.info(mod, "term collection off: nothing more is written to translations/export/ (the files already there stay)")
         end
     end
 end

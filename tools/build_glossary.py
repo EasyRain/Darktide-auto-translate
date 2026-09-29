@@ -5,22 +5,26 @@ the only writer of it, because the hand-verified parts below are the source of t
 manual edit to the generated file would be lost on the next run.
 
     python tools/build_glossary.py
-    python tools/build_glossary.py --export <dir> --uk-ref <dir>
+    python tools/build_glossary.py --index <db> --uk-ref <dir>
 
-* `--export`  the per-language term exports (translations/export/<lang>.lua in a deployed
-              copy of the mod, or wherever i18n tooling wrote them)
+* `--index`   the localisation index (game-data/index/localization.sqlite). Every key in
+              translations/term_keys.lua is looked up there and its wording taken for all twelve
+              languages at once. Rebuild the index after a game update - see game-data/README.md.
 * `--uk-ref`  the Ukrainian community translation (Nexus 618); optional - without it the
               Ukrainian values of a previous run are carried over untouched
 
-Inputs it reads: the exports, the previous glossary.lua (values are carried over), and the
-hand-verified blocks below. Output: translations/glossary.lua next to this script.
+Inputs it reads: the index, translations/term_keys.lua (the key list), the previous glossary.lua
+(values are carried over), and the hand-verified blocks below. Output: translations/glossary.lua.
 """
 import io, os, re, sys, glob, collections
 
 sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DEFAULT_EXPORT = os.path.join(REPO, 'translations', 'export')
+DEFAULT_INDEX = os.path.join(os.path.dirname(os.path.dirname(REPO)), 'game-data', 'index', 'localization.sqlite')
+TERM_KEYS = os.path.join(REPO, 'translations', 'term_keys.lua')
+SKILL_SCRIPTS = os.path.join(os.path.dirname(os.path.dirname(REPO)), '.dsh', 'skills',
+                             'darktide-localization-search', 'scripts')
 DEFAULT_UKREF = os.environ.get('AT_UK_REF', r'D:\DshWorkSpace\Darktide\refs\localizations')
 
 
@@ -30,7 +34,7 @@ def _arg(flag, default):
     return default
 
 
-EXPORT = _arg('--export', DEFAULT_EXPORT)
+INDEX = _arg('--index', DEFAULT_INDEX)
 UKREF = _arg('--uk-ref', DEFAULT_UKREF)
 OUT = os.path.join(REPO, 'translations', 'glossary.lua')
 
@@ -59,13 +63,48 @@ def unescape_lua(s):
         i += 1
     return ''.join(out)
 
-def parse_export(lang):
-    p = os.path.join(EXPORT, lang + '.lua')
-    if not os.path.exists(p):
-        return {}          # exports only exist on a machine that has run the game
-    t = io.open(p, encoding='utf-8').read()
-    return {k: unescape_lua(v)
-            for k, v in re.findall(r'\["(loc_[^"]+)"\] = "((?:[^"\\]|\\.)*)"', t)}
+def load_index(path, keys_path):
+    """key -> {lang: text}, read straight out of the localisation index.
+
+    Why the index and not the game: the mod used to export the wording of the current language at
+    startup, which meant twelve launches (one per language) to collect a key list, and a key only
+    ever got a value if a round ran *after* it was added to the list. The index holds every string the
+    game ships, for all twelve languages at once, keyed by the hash Fatshark computes over the key's
+    UTF-8 bytes - so the glossary can be built offline, and rebuilding it after a game update costs
+    one extraction (see game-data/README.md) instead of twelve rounds.
+
+    Keys that the game does not have (mod-only keys, or names a mod invented) simply produce no row
+    and are skipped, exactly as the exporter skipped them.
+    """
+    sys.path.insert(0, SKILL_SCRIPTS)
+    from common import key_hash
+    import sqlite3
+
+    keys = sorted(set(re.findall(r'"(loc_[a-z0-9_\-]+)"',
+                                 io.open(keys_path, encoding='utf-8').read())))
+    if not keys:
+        print('no keys in %s' % keys_path)
+        return collections.defaultdict(dict)
+    if not os.path.exists(path):
+        print('the index is missing: %s' % path)
+        print('build it first - see game-data/README.md (extract, convert, build_index)')
+        raise SystemExit(2)
+
+    con = sqlite3.connect('file:%s?mode=ro' % path, uri=True)
+    cols = ', '.join('"%s"' % lang for lang in GAME_LANGS)
+    out = collections.defaultdict(dict)
+    found = 0
+    for key in keys:
+        row = con.execute('SELECT %s FROM localization WHERE hash = ? LIMIT 1' % cols,
+                          (key_hash(key),)).fetchone()
+        if not row:
+            continue
+        langs = {lang: strip_rich(value) for lang, value in zip(GAME_LANGS, row) if value}
+        if langs:
+            out[key] = langs
+            found += 1
+    print('index: %d of %d key(s) resolved (%s)' % (found, len(keys), os.path.basename(path)))
+    return out
 
 # The file this script writes is also a source. Without this, regenerating on a
 # machine whose translations/export/ is missing (or was cleaned) silently dropped
@@ -111,10 +150,7 @@ for p in sorted(glob.glob(os.path.join(UKREF, 'ukrainian', 'UkrainianLocalizatio
     uk.update(extract_uk(p))
 
 # ---- collect: key -> {lang: text} ----
-data = collections.defaultdict(dict)
-for lang in GAME_LANGS:
-    for k, v in parse_export(lang).items():
-        data[k][lang] = strip_rich(v)
+data = load_index(INDEX, TERM_KEYS)
 for k, v in uk.items():
     if k in data:
         data[k]['uk'] = strip_rich(v)
@@ -184,51 +220,6 @@ for k in sorted(data.keys()):
             terms[key] = dict(langs)
         continue
     terms[key] = dict(langs)
-
-# ---- the string-cache harvest ----
-#
-# Everything above only covers key names translations/term_keys.lua contains, and the *English* value
-# is what pairs a key with its target languages - which is why a term whose key nobody guessed stays
-# invisible no matter how many languages are collected. The harvest files
-# (exporter.harvest_cache -> translations/export/cache_<lang>.lua) point the other way: they hold
-# key -> string for the keys the key list does NOT have, in whichever language the game ran.
-#
-# Pairing them per key turns "Renegade Berzerker" -> "血痂狂暴者" into a term as soon as an English
-# harvest exists - no second collection round, and no key list entry. Nothing is invented: a key is
-# used only when the English side and at least one target side both carry it, both values have to
-# pass the same "is this a bare term" test the exports do, and a word the exports already carry wins.
-def parse_cache(lang):
-    path = os.path.join(EXPORT, 'cache_' + lang + '.lua')
-    if not os.path.exists(path):
-        return {}
-    text = io.open(path, encoding='utf-8').read()
-    return {k: unescape_lua(v)
-            for k, v in re.findall(r'\["(loc_[^"]+)"\] = "((?:[^"\\]|\\.)*)"', text)}
-
-cache = {lang: parse_cache(lang) for lang in GAME_LANGS}
-cache = {lang: values for lang, values in cache.items() if values}
-harvested = 0
-if 'en' in cache:
-    for cache_key, raw in cache['en'].items():
-        en = strip_rich(raw)
-        if not is_term(en):
-            continue
-        key = en.lower()
-        if key in terms or key in exported_keys:
-            continue
-        langs = {'en': en}
-        for lang, values in cache.items():
-            if lang == 'en' or cache_key not in values:
-                continue
-            text = strip_rich(values[cache_key])
-            if is_term(text):
-                langs[lang] = text
-        if len(langs) > 1:
-            terms[key] = langs
-            exported_keys.add(key)
-            harvested += 1
-print('string cache: %d extra term(s) from %s'
-      % (harvested, ', '.join(sorted(cache)) if cache else 'no cache_*.lua file'))
 
 # ---- carry over whatever a previous run produced (see parse_existing) ----
 #
@@ -618,7 +609,8 @@ lines.append('-- translated and restored afterwards, so "Keystone" cannot become
 lines.append('--')
 lines.append('-- Sources:')
 lines.append('--   * everything below the hand verified block comes from the game\'s own')
-lines.append('--     localisation, exported for 12 languages at runtime (see translations/export/)')
+lines.append('--     localisation, read for all 12 languages out of the localisation index')
+lines.append('--     (game-data/index/localization.sqlite) for the keys translations/term_keys.lua lists')
 lines.append('--   * Ukrainian values were extracted from the complete community translation')
 lines.append('--     "Ukrainian Localization" (Nexus 618); the game ships no Ukrainian itself')
 lines.append('--   * the hand verified block lists mechanics wording that has no loc key of its')
@@ -628,9 +620,9 @@ lines.append('--     that official name minus the faction word the short English
 lines.append('--')
 lines.append('-- A term is only used for languages that have a value; empty ones are skipped.')
 lines.append('--')
-lines.append('-- NOTE: this file is generated by i18n/build_glossary.py (from the runtime exports')
-lines.append('-- in translations/export/ plus the hand verified block in that script). Re-run it')
-lines.append('-- after adding languages or keys — manual edits to this file will be overwritten.')
+lines.append('-- NOTE: this file is generated by tools/build_glossary.py (index values for the key list')
+lines.append('-- plus the hand verified block in that script). Re-run it after a game update or after')
+lines.append('-- adding keys — manual edits to this file will be overwritten.')
 lines.append('return {')
 lines.append('    terms = {')
 lines.append('        -- hand verified core mechanics (no game loc key exists for these)')

@@ -2,10 +2,10 @@
 """package_release.py -- build the player-facing zip (what goes on Nexus).
 
 The repository is not the mod. It also holds the C sources, the test fixtures, the
-measurement tools, the glossary's *input* exports and the developer's own translated
-stores - none of which a player should download, and two of which would actively hurt
-(``translations/export/`` blocks re-collection when it sits in the game folder, and a
-shipped ``translations/<lang>/`` store would look like the mod's own translations).
+measurement tools, the terminology key list (the glossary's build input) and the
+developer's own translated stores - none of which a player should download, and one of
+which would actively hurt (a shipped ``translations/<lang>/`` store would look like the
+mod's own translations).
 
 So the include list here is explicit and closed: a file gets in only by being named.
 That is the whole point of the script - a hand-made zip is exactly where a stray
@@ -36,7 +36,6 @@ STATIC_FILES = [
     "README.md",
     "bin/at_core.dll",
     "translations/glossary.lua",
-    "translations/term_keys.lua",
 ]
 DYNAMIC_DIRS = [
     ("scripts/mods/auto_translate", "*.lua"),
@@ -45,7 +44,7 @@ DYNAMIC_DIRS = [
 # record - these are what a hand-made zip gets wrong.
 NEVER_SHIP = [
     "models/",                  # 1.4 GB, downloaded by the player from the options
-    "translations/export/",     # the glossary's input; a stale copy blocks re-collection
+    "translations/term_keys.lua",  # the key list: build input for the glossary, not mod data
     "translations/<language>/", # the player's own translated stores
     "src/", "tools/", "tests/", "build.bat", "bin/at_cli.exe",
 ]

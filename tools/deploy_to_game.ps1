@@ -86,17 +86,16 @@ if (Test-Path $coreSource) {
     }
 }
 
-# The data the Lua loads at runtime lives at the mod *root*, not next to the code: the glossary
-# and the term key list. Those change as often as the code does (the glossary did, when language
-# names were added), so they are synced and verified here too - "the file did not land" is
-# otherwise invisible until a player notices the old data. bin/ and models/ are deliberately left
-# alone: the DLL is built, the models are 1.4 GB, and neither belongs in a routine deploy.
+# The data the Lua loads at runtime lives at the mod *root*, not next to the code: the glossary.
+# That changes as often as the code does (the glossary did, when language names were added), so it is
+# synced and verified here too - "the file did not land" is otherwise invisible until a player
+# notices the old data. bin/ and models/ are deliberately left alone: the DLL is built, the models
+# are 1.4 GB, and neither belongs in a routine deploy.
 #
-# translations/export/ is not deployed either. Nothing reads it at runtime: it is the input to
-# tools/build_glossary.py, it is 73 KB, and it lives in the repository (the only record of the
-# game's terminology in twelve languages, which cannot be re-collected without launching the game
-# once per language). A stale copy in the game folder is worse than none, because the exporter
-# skips a language whose file already exists at the current key-list version.
+# translations/term_keys.lua is build input, not mod data: tools/build_glossary.py reads it and
+# looks the keys up in the localisation index. The mod stopped exporting terminology on 2026-09-29,
+# so the file is not deployed any more - and a copy left in the game folder from an earlier version
+# is removed below, because a stale one only invites the question of what reads it (nothing does).
 # The descriptor itself carries the version the options screen shows, and the paths the game
 # loads the mod from. It is one line of state that goes stale silently: a version bump in the
 # repository used to reach the game folder only if someone copied it by hand, which the release
@@ -117,7 +116,7 @@ $dataDest = Join-Path $GameMods "$name\translations"
 if (Test-Path $dataSource) {
     New-Item -ItemType Directory -Force -Path $dataDest | Out-Null
     Write-Output ""
-    foreach ($file in (Get-ChildItem -Path $dataSource -File)) {
+    foreach ($file in (Get-ChildItem -Path $dataSource -File | Where-Object { $_.Name -ne "term_keys.lua" })) {
         Copy-Item $file.FullName -Destination $dataDest -Force
         $target = Join-Path $dataDest $file.Name
         $a = (Get-FileHash $file.FullName -Algorithm SHA256).Hash
@@ -126,9 +125,15 @@ if (Test-Path $dataSource) {
         if ($a -ne $b) { $failures++ }
         Write-Output ("{0} translations\{1,-23} {2}" -f $state, $file.Name, $a.Substring(0, 16))
     }
-    $skipped = Get-ChildItem -Path $dataSource -Directory | Where-Object { $_.Name -eq "export" }
-    if ($skipped) {
-        Write-Output "note: translations\export\ is not deployed - the game never reads it, and a stale copy blocks re-collection."
+    $stale = Join-Path $dataDest "term_keys.lua"
+    if (Test-Path $stale) {
+        Remove-Item $stale -Force
+        Write-Output "note: removed the deployed translations\term_keys.lua - it is build input now, and no Lua reads it."
+    }
+    $staleExport = Join-Path $dataDest "export"
+    if (Test-Path $staleExport) {
+        Remove-Item $staleExport -Recurse -Force
+        Write-Output "note: removed the deployed translations\export\ - the mod no longer exports terminology."
     }
 }
 

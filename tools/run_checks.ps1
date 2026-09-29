@@ -22,12 +22,16 @@ Set-Location $repo
 $lua = if ($env:LUA_SYNTAX_LUAJIT) { $env:LUA_SYNTAX_LUAJIT } else { 'D:\Tools\Lua\luajit\src\luajit.exe' }
 if (-not (Test-Path $lua)) { $lua = 'luajit' }
 
+# The key-list check rebuilds translations/term_keys.lua from the installed mods, so it needs the
+# game's mods folder. AT_MODS overrides; the default is this machine's installation.
+$mods = if ($env:AT_MODS) { $env:AT_MODS } else { 'D:\Steam\steamapps\common\Warhammer 40,000 DARKTIDE\mods' }
+
 $checks = @(
-    @{ name = 'syntax';    hint = 'LuaJIT parses all 15 Lua files';        cmd = { python tools\lua_syntax_check.py } },
+    @{ name = 'syntax';    hint = 'LuaJIT parses all 14 Lua files';        cmd = { python tools\lua_syntax_check.py } },
     @{ name = 'exports';   hint = 'every at_* in the Lua CDEF is in the DLL'; cmd = { python tools\check_exports.py } },
     @{ name = 'loc';       hint = 'the mod UI: key counts, 12 languages';  cmd = { python tools\check_localization.py } },
     @{ name = 'online';    hint = 'providers, batching, options tree';     cmd = { & $lua tools\smoke_online.lua } },
-    @{ name = 'export';    hint = 'the string-cache harvest';              cmd = { & $lua tools\smoke_export.lua } },
+    @{ name = 'keys';      hint = 'the key list rebuilds without losing keys'; cmd = { python tools\build_term_keys.py $mods --keep-version } },
     @{ name = 'store';     hint = 'hand written vs machine entries';       cmd = { & $lua tools\smoke_store.lua } },
     @{ name = 'hud';       hint = 'the progress HUD splits long lines';    cmd = { & $lua tools\smoke_hud.lua } },
     @{ name = 'injector';  hint = 'merging into other mods, and back out'; cmd = { & $lua tools\smoke_injector.lua } },

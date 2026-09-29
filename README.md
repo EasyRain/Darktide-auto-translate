@@ -96,7 +96,6 @@ sub-widgets of that dropdown: DMF hides all ten under `DeepL` and shows them the
 | Open translation folder | Maintenance | Opens `translations/<language>/` in Explorer: one plain-Lua file per mod, to fix a line by hand or hand the files to something else. Fix what you like, put the result back and press *Reload translation files*. |
 | Clear local translations | Maintenance | Throws away the translations an engine wrote; they are rebuilt when next needed. Hand written entries and the files holding them are kept — the mod never deletes those, so delete a line in the file yourself (the tooltip says so too). |
 | Test the glossary | Maintenance | Reports how many terms are loaded and which are missing. |
-| Collect terms | Maintenance | Writes the game's own wording for the collected keys into `translations/export/`. Off by default: switch it on for a collection round and off afterwards. Turning it on collects straight away, so no restart is needed. |
 | Debug logging | Maintenance | Verbose `[AT]` logging. |
 
 ## Engines and language support
@@ -672,26 +671,43 @@ them would wreck prose. `tools/check_glossary.lua` fails if one ever appears in 
 `tools/build_glossary.py` is the only writer of `translations/glossary.lua`:
 
 ```
-python tools\build_glossary.py                    # regenerate from the exports + the hand-verified blocks
+python tools\build_glossary.py                    # regenerate from the index + the hand-verified blocks
 luajit tools\check_glossary.lua                   # load it and exercise masking through the module
 ```
 
-It reads the game's own localisation exports (`translations/export/<lang>.lua`), carries over
-values the current exports no longer have (Ukrainian, which the game never shipped), and adds the
-hand-verified blocks for the wording the game has no string for: core mechanics, general UI
-labels, language names, autonyms and the short breed names a mod UI writes (`SHORT_BREEDS`).
-Editing the generated file by hand is lost on the next run,
-and `check_glossary.lua` is what proves the result still masks what it should — including that a
-term in another script is not matched inside a longer run of that script, and that a term ending
-in punctuation ("Chinese (Simplified)") is not eaten by its shorter prefix.
+It reads the game's own localisation out of the **localisation index**
+(`game-data/index/localization.sqlite`, built from the game's strings bundle — see
+`game-data/README.md`), for every key `translations/term_keys.lua` lists, and takes all twelve
+languages from one lookup per key. It then adds the hand-verified blocks for the wording the game has
+no string for: core mechanics, general UI labels, language names, autonyms and the short breed names
+a mod UI writes (`SHORT_BREEDS`), and carries over the values the game never shipped (Ukrainian, from
+the community translation). Editing the generated file by hand is lost on the next run, and
+`check_glossary.lua` is what proves the result still masks what it should — including that a term in
+another script is not matched inside a longer run of that script, and that a term ending in
+punctuation ("Chinese (Simplified)") is not eaten by its shorter prefix.
 
-A term can be missing even though the game has a wording for it, because the export only answers
-for key names somebody wrote down: 701 of the 1459 names in `translations/term_keys.lua` resolve and
-the other 758 are reported as unknown. A term whose key nobody guessed is therefore invisible. The
-`MISSING_LOC` block in the script is for those: the game's own wording, checked against the export
-where the export has the term, and *shadowed* by it — as soon as an export really resolves the key
-the game's value wins and the entry drops out of the generated file by itself. Two of them, and both
-were reported by the player:
+`translations/term_keys.lua` is therefore **build input, not mod data**: the mod never reads it, and
+it is not deployed or shipped in the release zip. Its keys come from three sources, merged by
+`tools/build_term_keys.py`:
+
+* the `loc_*` names the installed mods reference (equipment, slots, missions, talents, abilities,
+  interface words), plus the names guessed from those patterns;
+* the keys proven to exist by `tools/discover_keys.py`, which takes the known keys as templates,
+  mutates the parts that vary between siblings (pattern/mark numbers, trailing numbers and letters,
+  common suffixes, and the `loc_weapon_family_*` ↔ `loc_weapon_mark_*` pair) and hashes each guess the
+  way the game does — the index is keyed by that hash, so a hit proves the key exists **and** hands
+  over its wording in all twelve languages. This is how the twin of a known key is found without
+  launching anything: the 2026-09-29 update's weapon marks (`loc_weapon_mark_*`, 132 keys, the whole
+  dimension the earlier rounds never collected), the reworked talent trees and the weapon traits all
+  arrived this way;
+* whatever the file already lists, which is now verified after every rebuild: a key that would be
+  lost makes the tool exit 1 (it used to drop them in silence — see the note on `existing_keys()`).
+
+A term can still be missing even though the game has a wording for it, when no key name for it is
+known. The `MISSING_LOC` block in the script is for those: the game's own wording, checked against
+the index where the index has the term, and *shadowed* by it — as soon as a key really resolves the
+game's value wins and the entry drops out of the generated file by itself. Two of them, and both were
+reported by the player:
 
 | term | the game's wording | the key it comes from |
 | --- | --- | --- |
@@ -700,33 +716,8 @@ were reported by the player:
 
 "Rampage!" (the Hive Scum combat ability) had no wording to protect it, so every engine translated
 it as 大闹天宫 — the name of a well-known story rather than the ability. The values in the table are
-read out of the game itself, not from a third-party keyword list: the harvest below named the keys,
-and the wording is what the game's own localization holds for them.
+read out of the game itself, not from a third-party keyword list.
 
-The key names come from the game's string cache. `exporter.harvest_cache` reads
-`Managers.localization._string_cache` — the memo of every string the session has resolved — keeps the
-term-shaped values whose keys the list does not have, and writes them to
-`translations/export/cache_<lang>.lua` (the same shape as an export). It runs once at startup and
-then every 60 seconds, and writes only when it found something new, so browsing the talent tree once
-is what names the keys no key list guessed. The first run named 221 keys, which is how a class added
-after the list was written (its talents, abilities, auras and keystones), the enemy families, the
-mission names and the keyboard labels became visible.
-
-`python tools\build_term_keys.py <mods-dir>` merges those names into `translations/term_keys.lua`
-(the block is labelled "named by the game's string cache") and bumps the version, so the next launch
-collects them. One step stays manual for terms the glossary has to pair up: it matches the *English*
-source word against the target language, and an English value only exists once the game has been
-launched in English. Switching language once is therefore what turns the harvested keys into ordinary
-terms — and the exported term then shadows the block above.
-
-The harvest is a term source in its own right. `build_glossary.py` pairs `cache_en.lua` with the other
-`cache_<lang>.lua` files **per key**, so a key no list contains still yields a term as long as both
-sides carry it — measured with a stand-in English harvest: "Renegade Berzerker" → 血痂狂暴者,
-"Scab Berzerker" → 渣滓狂暴者, "Magistratum Dungeon" → TM8-707 法庭密牢. Nothing is invented: both
-values have to pass the same "is this a bare term" test the exports do, a word the exports already
-carry wins, and a cache-sourced term shadows the hand-written block exactly like an exported one.
-That is what makes a repeated collection round worthwhile: the key list supplies the terms it knows,
-the cache supplies the ones it does not.
 
 Note that a *stored* translation is never redone because the glossary changed: a stored entry is only
 re-translated when its source text changes, so correcting wording that is already stored means
@@ -748,67 +739,44 @@ written one.
 files to another program, put them back and press *Reload translation files*: what you wrote is kept,
 because an entry with no `src` marker counts as hand written.
 
-### Where `translations/export/` belongs
+### After a game update
 
-| | |
-| --- | --- |
-| **the repository** | yes. It is the input the glossary is built from, and the only record of the game's own terminology in all twelve languages — re-collecting it means launching the game once per language, because the strings only exist at runtime. The files say "safe to delete" because they are; the *repository's* copies are what keep the glossary reproducible. |
-| **the game/mod folder** | only while collecting. Nothing reads them at runtime: `glossary.lua` is the data the mod loads, and `term_keys.lua` is the key list the exporter reads. The mod writes an export only when the **Collect terms** switch is on and the language is missing or older than the key list, so with the switch off the folder stays as it is — and what is already in it can be deleted once it has been imported. |
-| **re-collecting** | delete the file for the language in question (or bump `version` in `term_keys.lua`), then invoke `exporter.run(mod, current_lang())`. The exporter skips a language whose file already exists at the current key-list version, so a stale copy in the game folder does not merely sit there — it blocks the refresh. |
-
-`tools/deploy_to_game.ps1` therefore syncs `glossary.lua` and `term_keys.lua` and prints a note
-about the export folder, rather than copying 73 KB the game never reads.
-
-### A collection round, start to finish
-
-Turn the **Collect terms** switch on first (Maintenance; it collects immediately, so it can also be switched on mid-session). The mod then writes both files for a language on its own, so a round is one launch per language:
-
-1. Switch the game's language — `powershell -File tools\lang_round.ps1 -Language <code>` edits the
-   Steam per-game setting for Darktide and waits; the launcher needs one click, then the script stops
-   the game once the export is in. (Or do it by hand: Steam → Darktide → Properties → Language.)
-2. Wait for the "terms exported for <lang>" notice — a few seconds; the log line is
-   `exported N term(s) for '<lang>'`.
-3. Open the screens whose wording a mod is likely to repeat: the talent trees of every class, the
-   mission board, the inventory, the options, the penances. The export does not need this (it looks
-   its key list up directly), but the *harvest* can only name keys the session has actually resolved,
-   and the English round is the source column every other language is paired against.
-4. Repeat — twelve rounds for the twelve languages the game ships.
-5. Switch **Collect terms** off again — what was collected stays where it is, and nothing
-   more is written.
-
-Why a round needs a launch at all, measured on 2026-09-16 (the player had already hit this making an
-earlier mod, and it is worth writing down before someone tries again):
-
-* The localization manager cannot serve another language at runtime: `Localize(key, "en")`,
-* `manager:localize(key, "en")` and setting `manager._language` all return the current language's
-  string, and the four localizers are resource-backed per package (they carry `lookup`,
-  `lookup_with_tag`, `test_font`, `release`) rather than per language.
-* The game's own settings file is not the switch either: with `language_id = "en"` in
-  `user_settings.config` the game still started in zh-cn and wrote `zh-cn` back.
-* Reading the strings off the disk is not an option: all 15,425 files in `bundle/` were scanned for
-  plain-text English, Chinese and Japanese strings and for loc key names, with no hit — they are
-  compressed.
-
-Then bring the results over and rebuild:
+The strings bundle changes, so the index has to be rebuilt before the glossary can be. The whole
+sequence, none of which launches the game:
 
 ```
-python tools\import_exports.py            # copy every export + harvest into the repository
-python tools\build_term_keys.py <mods>    # merge newly named keys into the key list (bumps the version)
-python tools\build_glossary.py            # rebuild the terms from both sources
-luajit tools\check_glossary.lua           # prove the result still masks what it should
+# 1. refresh the index (see game-data/README.md: extract, convert, build_index)
+dtmt.exe bundle extract -i '*.strings' "<game>\bundle\<strings-package>" .tmp\localization-<date>\raw
+python -B <skills>\convert_strings.py --input .tmp\localization-<date>\raw --output game-data\localization
+python -B <skills>\build_index.py --strings game-data\localization --db game-data\index\localization.sqlite --temp-root .tmp --replace
+
+# 2. find the keys the update added, then rebuild the terms
+python tools\discover_keys.py --append       # hash-checked against the new index; writes tools/keys_discovered.txt
+python tools\build_term_keys.py <mods>       # merge them into translations/term_keys.lua (verifies nothing is lost)
+python tools\build_glossary.py               # rebuild translations/glossary.lua from the index
+luajit tools\check_glossary.lua              # prove the result still masks what it should
 ```
 
-`import_exports.py` reports each file's language, version and key count, flags an export that is
-older than the key list, and says which languages are still missing. A version bump makes the next
-launch collect that language again, which is the point when the key list grew; nothing has to be
-deleted by hand.
+`discover_keys.py` prints a report (`.dtsrc/scratch/discovered_keys.txt`) grouped by key family, so
+it is also the fastest way to see what an update actually added: the 2026-09-29 update showed up as
+132 weapon marks, the reworked talent trees of six classes, thirteen NPC names and the new map's
+expedition modifiers.
 
-One consequence worth knowing when only some rounds have been done: a term needs the **English**
-column, because that is the word the glossary masks in a mod's source text. The zh-cn round collects
-922 keys but 221 of them (the enemy names, the mission names, the keyboard labels, the Hive Scum
-talents) have no English value yet, so they sit in the export unused until an English round adds it.
-`build_glossary.py` prints what came out of the cache pairing and what it skipped, which is how that
-shows up.
+Everything above used to be twelve launches of the game (one per language), because a key's wording
+could only be read from inside a running game. It was removed on 2026-09-29 once the index made the
+same data reachable from disk. The measurements that ruled out the shortcuts back then are still
+worth keeping, so nobody repeats them:
+
+* the localization manager cannot serve another language at runtime: `Localize(key, "en")`,
+  `manager:localize(key, "en")` and setting `manager._language` (plus `reset_cache()` and
+  `setup_localizers()`) all return the current language's string — measured again on 2026-09-29;
+* the game's own settings file is not the switch either: with `language_id = "en"` in
+  `user_settings.config` the game still started in zh-cn and wrote `zh-cn` back, and Steam rewrites
+  the per-game language in `appmanifest_<id>.acf` while it runs, so editing the manifest only works
+  through a Steam-driven launch;
+* the strings cannot be read off the disk *as plain text*: the bundle is compressed. It has to be
+  extracted and converted first — which is what the index is.
+
 
 ### When the placeholder is dropped, and when a key is given up on
 
@@ -1002,11 +970,11 @@ Lua has its own checks, because a syntax error there only shows up as a mod that
 load, and a missing export only shows up when the game calls it:
 
 ```
-python tools\lua_syntax_check.py                 # parses all 15 files, runs nothing
+python tools\lua_syntax_check.py                 # parses all 14 files, runs nothing
 python tools\check_exports.py                    # every at_* name in the Lua CDEF exists in the DLL
-python tools\check_localization.py               # 138 keys × 12 languages
+python tools\check_localization.py               # 148 keys × 12 languages
 luajit tools\smoke_online.lua                    # loads modules/online.lua with stubs, runs 262 assertions
-luajit tools\smoke_export.lua                    # the string-cache harvest: what it keeps, drops and rewrites
+python tools\build_term_keys.py <mods> --keep-version   # the key list rebuilds, and every key survives it
 luajit tools\smoke_store.lua                     # hand-written vs machine markers in a translation file
 luajit tools\smoke_hud.lua                       # the progress HUD's line splitting (long warnings)
 luajit tools\smoke_injector.lua                  # merging into other mods' tables, and taking it back out
@@ -1082,8 +1050,7 @@ is not enough.
 ## Releasing
 
 `tools/package_release.py` builds the player-facing archive from an **explicit include list** —
-descriptor, README, `bin/at_core.dll`, the Lua (including `modules/`), and `translations/glossary.lua`
-plus `translations/term_keys.lua`:
+descriptor, README, `bin/at_core.dll`, the Lua (including `modules/`), and `translations/glossary.lua`:
 
 ```
 python tools\package_release.py                                    # what would go in
@@ -1091,8 +1058,8 @@ python tools\package_release.py --out D:\ --verify-deployed "<game>\mods\auto_tr
 ```
 
 Everything else stays out on purpose, and the list is closed so that a hand-made zip cannot
-quietly add it: `models/` (1.4 GB, the player's own download), `translations/export/` (the
-glossary's input, and a stale copy in the game folder blocks re-collection), any
+quietly add it: `models/` (1.4 GB, the player's own download), `translations/term_keys.lua` (the
+glossary's build input, which no Lua reads), any
 `translations/<language>/` store (the player's own translations, not the mod's), and `src/`,
 `tools/`, `tests/`, `build.bat` and `bin/at_cli.exe`. The archive holds one top-level
 `auto_translate/` folder, so it unpacks straight into the game's `mods` directory, and
