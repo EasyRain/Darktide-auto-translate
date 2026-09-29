@@ -116,7 +116,13 @@ $dataDest = Join-Path $GameMods "$name\translations"
 if (Test-Path $dataSource) {
     New-Item -ItemType Directory -Force -Path $dataDest | Out-Null
     Write-Output ""
-    foreach ($file in (Get-ChildItem -Path $dataSource -File | Where-Object { $_.Name -ne "term_keys.lua" })) {
+    # Only the glossary is mod data - the Lua loads it at startup. Everything else in the repository's
+    # translations/ is build input for the tooling: term_keys.lua (the key list build_glossary.py
+    # looks up in the index) and uk_extra.lua (the Ukrainian values it fills). A whitelist rather
+    # than a blacklist, because uk_extra.lua was copied into the game folder by the blacklist
+    # version and sat there doing nothing (88 KB, found 2026-09-29).
+    $SHIP = @("glossary.lua")
+    foreach ($file in (Get-ChildItem -Path $dataSource -File | Where-Object { $SHIP -contains $_.Name })) {
         Copy-Item $file.FullName -Destination $dataDest -Force
         $target = Join-Path $dataDest $file.Name
         $a = (Get-FileHash $file.FullName -Algorithm SHA256).Hash
@@ -125,10 +131,13 @@ if (Test-Path $dataSource) {
         if ($a -ne $b) { $failures++ }
         Write-Output ("{0} translations\{1,-23} {2}" -f $state, $file.Name, $a.Substring(0, 16))
     }
-    $stale = Join-Path $dataDest "term_keys.lua"
-    if (Test-Path $stale) {
-        Remove-Item $stale -Force
-        Write-Output "note: removed the deployed translations\term_keys.lua - it is build input now, and no Lua reads it."
+    # ... and remove a copy of anything that is not mod data, so a build input never lingers there.
+    foreach ($file in (Get-ChildItem -Path $dataSource -File | Where-Object { $SHIP -notcontains $_.Name })) {
+        $stale = Join-Path $dataDest $file.Name
+        if (Test-Path $stale) {
+            Remove-Item $stale -Force
+            Write-Output ("note: removed the deployed translations\{0} - it is build input, and no Lua reads it." -f $file.Name)
+        }
     }
     $staleExport = Join-Path $dataDest "export"
     if (Test-Path $staleExport) {
