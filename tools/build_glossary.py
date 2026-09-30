@@ -146,72 +146,10 @@ for k, v in uk.items():
     if k in data:
         data[k]['uk'] = strip_rich(v)
 
-# Words that must never become terms, however often the game uses them.
-#
-# Masking replaces a term everywhere it appears, which is right for a name - "Relic" is 圣物 in every
-# context - and wrong for a word that carries grammar or has a second, ordinary meaning. The settings
-# export this project just collected offered On, Off, All, None, Back, Save, Close, In, Out, More,
-# Name, Type, Value..., and a glossary built from those would rewrite "on the ground" as the word a
-# UI shows for a switch, or "close range" as the word a menu shows for a button. That corruption is
-# silent: the placeholder and format-specifier guards cannot see meaning.
-#
-# So this list is about *function*: state words, prepositions, verbs that double as directions, and
-# generic nouns that are labels for other things. Nouns and names are the point of the glossary and
-# stay - "filters" was reported as mistranslated and is deliberately not here.
-STOP_WORDS = {
-    # state and choice
-    'on', 'off', 'all', 'none', 'auto', 'automatic', 'default', 'yes', 'no', 'ok', 'true', 'false',
-    'enabled', 'disabled', 'unavailable', 'available', 'always', 'never', 'optional', 'required',
-    'selected', 'unselected', 'unknown', 'mixed', 'custom',
-    # actions a label performs (verbs, and several of them are also directions)
-    'apply', 'cancel', 'close', 'back', 'next', 'previous', 'open', 'save', 'load', 'delete',
-    'add', 'edit', 'remove', 'reset', 'clear', 'confirm', 'continue', 'retry', 'skip', 'start',
-    'stop', 'exit', 'quit', 'search', 'sort', 'order', 'select', 'choose', 'show', 'hide',
-    'toggle', 'enable', 'disable', 'set', 'change', 'use', 'copy', 'paste', 'move',
-    # place and direction
-    'left', 'right', 'top', 'bottom', 'up', 'down', 'in', 'out', 'inside', 'outside', 'above',
-    'below', 'front', 'rear', 'near', 'far', 'here', 'there', 'over', 'under',
-    # quantity and degree
-    'more', 'less', 'max', 'min', 'maximum', 'minimum', 'low', 'medium', 'high', 'normal',
-    'small', 'large', 'big', 'short', 'long', 'fast', 'slow', 'new', 'old', 'first', 'last',
-    # generic nouns that exist to label other things
-    'name', 'title', 'text', 'value', 'values', 'type', 'types', 'size', 'mode', 'modes', 'level',
-    'amount', 'number', 'count', 'total', 'info', 'information', 'help', 'about', 'other', 'others',
-    'option', 'options', 'setting', 'settings', 'button', 'buttons', 'key', 'keys', 'test',
-}
-
-# Weapon mark designations ("Mk VII", "Mk IIa", and the paired "Mk I & Mk V" of the slab shield).
-# They arrived with the 2026-09-29 key discovery (loc_weapon_mark_*, 132 keys) and read the same in
-# ten of the twelve languages: only zh-cn drops the space ("Mk.VII") and ru spells it out
-# ("Мод. VII"). Masking a mark therefore buys nothing a reader would notice and costs 29 entries in
-# a table whose job is protecting *names* - the player asked for them to be left out (2026-09-29).
-# The keys stay in translations/term_keys.lua, so re-enabling this is one line.
-MARK_DESIGNATION = re.compile(
-    r'^(?:Mk|MK|Mark)\.?\s*[IVXLivxl0-9]+[a-z]?'
-    r'(?:\s*(?:&|and|\+)\s*(?:Mk|MK|Mark)\.?\s*[IVXLivxl0-9]+[a-z]?)?$', re.I)
-# Values that are not words a player reads, but records the localization carries: the developers'
-# own placeholders ("-- aura description --"), a truncated list entry ("1 more"), a bare mark label
-# ("M1") and the lowercase operation ids the Havoc screens use internally ("no quarter", "spy hunt",
-# "vox ghosts"). Masking any of those would either do nothing or rewrite ordinary English, and every
-# one of them also had no Ukrainian, which is how they were found (2026-09-29).
-PLACEHOLDER = re.compile(r'^(?:--.*--|\d+ more|[A-Za-z]?\d+)$')
-LOWERCASE_ID = re.compile(r'^[^A-Z]*\s[^A-Z]*$')
-
-
-def is_term(text):
-    if not text or len(text) < 2 or len(text) > 30:
-        return False
-    if text[-1] in '.!:;':
-        return False
-    if MARK_DESIGNATION.match(text) or PLACEHOLDER.match(text) or LOWERCASE_ID.match(text):
-        return False
-    if re.search(r'[{}%<>|]', text):
-        return False
-    if re.fullmatch(r'[\d\s.,%+-]+', text):
-        return False
-    if text.strip().lower() in STOP_WORDS:
-        return False
-    return True
+# What counts as a term is defined once, in tools/term_filter.py, because tools/suggest_terms.py
+# looks for the terms this file is missing and has to apply the same rules.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from term_filter import is_term, STOP_WORDS  # noqa: E402
 
 terms = collections.OrderedDict()   # lower(en) -> entry
 exported_keys = set()               # words the game itself localises
@@ -333,6 +271,94 @@ HAND = [
 # these into ordinary exported terms - and the export then shadows this block, because it is
 # authoritative for its own terms.
 MISSING_LOC = [
+    # Terms every installed mod uses and the game localises, found by tools/suggest_terms.py
+    # (2026-09-30): it compares the English strings the mods ship with the game's own short
+    # strings and reports the ones this glossary was missing. Each row carries the wording of the
+    # index row that is localised most widely, and the block is shadowed automatically once a key
+    # resolving to the same English enters translations/term_keys.lua.
+    ("Ranged Weapon", {"zh-cn": "远程武器", "zh-tw": "遠端武器", "ja": "遠隔武器", "ko": "원거리 무기", "ru": "Дистанционное оружие", "de": "Fernkampfwaffe", "fr": "Arme à distance", "es": "Arma a distancia", "it": "Arma a distanza", "pl": "Broń dystansowa", "pt-br": "Arma de longo alcance"}),
+    ("Melee Attack", {"zh-cn": "近战攻击", "zh-tw": "近戰攻擊", "ja": "近接攻撃", "ko": "근접 공격", "ru": "Атака в ближнем бою", "de": "Nahkampfangriff", "fr": "Attaque de mêlée", "es": "Ataque cuerpo a cuerpo", "it": "Attacco corpo a corpo", "pl": "Atak w zwarciu", "pt-br": "Ataque corpo a corpo"}),
+    ("Melee Weapon", {"zh-cn": "近战武器", "zh-tw": "近戰武器", "ja": "近接武器", "ko": "근접 무기", "ru": "Оружие ближнего боя", "de": "Nahkampfwaffe", "fr": "Arme de mêlée", "es": "Arma cuerpo a cuerpo", "it": "Arma corpo a corpo", "pl": "Broń biała", "pt-br": "Arma corpo a corpo"}),
+    ("Melee Attacks", {"zh-cn": "近战攻击", "zh-tw": "近戰攻擊", "ja": "近接攻撃", "ko": "근접 공격", "ru": "Атаки в ближнего бою", "de": "Nahkampfangriffe", "fr": "Attaques de mêlée", "es": "Ataques cuerpo a cuerpo", "it": "Attacchi corpo a corpo", "pl": "Ataki w zwarciu", "pt-br": "Ataques corpo a corpo"}),
+    ("Ranged Attacks", {"zh-cn": "远程攻击", "zh-tw": "遠程攻擊", "ja": "遠隔攻撃", "ko": "원거리 공격", "ru": "Атаки в дальнем бою", "de": "Fernkampfangriffe", "fr": "Attaques à distance", "es": "Ataques a distancia", "it": "Attacchi a distanza", "pl": "Ataki dystansowe", "pt-br": "Ataques de longo alcance"}),
+    ("Damage Reduction", {"zh-cn": "伤害降低", "zh-tw": "傷害減少", "ja": "ダメージ軽減", "ko": "대미지 감소", "ru": "Снижение урона", "de": "Schadensreduktion", "fr": "Réduction des dégâts", "es": "Reducción de daño", "it": "Riduzione dei danni", "pl": "Zmniejszenie obrażeń", "pt-br": "Redução de dano"}),
+    ("Force Greatsword", {"zh-cn": "力场大剑", "zh-tw": "力場巨劍", "ja": "フォース・グレートソード", "ko": "포스 그레이트소드", "ru": "Длинный психосиловой меч", "de": "Psigroßschwert", "fr": "Épée de force à deux mains", "es": "Mandoble de fuerza", "it": "Spadone psichico", "pl": "Duży miecz psioniczny", "pt-br": "Espadão de força"}),
+    ("Ammo Reserve", {"zh-cn": "弹药储备", "zh-tw": "儲備彈藥", "ja": "予備弾薬", "ko": "탄약 보유", "ru": "Резерв боеприпасов", "de": "Reservemunition", "fr": "Réserve de munitions", "es": "Reserva de munición", "it": "Riserva di munizioni", "pl": "Rezerwa amunicji", "pt-br": "Reserva de munição"}),
+    ("Melee Damage", {"zh-cn": "近战伤害", "zh-tw": "近戰傷害", "ja": "近接ダメージ", "ko": "근접 대미지", "ru": "Урон в ближнем бою", "de": "Nahkampfschaden", "fr": "Dégâts de mêlée", "es": "Daño cuerpo a cuerpo", "it": "Danni corpo a corpo", "pl": "Obrażenia w zwarciu", "pt-br": "Dano corpo a corpo"}),
+    ("Movement Speed", {"zh-cn": "移动速度", "zh-tw": "移動速度", "ja": "移動速度", "ko": "이동 속도", "ru": "Скорость передвижения", "de": "Bewegungsgeschwindigkeit", "fr": "Vitesse de déplacement", "es": "Velocidad de movimiento", "it": "Velocità di movimento", "pl": "Prędkość ruchu", "pt-br": "Velocidade de movimento"}),
+    ("Ranged Damage", {"zh-cn": "远程伤害", "zh-tw": "遠程傷害", "ja": "遠隔ダメージ", "ko": "원거리 대미지", "ru": "Урон в дальнем бою", "de": "Fernkampfschaden", "fr": "Dégâts à distance", "es": "Daño a distancia", "it": "Danni a distanza", "pl": "Obrażenia dystansowe", "pt-br": "Dano de longo alcance"}),
+    ("Ranged Kills", {"zh-cn": "远程击杀", "zh-tw": "遠程擊殺", "ja": "遠隔キル数", "ko": "원거리 처치", "ru": "Убийства в дальнем бою", "de": "Fernkampf-Tötungen", "fr": "Éliminations à distance", "es": "Bajas a distancia", "it": "Uccisioni a distanza", "pl": "Zabójstwa dystansowe", "pt-br": "Abate de longo alcance"}),
+    ("Brunt's Armoury", {"zh-cn": "布伦特的军备库", "zh-tw": "布倫特的軍械庫", "ja": "ブラントの武器庫", "ko": "브런트의 무기고", "ru": "Арсенал Бранта", "de": "Brunts Waffenkammer", "fr": "Armurerie de Brunt", "es": "Armería de Brunt", "it": "Armeria di Brunt", "pl": "Zbrojownia Brunta", "pt-br": "Arsenal de Brunt"}),
+    ("Critical Chance", {"zh-cn": "暴击几率", "zh-tw": "暴擊幾率", "ja": "クリティカルチャンス", "ko": "치명타 확률", "ru": "Вероятность крит. удара", "de": "Kritische Trefferchance", "fr": "Taux de coup critique", "es": "Probabilidad de crítico", "it": "Probabilità di critico", "pl": "Szansa na trafienie krytyczne", "pt-br": "Chance de crítico"}),
+    ("Fire Grenade", {"zh-cn": "火焰手雷", "zh-tw": "火焰手雷", "ja": "グレネード発射", "ko": "화염 수류탄", "ru": "Бросок гранаты", "de": "Feuergranate", "fr": "Grenade incendiaire", "es": "Granada incendiaria", "it": "Granata infuocata", "pl": "Granat Ogniowy", "pt-br": "Granada de fogo"}),
+    ("Havoc Assignment", {"zh-cn": "浩劫任务", "zh-tw": "浩劫任務", "ja": "ハヴォック任務", "ko": "파괴 임무", "ru": "Задание верной смерти", "de": "Verwüstungsauftrag", "fr": "Mission de dévastation", "es": "Encargo de pandemonio", "it": "Incarico Scompiglio", "pl": "Zadanie spustoszenia", "pt-br": "Tarefa de Devastação"}),
+    ("Ranged Weapons", {"zh-cn": "远程武器", "zh-tw": "遠端武器", "ja": "遠隔武器", "ko": "원거리 무기", "ru": "Дистанционное оружие", "de": "Fernkampfwaffen", "fr": "Armes à distance", "es": "Armas a distancia", "it": "Armi a distanza", "pl": "Broń dystansowa", "pt-br": "Armas de longo alcance"}),
+    ("Stagger Enemies", {"zh-cn": "踉跄敌人", "zh-tw": "使敵人暈眩", "ja": "敵をよろめかせる", "ko": "적 비틀거리게 하기", "ru": "Ошеломить врагов", "de": "Überwältige Gegner", "fr": "Faites vaciller des ennemis.", "es": "Haz tambalear a los enemigos", "it": "Fai barcollare i nemici", "pl": "Oszołom wrogów", "pt-br": "Desequilibrar inimigos"}),
+    ("Suppress Enemies", {"zh-cn": "压制敌人", "zh-tw": "壓制敵人", "ja": "敵を制圧する", "ko": "적 제압하기", "ru": "Подавите врагов", "de": "Verdränge die Gegner", "fr": "Infligez Suppression aux ennemis.", "es": "Reprime a los enemigos", "it": "Sopprimi i nemici", "pl": "Tłumienie wrogów", "pt-br": "Suprima os Inimigos"}),
+    ("Toughness Damage", {"zh-cn": "韧性伤害", "zh-tw": "韌性傷害", "ja": "タフネスダメージ", "ko": "강인함 대미지", "ru": "Урон стойкости", "de": "Zähigkeitsschaden", "fr": "Dégâts de robustesse", "es": "Daño a la dureza", "it": "Danni alla Robustezza", "pl": "Obrażenia wytrzymałości", "pt-br": "Dano de Resistência"}),
+    ("Aim Down Sights", {"zh-cn": "瞄准视角", "zh-tw": "機瞄", "ja": "照準を合わせる", "ko": "정조준", "ru": "Прицеливание", "de": "Visier", "fr": "Viseur", "es": "Mira", "it": "Mirino", "pl": "Celowanie", "pt-br": "Mira"}),
+    ("Ammo Crate", {"zh-cn": "弹药箱", "zh-tw": "彈藥箱", "ja": "弾薬クレート", "ko": "탄약 상자", "ru": "Контейнер с боеприпасами", "de": "Munitionskiste", "fr": "Caisse de munitions", "es": "Caja de munición", "it": "Cassa di munizioni", "pl": "Skrzynia z amunicją", "pt-br": "Caixote de Munição"}),
+    ("Ascension Riser", {"zh-cn": "升降机", "zh-tw": "升降機", "ja": "アセンションライザー", "ko": "어센션 라이저", "ru": "Подъемная платформа", "de": "Aufzug", "fr": "Élévateur à ascension", "es": "Elevador de ascenso", "it": "Elevatore ascendente", "pl": "Unośnik", "pt-br": "Ascensor"}),
+    ("Attack Speed", {"zh-cn": "攻击速度", "zh-tw": "攻擊速度", "ja": "攻撃速度", "ko": "공격 속도", "ru": "Скорость атаки", "de": "Angriffsgeschwindigkeit", "fr": "Vitesse d'attaque", "es": "Velocidad de ataque", "it": "Velocità d'attacco", "pl": "Prędkość ataku", "pt-br": "Velocidade de Ataque"}),
+    ("Breaching Charge", {"zh-cn": "爆破炸药", "zh-tw": "爆破炸藥", "ja": "爆薬設置", "ko": "파괴 충전", "ru": "Пробивной заряд", "de": "Sprengladung", "fr": "Charge de brèche", "es": "Carga de irrupción", "it": "Carica di sfondamento", "pl": "Ładunek do wyłomów", "pt-br": "Carga de abertura"}),
+    ("Celerity Stimm", {"zh-cn": "敏捷兴奋剂", "zh-tw": "敏捷興奮劑", "ja": "迅速化刺激剤", "ko": "민첩성 자극제", "ru": "Стимулятор рефлексов", "de": "Aufputschmittel für Geschwindigkeit", "fr": "Stimulant de célérité", "es": "Estimulante de celeridad", "it": "Stimolante per la speditezza", "pl": "Stymulator pośpiechu", "pt-br": "Estimulante de Velocidade"}),
+    ("Charge Up", {"zh-cn": "充能", "zh-tw": "充能", "ja": "チャージ", "ko": "충전", "ru": "Зарядить", "de": "Aufladen", "fr": "Chargement", "es": "Carga aumentada", "it": "Ricarica", "pl": "Doładowanie", "pt-br": "Carregar"}),
+    ("Chem Toxin", {"zh-cn": "化学毒素", "zh-tw": "化學毒素", "ja": "ケム毒", "ko": "화학 독소", "ru": "Химтоксин", "de": "Chem-Toxin", "fr": "Toxine chimique", "es": "Toxina química", "it": "Tossina Chimica", "pl": "Toksyna chemiczna", "pt-br": "Quimiotoxina"}),
+    ("Combat Stimm", {"zh-cn": "作战兴奋剂", "zh-tw": "作戰興奮劑", "ja": "戦闘用刺激剤", "ko": "전투력 자극제", "ru": "Стимулятор боевых навыков", "de": "Aufputschmittel für den Kampf", "fr": "Stimulant de combat", "es": "Estimulante de combate", "it": "Stimolante da combattimento", "pl": "Stymulator bojowy", "pt-br": "Estimulante de Combate"}),
+    ("Commodore's Vestures", {"zh-cn": "准将的服装", "zh-tw": "准將服裝店", "ja": "准将服", "ko": "준장의 수확물", "ru": "Oдеяние от Командора", "de": "Gewänder des Kommodore", "fr": "Vêtements du Commodore", "es": "Vestiduras de la comodoro", "it": "Vesti del commodoro", "pl": "Szaty Komodor", "pt-br": "Vestes do Comodoro"}),
+    ("Concentration Stimm", {"zh-cn": "专注兴奋剂", "zh-tw": "專注興奮劑", "ja": "集中用刺激剤", "ko": "집중력 자극제", "ru": "Стимулятор концентрации", "de": "Aufputschmittel für die Konzentration", "fr": "Stimulant de concentration", "es": "Estimulante de concentración", "it": "Stimolante per la concentrazione", "pl": "Stymulator koncentracji", "pt-br": "Estimulante de Concentração"}),
+    ("Damage Taken", {"zh-cn": "所受伤害", "zh-tw": "承受傷害", "ja": "受けたダメージ", "ko": "받은 대미지", "ru": "Получено урона", "de": "Erlittener Schaden", "fr": "Dégâts subis", "es": "Daño recibido", "it": "Danni subiti", "pl": "Odniesione obrażenia", "pt-br": "Dano sofrido"}),
+    ("Devil's Claw", {"zh-cn": "恶魔之爪", "zh-tw": "惡魔之爪", "ja": "悪魔の爪", "ko": "악마의 발톱", "ru": "Дьявольский коготь", "de": "Teufelsklaue", "fr": "Griffe du diable", "es": "Garra del Diablo", "it": "Artiglio del diavolo", "pl": "Diabelski Pazur", "pt-br": "Garra do Demônio"}),
+    ("Diligent Patrol", {"zh-cn": "勤勉巡查", "zh-tw": "勤於巡邏", "ja": "勤勉なパトロール", "ko": "성실한 정찰", "ru": "Бдительный патруль", "de": "Sorgfältige Patrouille", "fr": "Patrouille diligente", "es": "Patrulla diligente", "it": "Pattuglia diligente", "pl": "Pilny patrol", "pt-br": "Patrulha diligente"}),
+    ("Elite Kill", {"zh-cn": "精英击杀", "zh-tw": "精英擊殺", "ja": "上位者撃破", "ko": "엘리트 처치", "ru": "Убийство элитн.", "de": "Elite-Tötung", "fr": "Élimination d'élite", "es": "Baja de élite", "it": "Uccisione élite", "pl": "Zabójstwo elity", "pt-br": "Morte de Elite"}),
+    ("Emperor's Will", {"zh-cn": "帝皇之意", "zh-tw": "帝皇意志", "ja": "皇帝の意思", "ko": "황제의 의지", "ru": "Воля Императора", "de": "Wille des Imperators", "fr": "Volonté de l'Empereur", "es": "Voluntad del emperador", "it": "La volontà dell'Imperatore", "pl": "Wola Imperatora", "pt-br": "Vontade do Imperador"}),
+    ("Enemy Types", {"zh-cn": "敌人类型", "zh-tw": "敵人類型", "ja": "敵のタイプ", "ko": "적 유형", "ru": "Типы врагов", "de": "Feindarten", "fr": "Types d'ennemis", "es": "Tipos de enemigos", "it": "Tipi di nemici", "pl": "Typy wrogów", "pt-br": "Tipos de inimigo"}),
+    ("For the Emperor", {"zh-cn": "为了帝皇", "zh-tw": "為了帝皇", "ja": "皇帝の名の下に", "ko": "황제를 위하여", "ru": "За Императора", "de": "Für den Imperator", "fr": "Pour l'Empereur", "es": "Por el Emperador", "it": "Per l'Imperatore", "pl": "Za Imperatora", "pt-br": "Pelo Imperador"}),
+    ("Force Swords", {"zh-cn": "力场剑", "zh-tw": "力場劍", "ja": "フォースソード", "ko": "포스 검", "ru": "Психосиловые мечи", "de": "Psischwerter", "fr": "Épées de force", "es": "Espadas de fuerza", "it": "Spade psichiche", "pl": "Miecze psioniczne", "pt-br": "Espadas de força"}),
+    ("Forge's Bellow", {"zh-cn": "熔炉怒吼", "zh-tw": "熔爐怒吼", "ja": "鍛造場の息吹", "ko": "모루의 함성", "ru": "Рев кузни", "de": "Schrei der Schmiede", "fr": "Beuglement de forge", "es": "Bramido de la forja", "it": "Ruggito della Forgia", "pl": "Ryk Kuźni", "pt-br": "Brado da Forja"}),
+    ("Havoc Rewards", {"zh-cn": "浩劫奖励", "zh-tw": "浩劫獎勵", "ja": "ハヴォック報酬", "ko": "파괴 보상", "ru": "Награды верной смерти", "de": "Verwüstungsbelohnungen", "fr": "Récompenses de dévastation", "es": "Recompensas de pandemonio", "it": "Ricompense Scompiglio", "pl": "Nagrody spustoszenia", "pt-br": "Recompensas de Devastação"}),
+    ("Kill Enemies", {"zh-cn": "击杀敌人", "zh-tw": "擊殺敵人", "ja": "敵を倒せ", "ko": "적 처치하기", "ru": "Убейте врагов", "de": "Töte Feinde", "fr": "Tuez les ennemis.", "es": "Mata a enemigos", "it": "Uccidi i nemici", "pl": "Zabij wrogów", "pt-br": "Matar inimigos"}),
+    ("Lieutenant Masozi", {"zh-cn": "马佐齐副官", "zh-tw": "馬佐齊中尉", "ja": "マソジ副官", "ko": "마소지 중위", "ru": "Лейтенант Масози", "es": "Teniente Masozi", "it": "Tenente Masozi", "pl": "porucznik Masozi", "pt-br": "Tenente Masozi"}),
+    ("Martyr's Skull", {"zh-cn": "殉道者头骨", "zh-tw": "殉道者之顱", "ja": "殉教者の髑髏", "ko": "순교자의 두개골", "ru": "Череп мученика", "de": "Schädel des Märtyrers", "fr": "Crâne du martyr", "es": "Cráneo de mártir", "it": "Teschio del Martire", "pl": "Czaszka męczennika", "pt-br": "Caveira do Mártir"}),
+    ("Med Stimm", {"zh-cn": "医疗兴奋剂", "zh-tw": "醫療興奮劑", "ja": "医薬品", "ko": "약물", "ru": "Медицинский стимулятор", "de": "Med-Aufputschmittel", "fr": "Stimulant médical", "es": "Estimulante medicinal", "it": "Stimolante medicae", "pl": "Stymulator medyczny", "pt-br": "Med-estimulante"}),
+    ("Medicae Station", {"zh-cn": "医疗站", "zh-tw": "醫療站", "ja": "メディケアステーション", "ko": "치료소", "ru": "Медстанция", "de": "Medicae-Station", "fr": "Station médicale", "es": "Estación médica", "it": "Stazione medicae", "pl": "Medstacja", "pt-br": "Estação de Remédios"}),
+    ("Melee Attack Speed", {"zh-cn": "近战攻击速度", "zh-tw": "近戰攻擊速度", "ja": "近接攻撃速度", "ko": "근접 공격 속도", "ru": "Скорость атаки в ближнем бою", "de": "Angriffsgeschwindigkeit im Nahkampf", "fr": "Vitesse d'attaque de mêlée", "es": "Velocidad de ataque cuerpo a cuerpo", "it": "Velocità d'attacco corpo a corpo", "pl": "Prędkość ataku w zwarciu", "pt-br": "Velocidade de ataque corpo a corpo"}),
+    ("Melee Hits", {"zh-cn": "近战命中", "zh-tw": "近戰命中", "ja": "近接ヒット", "ko": "근접 공격 명중", "ru": "Удары в ближнем бою", "de": "Nahkampftreffer", "fr": "Coups en mêlée", "es": "Golpes cuerpo a cuerpo", "it": "Colpi corpo a corpo", "pl": "Trafienia w zwarciu", "pt-br": "Acertos corpo a corpo"}),
+    ("Melee Kills", {"zh-cn": "近战击杀", "zh-tw": "近戰擊殺", "ja": "近接キル数", "ko": "근접 처치", "ru": "Убийства в ближнем бою", "de": "Nahkampftötungen", "fr": "Éliminations en mêlée", "es": "Bajas cuerpo a cuerpo", "it": "Uccisioni corpo a corpo", "pl": "Zabójstwa w zwarciu", "pt-br": "Abates corpo a corpo"}),
+    ("Nearby Enemies", {"zh-cn": "附近敌人", "zh-tw": "附近敵人", "ja": "近くの敵", "ko": "근처 적", "ru": "Ближайшие враги", "de": "Nahe Feinde", "fr": "Ennemis à proximité", "es": "Enemigos cercanos", "it": "Nemici vicini", "pl": "Pobliscy wrogowie", "pt-br": "Inimigos próximos"}),
+    ("Noospheric Command", {"zh-cn": "星语指令", "zh-tw": "心智網指令", "ja": "ノウスフィアコマンド", "ko": "누스피어 명령", "ru": "Ноосферная команда", "de": "Noosphärischer Befehl", "fr": "Commandement noosphérique", "es": "Orden noosférica", "it": "Comando Noosferico", "pl": "Noosferyczne Dowodzenie", "pt-br": "Comando Noosférico"}),
+    ("Open the Gate", {"zh-cn": "打开大门", "zh-tw": "開啟大門", "ja": "門を開ける", "ko": "문 열기", "ru": "Откройте ворота", "de": "Öffnet das Tor", "fr": "Ouvrez la porte.", "es": "Abre la puerta", "it": "Apri il cancello", "pl": "Otwórzcie bramę", "pt-br": "Abra o portão"}),
+    ("Other Talents", {"zh-cn": "其他天赋", "zh-tw": "其他天賦", "ja": "その他のタレント", "ko": "기타 재능", "ru": "Другие таланты", "de": "Sonstige Talente", "fr": "Autres talents", "es": "Otros talentos", "it": "Altri talenti", "pl": "Pozostałe talenty", "pt-br": "Outros talentos"}),
+    ("Plasma Guns", {"zh-cn": "等离子枪", "zh-tw": "等離子槍", "ja": "プラズマガン", "ko": "플라즈마 건", "ru": "Плазмомёты", "de": "Plasmagewehre", "fr": "Fusils à plasma", "es": "Cañones de plasma", "it": "Fucili al plasma", "pl": "Bronie plazmowe", "pt-br": "Armas de plasma"}),
+    ("Portrait Frame", {"zh-cn": "肖像框", "zh-tw": "肖像框", "ja": "ポートレートフレーム", "ko": "초상화 프레임", "ru": "Портретная рамка", "de": "Porträtrahmen", "fr": "Cadre de portrait", "es": "Marco de retrato", "it": "Cornice ritratto", "pl": "Ramka portretowa", "pt-br": "Moldura de Retrato"}),
+    ("Power Cell", {"zh-cn": "能量电池", "zh-tw": "能量電池", "ja": "パワーセル", "ko": "배터리", "ru": "Силовой элемент", "de": "Energiezelle", "fr": "Batterie", "es": "Célula de energía", "it": "Batteria", "pl": "Ogniwo zasilania", "pt-br": "Célula de energia"}),
+    ("Power Switch", {"zh-cn": "能源开关", "zh-tw": "電力開關", "ja": "パワースイッチ", "ko": "전력 스위치", "ru": "Переключатель", "de": "Energieschalter", "fr": "Levier d'alimentation", "es": "Interruptor de energía", "it": "Interruttore di corrente", "pl": "Przełącznik zasilania", "pt-br": "Interruptor de energia"}),
+    ("Pull the Lever", {"zh-cn": "拉下拉杆", "zh-tw": "拉動操縱桿", "ja": "レバーを引く", "ko": "레버 당기기", "ru": "Потяните рычаг", "de": "Zieht den Hebel", "fr": "Actionner le levier", "es": "Tirad de la palanca", "it": "Tira la leva", "pl": "Pociągnijcie za dźwignię", "pt-br": "Puxe a alavanca"}),
+    ("Ranged Specialist", {"zh-cn": "远程专家", "zh-tw": "遠程專家", "ja": "遠距離のスペシャリスト", "ko": "원거리 전문가", "ru": "Специалист дальнего боя", "de": "Fernkampfspezialist", "fr": "Spécialiste à distance", "es": "Especialista a distancia", "it": "Specialista a distanza", "pl": "Specjalista dystansowy", "pt-br": "Especialista de longo alcance"}),
+    ("Regen Rate", {"zh-cn": "恢复速度", "zh-tw": "恢復速率", "ja": "回復率", "ko": "재생 속도", "ru": "Скорость реген.", "de": "Rate der Regen", "fr": "Taux de régén", "es": "Tasa de Regen", "it": "Tasso Rigen.", "pl": "Tempo Regen", "pt-br": "Taxa de Regen"}),
+    ("Relay Station", {"zh-cn": "中继站", "zh-tw": "中繼站", "ja": "中継局", "ko": "중계기 스테이션", "ru": "Ретранслятор", "de": "Relaisstation", "fr": "Station relais", "es": "Estación de transmisión", "it": "Stazione di trasmissione", "pl": "Stacja przekazywania", "pt-br": "Estação Retransmissora"}),
+    ("Savvy Operator", {"zh-cn": "老练干员", "zh-tw": "精明的幹員", "ja": "手練れのオペレーター", "ko": "노련한 운영자", "ru": "Бывалый боец", "de": "Gerissener Operator", "fr": "Opérateur spécialiste", "es": "Operador espabilado", "it": "Operatore scaltro", "pl": "Sprytny operator", "pt-br": "Operador Sagaz"}),
+    ("Skull Weight", {"zh-cn": "配重头骨", "zh-tw": "顱骨重量", "ja": "髑髏の重り", "ko": "두개골 추", "ru": "Вес черепа", "de": "Schädelgewicht", "fr": "Poids en forme de crâne", "es": "Cráneo pesado", "it": "Peso a forma di teschio", "pl": "Ciężka czaszka", "pt-br": "Peso de crânio"}),
+    ("Slab Shield", {"zh-cn": "板砖大盾", "zh-tw": "厚板盾", "ja": "デカブツシールド", "ko": "슬랩 실드", "ru": "Щит Верзилы", "de": "Klotzschild", "fr": "Bouclier de Colosse", "es": "Escudo de moles", "it": "Scudo spesso", "pl": "Tarcza płytowa", "pt-br": "Escudo Ogro"}),
+    ("Smoke Screen", {"zh-cn": "烟幕", "zh-tw": "煙幕", "ja": "煙幕", "ko": "연막", "ru": "Дымовая завеса", "de": "Rauchwand", "fr": "Écran de fumée", "es": "Pantalla de humo", "it": "Cortina fumogena", "pl": "Zasłona dymna", "pt-br": "Cortina de fumaça"}),
+    ("Special Condition", {"zh-cn": "特殊状况", "zh-tw": "特殊環境", "ja": "特殊条件", "ko": "특별 조건", "ru": "Особое обстоятельство", "de": "Spezielle Kondition", "fr": "Condition spéciale", "es": "Condición especial", "it": "Condizione speciale", "pl": "Stan specjalny", "pt-br": "Condição especial"}),
+    ("Stamina Regeneration", {"zh-cn": "体力恢复", "zh-tw": "體力恢復", "ja": "スタミナ回復", "ko": "스태미너 재생", "ru": "Восстановление выносливости", "de": "Ausdauerregeneration", "fr": "Régénération d'endurance", "es": "Regeneración de resistencia", "it": "Rigenerazione di Resistenza", "pl": "Regeneracja kondycji", "pt-br": "Regeneração de vigor"}),
+    ("Stimm Component", {"zh-cn": "兴奋剂原料", "zh-tw": "興奮劑原料", "ja": "薬剤成分", "ko": "자극제 약물 재료", "ru": "Компонент стимулятора", "de": "Aufputschmittel-Komponente", "fr": "Composant de stimulant", "es": "Componente de estimulante", "it": "Componente stimolante", "pl": "Komponent Stymulatora", "pt-br": "Componente de estimulante"}),
+    ("Stub Revolver", {"zh-cn": "短柄左轮枪", "zh-tw": "短管左輪槍", "ja": "スタブリボルバー", "ko": "스터브 리볼버", "ru": "Стаб-револьвер", "de": "Stub-Revolver", "fr": "Revolver à canon court", "es": "Revólver semiautomático", "it": "Revolver a canna corta", "pl": "Krótki rewolwer", "pt-br": "Revólver Pesado"}),
+    ("Tainted Communications Device", {"zh-cn": "腐化通讯装置", "zh-tw": "通訊干擾裝置", "ja": "不浄の通信装置", "ko": "오염된 통신 장치", "ru": "Оскверненное средство связи", "de": "Verdorbenes Kommunikationsgerät", "fr": "Appareil de communication corrompu", "es": "Dispositivo de comunicación corrupto", "it": "Dispositivo di comunicazione corrotto", "pl": "Skażone urządzenie komunikacyjne", "pt-br": "Dispositivos de comunicação adulterados"}),
+    ("Tainted Skull", {"zh-cn": "腐化颅骨", "zh-tw": "腐敗顱骨", "ja": "汚れた頭骨", "ko": "타락한 두개골", "ru": "Оскверненный череп", "de": "Verdorbener Schädel", "fr": "Crâne corrompu", "es": "Cráneo corrupto", "it": "Teschi corrotto", "pl": "Skażona czaszka", "pt-br": "Crânio maculado"}),
+    ("Taking Damage", {"zh-cn": "受到伤害", "zh-tw": "承受傷害", "ja": "被ダメージ中", "ko": "대미지 받음", "ru": "Получение урона", "de": "Nimmt Schaden", "fr": "Subit des dégâts", "es": "Recibiendo daño", "it": "Subire danni", "pl": "Odnoszenie obrażeń", "pt-br": "Sofrendo dano"}),
+    ("Tancred Bastion", {"zh-cn": "唐克雷德堡垒", "zh-tw": "坦克雷德堡壘", "ja": "タンクレード・バスチョン", "ko": "탄크레드 감옥선", "ru": "Бастион Танкред", "de": "Tancred-Bastion", "fr": "Bastion de Tancred", "es": "Bastión del Buen Consejo", "it": "Bastione di Tancred", "pl": "Bastion Tancred", "pt-br": "Bastião de Tancred"}),
+    ("Targeted Toxin", {"zh-cn": "精准毒素", "zh-tw": "精準投毒", "ja": "標的毒化", "ko": "표적 독", "ru": "Нацеленный токсин", "de": "Gezieltes Toxin", "fr": "Toxine ciblée", "es": "Toxinas dirigidas", "it": "Tossina bersagliata", "pl": "Ukierunkowana Toksyna", "pt-br": "Toxina Direcionada"}),
+    ("Theatre of Castigation", {"zh-cn": "惩戒剧场", "zh-tw": "責難劇場", "ja": "懲戒の劇場", "ko": "견책의 극장", "ru": "Театр Бичевания", "de": "Das Theater der Züchtigung", "fr": "Le théâtre de la réprimande", "es": "El teatro del castigo", "it": "Il Teatro del castigo", "pl": "Teatr Karcenia", "pt-br": "Teatro do Castigo"}),
+    ("Theatre of Humility", {"zh-cn": "谦卑剧场", "zh-tw": "謙卑劇場", "ja": "謙虚の劇場", "ko": "겸손의 극장", "ru": "Театр Смирения", "de": "Das Theater der Demut", "fr": "Le théâtre de l'humilité", "es": "El teatro de la humildad", "it": "Il Teatro dell'umiltà", "pl": "Teatr Pokory", "pt-br": "Teatro da Humildade"}),
+    ("Tox Flamer", {"zh-cn": "剧毒火焰兵", "zh-tw": "毒焰噴射者", "ja": "トックス・フレイマー", "ko": "독성 플레이머", "ru": "Токсичный Огневик", "de": "Gift-Flammenwerfer", "fr": "Incendiaire toxique", "es": "Lanzallamas Tóxico", "it": "Sparafiamme tossico", "pl": "Toksypalacz", "pt-br": "Flamejante Tóxico"}),
+    ("Trust Level", {"zh-cn": "信任等级", "zh-tw": "信任等級", "ja": "信頼度", "ko": "신뢰 레벨", "ru": "Уровень доверия", "de": "Vertrauenslevel", "fr": "Niveau de confiance", "es": "Nivel de confianza", "it": "Livello di fiducia", "pl": "Poziom zaufania", "pt-br": "Nível de confiança"}),
+    ("Vantage Point", {"zh-cn": "有利位置", "zh-tw": "有利地形", "ja": "バンテージ・ポイント", "ko": "저격 지점", "ru": "Точка обзора", "de": "Aussichtspunkt", "fr": "Position avantageuse", "es": "Punto de ventaja", "it": "Punto di vantaggio", "pl": "Punkt widokowy", "pt-br": "Ponto de vantagem"}),
+    ("Vent Heat", {"zh-cn": "排出热气", "zh-tw": "排出熱量", "ja": "熱放出", "ko": "열 환기", "ru": "Отводит тепло", "de": "Hitze ablassen", "fr": "Évacuation de chaleur", "es": "Liberar calor", "it": "Dispersione di calore", "pl": "Wentylacja ciepła", "pt-br": "Calor da ventilação"}),
+    ("Virulent Strain", {"zh-cn": "强效菌株", "zh-tw": "劇毒菌株", "ja": "悪性菌株", "ko": "치명적인 역병", "ru": "Вирулентный штамм", "de": "Virulenter Strang", "fr": "Souche virulente", "es": "Cepa virulenta", "it": "Ceppo virulento", "pl": "Zjadliwy Szczep", "pt-br": "Cepa Virulenta"}),
+    ("Warp Charge", {"zh-cn": "亚空间充能", "zh-tw": "亞空間充能", "ja": "ワープ・チャージ", "ko": "워프 충전", "ru": "Варп-заряд", "de": "Warp-Ladung", "fr": "Recharge de warp", "es": "Carga de disformidad", "it": "Carica Warp", "pl": "Ładunek Osnowy", "pt-br": "Carga de Dobra"}),
+    ("Weak Spot", {"zh-cn": "弱点", "zh-tw": "弱點", "ja": "弱点", "ko": "약점", "ru": "Слабое место", "de": "Schwachstelle", "fr": "Point faible", "es": "Punto débil", "it": "Punto debole", "pl": "Słaby punkt", "pt-br": "Ponto fraco"}),
     # Names a weapon-mod option label exposed (no_more_overloads, 2026-09-30): the game has
     # them - the index holds all twelve languages - but the keys carrying them are not in the key
     # list, so no pass ever fetched them. Generic weapon and mechanic names, safe to mask.
