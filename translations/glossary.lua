@@ -31,6 +31,10 @@ return {
 
         -- game terms whose own loc key is not in the collected key list (yet); the game's
         -- wording, checked against the export where the export has the term
+        { en = "Force Staff", ["zh-cn"] = "力场杖", ["zh-tw"] = "力場法杖", ja = "フォースの杖", ko = "포스 지팡이", ru = "Психосиловой посох", de = "Psistab", fr = "Bâton de force", es = "Báculo de fuerza", it = "Bastone psichico", pl = "Laska psioniczna", ["pt-br"] = "Cajado de força" },
+        { en = "Force Sword", ["zh-cn"] = "力场剑", ["zh-tw"] = "力場劍", ja = "フォースソード", ko = "포스 검", ru = "Психосиловой меч", de = "Psischwert", fr = "Épée de force", es = "Espada de fuerza", it = "Spada psichica", pl = "Miecz psioniczny", ["pt-br"] = "Espada de força" },
+        { en = "Laspistol", ["zh-cn"] = "激光手枪", ["zh-tw"] = "鐳射手槍", ja = "ラスピストル", ko = "레이저 피스톨", ru = "Лазпистолет", de = "Laserpistole", fr = "Pistolet laser", es = "Pistola láser", it = "Pistola laser", pl = "Pistolet laserowy", ["pt-br"] = "Pistola de laser" },
+        { en = "Overload", ["zh-cn"] = "过载", ["zh-tw"] = "超載", ja = "オーバーロード", ko = "과부하", ru = "Перегрузка", de = "Überladung", fr = "Surcharge", es = "Sobrecarga", it = "Sovraccarico", pl = "Przeciążenie", ["pt-br"] = "Sobrecarga" },
         { en = "Rampage!", ["zh-cn"] = "怒火冲天！", ["zh-tw"] = "怒火沖天！", ja = "大暴れだ！", ko = "날뛰자!", ru = "Буйство!", de = "Randale!", fr = "Carnage !", es = "¡Estampida!", it = "Furia!", pl = "Rzeźnia!", ["pt-br"] = "Fúria!", uk = "Лють!" },
         { en = "Rampage", ["zh-cn"] = "怒火冲天", ["zh-tw"] = "怒火沖天", uk = "Шал" },
         { en = "Grimoire", ["zh-cn"] = "魔法书", ["zh-tw"] = "法術書", ja = "グリモア", ko = "그리모어", ru = "Гримуар", de = "Grimoire", fr = "Grimoire", es = "Grimorio", it = "Grimorio", pl = "Grymuar", ["pt-br"] = "Grimório", uk = "Ґримоар" },

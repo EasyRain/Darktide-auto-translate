@@ -333,6 +333,16 @@ HAND = [
 # these into ordinary exported terms - and the export then shadows this block, because it is
 # authoritative for its own terms.
 MISSING_LOC = [
+    # Names a weapon-mod option label exposed (no_more_overloads, 2026-09-30): the game has
+    # them - the index holds all twelve languages - but the keys carrying them are not in the key
+    # list, so no pass ever fetched them. Generic weapon and mechanic names, safe to mask.
+    ("Force Staff", {"zh-cn": "力场杖", "zh-tw": "力場法杖", "ja": "フォースの杖", "ko": "포스 지팡이", "ru": "Психосиловой посох", "de": "Psistab", "fr": "Bâton de force", "es": "Báculo de fuerza", "it": "Bastone psichico", "pl": "Laska psioniczna", "pt-br": "Cajado de força"}),
+    ("Force Sword", {"zh-cn": "力场剑", "zh-tw": "力場劍", "ja": "フォースソード", "ko": "포스 검", "ru": "Психосиловой меч", "de": "Psischwert", "fr": "Épée de force", "es": "Espada de fuerza", "it": "Spada psichica", "pl": "Miecz psioniczny", "pt-br": "Espada de força"}),
+    ("Laspistol", {"zh-cn": "激光手枪", "zh-tw": "鐳射手槍", "ja": "ラスピストル", "ko": "레이저 피스톨", "ru": "Лазпистолет", "de": "Laserpistole", "fr": "Pistolet laser", "es": "Pistola láser", "it": "Pistola laser", "pl": "Pistolet laserowy", "pt-br": "Pistola de laser"}),
+    ("Overload", {"zh-cn": "过载", "zh-tw": "超載", "ja": "オーバーロード", "ko": "과부하", "ru": "Перегрузка", "de": "Überladung", "fr": "Surcharge", "es": "Sobrecarga", "it": "Sovraccarico", "pl": "Przeciążenie", "pt-br": "Sobrecarga"}),
+    # Names a weapon-mod option label exposed (no_more_overloads, 2026-09-30): the game has
+    # them - the index holds all twelve languages - but the keys carrying them are not in the key
+    # list, so no pass ever fetched them. Generic weapon and mechanic names, safe to mask.
     # Hive Scum (Broker) combat abilities. The game spells the name with its own exclamation mark,
     # and the mod writes the English that way too ("Rampage!"), so both spellings are listed: the
     # matcher prefers the longer term where it applies.
