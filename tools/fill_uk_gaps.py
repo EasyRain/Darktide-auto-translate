@@ -196,29 +196,20 @@ def community_by_key() -> set[str]:
     con = sqlite3.connect("file:%s?mode=ro" % INDEX, uri=True)
     covered = set()
     for key in set(keys):
-        if key_hash(key) not in community:
+        digest = key_hash(key)
+        if digest not in community:
             continue
-        row = con.execute('SELECT en FROM localization WHERE hash = ? LIMIT 1', (key_hash(key),)).fetchone()
+        row = con.execute('SELECT en FROM localization WHERE hash = ? LIMIT 1', (digest,)).fetchone()
         if row and row[0]:
             covered.add(row[0])
     return covered
 
 
 def community_by_hash() -> dict[int, str]:
-    key_block = re.compile(r'\[?"?loc_keys"?\]?\s*=\s*\{([^}]*)\}')
-    returns = re.compile(r'return\s+"((?:[^"\\]|\\.)*)"')
-    out: dict[int, str] = {}
-    for path in sorted(UKREF.glob("*.lua")):
-        text = io.open(path, encoding="utf-8", errors="replace").read()
-        for block in key_block.finditer(text):
-            keys = re.findall(r'"(loc_[^"]+)"', block.group(1))
-            if not keys:
-                continue
-            value = returns.search(text[block.end():block.end() + 3000])
-            if value:
-                for key in keys:
-                    out.setdefault(key_hash(key), value.group(1))
-    return out
+    """hash -> Ukrainian, through tools/ukref.py's cache of the reference files."""
+    sys.path.insert(0, str(ROOT / "tools"))
+    import ukref
+    return ukref.load_by_hash(str(UKREF), quiet=True)
 
 
 def main() -> int:
@@ -236,25 +227,34 @@ def main() -> int:
     community = community_by_hash()
     con = sqlite3.connect("file:%s?mode=ro" % INDEX, uri=True)
 
+    # One pass over the index, then in-memory lookups: asking SQLite once per term is a full table
+    # scan each time (no index on `en`), which cost 206 s for these 1090 terms (2026-09-30).
+    sys.path.insert(0, str(ROOT / "tools"))
+    import indexmap
+    by_en = indexmap.en_map(str(INDEX), quiet=True)
+
     recovered, sources = {}, {}
     for en in gaps:
-        if en in HAND:
-            continue
         for candidate in (en, en + "!", en + ".", en + "?"):
-            rows = con.execute('SELECT hash FROM localization WHERE en = ? LIMIT 6', (candidate,)).fetchall()
-            hit = next((community[d] for (d,) in rows if d in community), None)
+            hit = next((community[d] for d in by_en.get(candidate, ()) if d in community), None)
             if hit:
                 recovered[en] = hit
                 sources[en] = "community '%s'" % candidate
                 break
 
-    values = dict(recovered)
-    values.update({en: HAND[en] for en in HAND if en in gaps})
+    # The community file wins where it has a value: it is a translation by Ukrainian speakers, and
+    # the HAND table is this project's own wording, written when 3.2.0 had none for those terms.
+    # 3.2.1 covers 17 of them (Spillway, Cruncher, the Hunted variants, Wounds...), so the order
+    # matters - the earlier version let HAND override the community and would have kept our guesses
+    # for terms that now have an official wording (2026-09-30).
+    values = {en: HAND[en] for en in HAND if en in gaps}
+    values.update(recovered)
     missing = [en for en in gaps if en not in values]
 
-    print("glossary gaps: %d" % len(gaps))
+    print("glossary terms: %d" % len(gaps))
     print("  from the community (by hash): %d" % len(recovered))
-    print("  hand written:                 %d" % len([en for en in HAND if en in gaps]))
+    print("  hand written (community has none): %d"
+          % len([en for en in values if sources.get(en) is None]))
     print("  left without Ukrainian:       %d %s" % (len(missing), missing[:8]))
 
     if args.write and values:

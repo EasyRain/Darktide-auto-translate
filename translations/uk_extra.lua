@@ -44,7 +44,7 @@ return {
     ["Arc Efficiency"] = "Дугова Ефективність", -- community 'Arc Efficiency'
     ["Arc Maul"] = "Дуговий буздиган", -- community 'Arc Maul'
     ["Arc Rifle"] = "Дугова гвинтівка", -- community 'Arc Rifle'
-    ["Arch Daemonhost"] = "Архі-демонхост", -- hand
+    ["Arch Daemonhost"] = "Архідемононосій", -- community 'Arch Daemonhost'
     ["Archivum Sycorax"] = "Архівум Сікоракс", -- community 'Archivum Sycorax'
     ["Armour Piercing"] = "Бронебійний", -- community 'Armour Piercing'
     ["Armourbane"] = "Бронебій", -- community 'Armourbane'
@@ -211,7 +211,7 @@ return {
     ["Crowd Control"] = "Контроль натовпу", -- community 'Crowd Control'
     ["Crucian Roulette"] = "Круціанська рулетка", -- community 'Crucian Roulette'
     ["Cruel Fortune"] = "Жорстока вдача", -- community 'Cruel Fortune'
-    ["Cruncher"] = "«Дробар»", -- hand
+    ["Cruncher"] = "Хрумкало", -- community 'Cruncher'
     ["Crusher"] = "Трощитель", -- community 'Crusher'
     ["Crystalline Will"] = "Кришталева воля", -- community 'Crystalline Will'
     ["Ctrl"] = "Ctrl", -- community 'Ctrl'
@@ -359,12 +359,12 @@ return {
     ["Grenadier Gauntlet"] = "ГранАтометна рукавиця", -- community 'Grenadier Gauntlet'
     ["Grenadiers"] = "Бомбери", -- community 'Grenadiers'
     ["Grievous Wounds"] = "Тяжкі рани", -- community 'Grievous Wounds'
-    ["Grimoire"] = "Ґримоар", -- hand
+    ["Grimoire"] = "Ґримоар", -- community 'Grimoire'
     ["Groaner"] = "Хрипун", -- community 'Groaner'
     ["Gunner"] = "Стрілець!", -- community 'Gunner!'
     ["Gunners"] = "Кулеметники", -- community 'Gunners'
     ["Gunslinger"] = "Швидкостріл", -- community 'Gunslinger'
-    ["Gurry \"Brunt\" Cernik"] = "Гаррі «Брант» Чернік", -- hand
+    ["Gurry \"Brunt\" Cernik"] = "Ґаррі «Брант» Кернік", -- community 'Gurry "Brunt" Cernik'
     ["Hab Dreyko"] = "Хаб Дрейко", -- community 'Hab Dreyko'
     ["Hadron Omega-7-7"] = "Гадрона Омега-7-7", -- community 'Hadron Omega-7-7'
     ["Hail of Fire"] = "Злива вогню", -- community 'Hail of Fire'
@@ -403,9 +403,10 @@ return {
     ["Hi-Intensity Rotten Armour"] = "Гнила броня (висока інтенсивність)", -- hand
     ["Hi-Intensity Tainted Sacrament"] = "Високоінтенсивне Осквернене Таїнство", -- community 'Hi-Intensity Tainted Sacrament'
     ["Hi-intensity Brute Conscripts"] = "Громили-призовники (висока інтенсивність)", -- hand
-    ["Hi-intensity Mutated Horrors"] = "Мутовані жахіття (висока інтенсивність)", -- hand
+    ["Hi-intensity Mutated Horrors"] = "Високоінтенсивні Мутовані почвари", -- community 'Hi-intensity Mutated Horrors'
     ["Hi-intensity Pox Gas"] = "Високоінтенсивний чумний газ", -- community 'Hi-intensity Pox Gas'
     ["Hi-intensity Tainted Airwaves"] = "Осквернений ефір (висока інтенсивність)", -- hand
+    ["Hide"] = "Сховати", -- community 'Hide'
     ["High Capacity"] = "Висока ємність", -- community 'High Capacity'
     ["High Damage"] = "Висока шкода", -- community 'High Damage'
     ["High-Intensity Endless Hordes"] = "Високоінтенсивні Нескінченні Орди", -- community 'High-Intensity Endless Hordes'
@@ -414,14 +415,14 @@ return {
     ["Hold the Line"] = "Тримай лінію", -- community 'Hold the Line'
     ["Holy Cause"] = "Свята мета", -- community 'Holy Cause'
     ["Holy Revenant"] = "Святий ревенант", -- community 'Holy Revenant'
-    ["Honour Among Thieves"] = "Честь серед злодіїв", -- hand
+    ["Honour Among Thieves"] = "Честь серед злодіїв", -- community 'Honour Among Thieves'
     ["Hound"] = "Чумний Пес!", -- community 'Hound!'
     ["Hounds"] = "Пси", -- hand
-    ["Hunted (Inferno)"] = "«Полювання» (Пекло)", -- hand
-    ["Hunted (Ventilation Purge)"] = "«Полювання» (Очищення вентиляції)", -- hand
+    ["Hunted (Inferno)"] = "Полювання (інферно)", -- community 'Hunted (Inferno)'
+    ["Hunted (Ventilation Purge)"] = "Полювання (очищення вентиляції)", -- community 'Hunted (Ventilation Purge)'
     ["Hunter's Resolve"] = "Рішучість мисливця", -- community 'Hunter's Resolve'
     ["Hunting Grounds"] = "Мисливські угіддя", -- community 'Hunting Grounds'
-    ["Huntsman's Shotgun"] = "Мисливський дробовик", -- hand
+    ["Huntsman's Shotgun"] = "Мисливський дробовик", -- community 'Huntsman's Shotgun'
     ["I Shall Not Fall"] = "Я не впаду", -- community 'I Shall Not Fall'
     ["Immolation Grenade"] = "Граната спалення", -- community 'Immolation Grenade'
     ["Impact Boost"] = "Підсилення удару", -- community 'Impact Boost'
@@ -488,7 +489,7 @@ return {
     ["Loner"] = "Самітник", -- hand
     ["Long Range Assassin"] = "Далекобійний убивця", -- community 'Long Range Assassin'
     ["Longshot"] = "Далекострільник", -- community 'Longshot'
-    ["Lords and Lies"] = "Володарі та брехня", -- hand
+    ["Lords and Lies"] = "Лорди та брехня", -- community 'Lords and Lies'
     ["Low Profile"] = "Тишком нишком", -- community 'Low Profile'
     ["Low intensity Pox Gas"] = "Низькоінтенсивний чумний газ", -- community 'Low intensity Pox Gas'
     ["Low-Intensity Engagement Zone"] = "Зона бою низької інтенсивності", -- community 'Low-Intensity Engagement Zone'
@@ -562,7 +563,7 @@ return {
     ["Movement Speed Boost"] = "Підсилення швидкості руху", -- community 'Movement Speed Boost'
     ["Multi Purpose"] = "Багатоцільовий", -- community 'Multi Purpose'
     ["Mutant"] = "Мутант", -- community 'Mutant'
-    ["Mutated Horrors"] = "Мутовані жахіття", -- hand
+    ["Mutated Horrors"] = "Мутовані почвари", -- community 'Mutated Horrors'
     ["Mutated Poxwalker"] = "Мутований Чумоходець", -- community 'Mutated Poxwalker'
     ["N/A"] = "Н/д", -- community 'N/A'
     ["NUMPAD 0"] = "Numpad 0", -- community 'NUMPAD 0'
@@ -583,7 +584,7 @@ return {
     ["No Man's Land"] = "Нічиї Землі", -- community 'No Man's Land'
     ["No Pushover"] = "Не розмазня", -- community 'No Pushover'
     ["No Respite"] = "Без перепочинку", -- community 'No Respite'
-    ["Noble Prerogative"] = "Шляхетне право", -- hand
+    ["Noble Prerogative"] = "Шляхетна прерогатива", -- community 'Noble Prerogative'
     ["None"] = "Немає", -- community 'None'
     ["Not Far Behind"] = "Не відставай", -- community 'Not Far Behind'
     ["Nuncio-Aquila"] = "Нунцій-аквіла", -- community 'Nuncio-Aquila'
@@ -755,7 +756,7 @@ return {
     ["Ripper Gun"] = "Різник", -- community 'Ripper Gun'
     ["Rising Heat"] = "Зростаючий жар", -- community 'Rising Heat'
     ["Rodin Karnak"] = "Родін Карнак", -- community 'Rodin Karnak'
-    ["Rodin Karnak, Prophet of Decay"] = "Родін Карнак, Пророк Розпаду", -- hand
+    ["Rodin Karnak, Prophet of Decay"] = "Родін Карнак, Пророк Розкладу", -- community 'Rodin Karnak, Prophet of Decay'
     ["Rolling Steel"] = "Каток сталі", -- community 'Rolling Steel'
     ["Rotten Armour"] = "Гнила броня", -- community 'Rotten Armour'
     ["Rotten Armour and Pox Gas"] = "Гнила броня і Чумний газ", -- hand
@@ -829,6 +830,7 @@ return {
     ["Sire Melk's Requisitorium"] = "Реквізиторіум Сіра Мелка", -- community 'Sire Melk's Requisitorium'
     ["Sister Hestia Prine"] = "Сестра Гестія Прайн", -- community 'Sister Hestia Prine'
     ["Skirmisher"] = "Сутичник", -- community 'Skirmisher'
+    ["Skitarii"] = "Скітарій", -- community 'Skitarii'
     ["Skitarius"] = "Скітарій", -- community 'Skitarius'
     ["Slam"] = "Геп", -- community 'Slam'
     ["Slow and Steady"] = "Повільний і впевнений", -- community 'Slow and Steady'
@@ -848,7 +850,7 @@ return {
     ["Spearhead Boltgun"] = "Проривний болтер", -- community 'Spearhead Boltgun'
     ["Special Action"] = "Особлива дія", -- community 'Special Action'
     ["Special Melee Attack"] = "Особлива атака ближнього бою", -- community 'Special Melee Attack'
-    ["Spillway"] = "Водозлив", -- hand
+    ["Spillway"] = "Водоскид", -- community 'Spillway'
     ["Spreadshot"] = "Дробовий постріл", -- community 'Spreadshot'
     ["Stability"] = "Стабільність зброї", -- community 'Stability'
     ["Stalker"] = "Сталкер", -- hand
@@ -909,7 +911,7 @@ return {
     ["The Blight Spreads"] = "Поширення Зарази", -- community 'The Blight Spreads'
     ["The Carnival"] = "Карнавал", -- community 'The Carnival'
     ["The Commodore's Vestures"] = "Убрання Коммодора", -- community 'The Commodore's Vestures'
-    ["The Depths"] = "Глибини", -- hand
+    ["The Depths"] = "Глибини", -- community 'The Depths'
     ["The Emperor's Bullet"] = "Куля Імператора", -- hand
     ["The Emperor's Fading light (I)"] = "Згасаюче світло Імператора (I)", -- community 'The Emperor's Fading light (I)'
     ["The Emperor's Fist"] = "Кулак імператора", -- community 'The Emperor's Fist'
@@ -936,7 +938,7 @@ return {
     ["Thick Skin"] = "Товста шкіра", -- community 'Thick Skin'
     ["Third Curio"] = "Третя реліквія", -- community 'Third Curio'
     ["Throneside"] = "Тронсайд", -- community 'Throneside'
-    ["Thugshot"] = "«Самопал»", -- hand
+    ["Thugshot"] = "Бандитський постріл", -- community 'Thugshot'
     ["Thunder Hammer"] = "Громовий молот", -- community 'Thunder Hammer'
     ["Thy Wrath be Swift"] = "Нехай твій гнів буде стрімким", -- community 'Thy Wrath be Swift'
     ["To the Bitter End"] = "До гіркого кінця", -- hand
@@ -1027,7 +1029,7 @@ return {
     ["Wildfire"] = "Пожежа", -- community 'Wildfire'
     ["Withering Fire"] = "Спустошливий вогонь", -- community 'Withering Fire'
     ["Won't Give In"] = "Не здамся", -- community 'Won't Give In'
-    ["Wounds"] = "Рани", -- hand
+    ["Wounds"] = "Поранення", -- community 'Wounds'
     ["Writ of Execution"] = "Грамота страти", -- community 'Writ of Execution'
     ["Writ of Judgement"] = "Указ правосуддя", -- community 'Writ of Judgement'
     ["Zealot"] = "Бузувір", -- community 'Zealot'

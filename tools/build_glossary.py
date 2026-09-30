@@ -130,24 +130,15 @@ def parse_existing(path):
     return out
 
 # ---- Ukrainian: from the community mod (complete translation) ----
-KEY_BLOCK = re.compile(r'\[?"?loc_keys"?\]?\s*=\s*\{([^}]*)\}')
-def extract_uk(path):
-    text = io.open(path, encoding='utf-8', errors='replace').read()
-    out = {}
-    for m in KEY_BLOCK.finditer(text):
-        keys = re.findall(r'"(loc_[^"]+)"', m.group(1))
-        if not keys:
-            continue
-        seg = text[m.end():m.end() + 3000]
-        rm = re.search(r'return\s+"((?:[^"\\]|\\.)*)"', seg)
-        if rm:
-            for k in keys:
-                out.setdefault(k, rm.group(1))
-    return out
-
-uk = {}
-for p in sorted(glob.glob(os.path.join(UKREF, 'ukrainian', 'UkrainianLocalization', 'scripts', 'mods', 'UkrainianLocalization', 'UkrainianLocalization_part*.lua'))):
-    uk.update(extract_uk(p))
+#
+# Through tools/ukref.py's cache. Reading the 44 files (51 MB) and hashing their 152k key names used
+# to happen on every run of this script; the cache turns that into a 0.2 s read, and rebuilds itself
+# when the reference files change (a fingerprint of names, sizes and mtimes lives in the cache).
+UK_FOLDER = os.path.join(UKREF, 'ukrainian', 'UkrainianLocalization', 'scripts', 'mods',
+                         'UkrainianLocalization')
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import ukref
+uk = ukref.load_by_key(UK_FOLDER)
 
 # ---- collect: key -> {lang: text} ----
 data = load_index(INDEX, TERM_KEYS)
