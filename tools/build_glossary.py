@@ -271,10 +271,24 @@ HAND = [
 # these into ordinary exported terms - and the export then shadows this block, because it is
 # authoritative for its own terms.
 MISSING_LOC = [
+    # A row carries a value for every language the game has one for - including the languages
+    # where the game shows the English word itself (Aquila in German, Grenade in French). Those
+    # slots are not padding: the matcher uses them to put the word aside while the engine works
+    # on the rest of the string, so a proper noun the game never translates cannot be translated
+    # by the engine either (tools/check_languages.lua section 6 holds that behaviour). A row is
+    # still shorter than eleven where the game has no value at all, and the four rows that are
+    # Chinese-only are deliberate (the Karnak twins and Rampage are Chinese-only wording).
+    # have fewer than eleven because the game keeps the English word in that language - Aquila
+    # has no German (it is 'Aquila' there), Grenade has no French ('grenade'), Scab no
+    # Brazilian Portuguese. Writing those slots anyway would be a no-op: masking a word and
+    # putting the same word back. Ukrainian is absent from most rows for a different reason:
+    # it is not in the game at all - it comes from the community translation, keyed by loc key,
+    # and these bare names do not appear in that file. Measured 2026-09-30: of 133 rows, 123
+    # carry all eleven languages, 16 slots are English-by-design and 0 are missing data.
     # Single words every installed mod uses and the game localises, picked by hand from
     # tools/suggest_terms.py's candidates (2026-09-30): factions, enemies, weapon families,
     # materials, stats and mechanics. Verbs, adjectives and UI words were left out on purpose.
-    ("Scab", {"zh-cn": "血痂", "zh-tw": "血痂", "ja": "スキャブ", "ko": "스캡", "ru": "Скаб", "de": "Verräter", "fr": "Squameux", "es": "Costra", "it": "Crumiro", "pl": "Drań"}),
+    ("Scab", {"zh-cn": "血痂", "zh-tw": "血痂", "ja": "スキャブ", "ko": "스캡", "ru": "Скаб", "de": "Verräter", "fr": "Squameux", "es": "Costra", "it": "Crumiro", "pl": "Drań", "pt-br": "Scab"}),
     ("Poxwalkers", {"zh-cn": "瘟疫行者", "zh-tw": "瘟疫行者", "ja": "ポクスウォーカー", "ko": "폭스워커", "ru": "Чумные Ходоки", "de": "Seuchenwandler", "fr": "Scrofuleux", "es": "Plagabundos", "it": "Pestevaganti", "pl": "Wysypkołazy", "pt-br": "Pestes-ambulantes"}),
     ("Specialist", {"zh-cn": "专家", "zh-tw": "專家", "ja": "スペシャリスト", "ko": "전문가", "ru": "Специалист", "de": "Spezialist", "fr": "Spécialiste", "es": "Experto", "it": "Specialista", "pl": "Specjalista", "pt-br": "Especialista"}),
     ("Specialists", {"zh-cn": "专家", "zh-tw": "專家", "ja": "スペシャリスト", "ko": "전문가", "ru": "Специалисты", "de": "Spezialisten", "fr": "Spécialistes", "es": "Expertos", "it": "Specialisti", "pl": "Specjaliści", "pt-br": "Especialistas"}),
@@ -282,36 +296,36 @@ MISSING_LOC = [
     ("Cyber-Mastiff", {"zh-cn": "智能獒犬", "zh-tw": "機械戰犬", "ja": "サイバーマスティフ", "ko": "사이버 마스티프", "ru": "Кибермастиф", "de": "Cyber-Dogge", "fr": "Cyber mastiff", "es": "Cibermastín", "it": "Mastino cibernetico", "pl": "Cybermastif", "pt-br": "Cibermastim"}),
     ("Executor", {"zh-cn": "处刑者", "zh-tw": "行刑者", "ja": "執行者", "ko": "처형인", "ru": "Экзекутор", "de": "Exekutor", "fr": "Exécuteur", "es": "Ejecutor", "it": "Boia", "pl": "Egzekutor", "pt-br": "Carrasco"}),
     ("Autogun", {"zh-cn": "自动枪", "zh-tw": "自動槍", "ja": "オートガン", "ko": "오토건", "ru": "Автомат", "de": "Sturmgewehr", "fr": "Fusil d'assaut", "es": "Rifle automático", "it": "Fucile automatico", "pl": "Karabin automatyczny", "pt-br": "Arma Automática"}),
-    ("Lasgun", {"zh-cn": "激光枪", "zh-tw": "鐳射槍", "ja": "ラスガン", "ko": "레이저건", "ru": "Лазган", "de": "Lasergewehr", "fr": "Fusil laser", "es": "Rifle láser", "it": "Fucile laser", "pt-br": "Fusil de laser"}),
+    ("Lasgun", {"zh-cn": "激光枪", "zh-tw": "鐳射槍", "ja": "ラスガン", "ko": "레이저건", "ru": "Лазган", "de": "Lasergewehr", "fr": "Fusil laser", "es": "Rifle láser", "it": "Fucile laser", "pl": "Lasgun", "pt-br": "Fusil de laser"}),
     ("Boltgun", {"zh-cn": "爆矢枪", "zh-tw": "爆矢槍", "ja": "ボルトガン", "ko": "볼트건", "ru": "Болтер", "de": "Bolter", "fr": "Bolter", "es": "Bólter", "it": "Fucile requiem", "pl": "Bolter", "pt-br": "Bolter"}),
     ("Shotguns", {"zh-cn": "霰弹枪", "zh-tw": "霰彈槍", "ja": "ショットガン", "ko": "샷건", "ru": "Дробовики", "de": "Schrotflinten", "fr": "Fusils à pompe", "es": "Escopetas", "it": "Fucili a pompa", "pl": "Strzelby", "pt-br": "Escopetas"}),
     ("Bayonet", {"zh-cn": "刺刀", "zh-tw": "刺刀", "ja": "銃剣", "ko": "총검", "ru": "Штык", "de": "Bajonett", "fr": "Baïonnette", "es": "Bayoneta", "it": "Baionetta", "pl": "Bagnet", "pt-br": "Baioneta"}),
     ("Curio", {"zh-cn": "附件", "zh-tw": "珍品", "ja": "収集品", "ko": "수집품", "ru": "Диковинка", "de": "Kuriosität", "fr": "Curiosité", "es": "Curiosidad", "it": "Rarità", "pl": "Ciekawostka", "pt-br": "Artefato"}),
     ("Relic", {"zh-cn": "圣物级", "zh-tw": "聖物", "ja": "レリック", "ko": "유물", "ru": "Реликвия", "de": "Relikt", "fr": "Relique", "es": "Reliquia", "it": "Reliquia", "pl": "Relikwia", "pt-br": "Relíquia"}),
-    ("Grenade", {"zh-cn": "手雷", "zh-tw": "手榴彈", "ja": "グレネード", "ko": "수류탄", "ru": "Граната", "de": "Granate", "es": "Granada", "it": "Granata", "pl": "Granat", "pt-br": "Granada"}),
-    ("Grenades", {"zh-cn": "手雷", "zh-tw": "手榴彈", "ja": "グレネード", "ko": "수류탄", "ru": "Гранаты", "de": "Granaten", "es": "Granadas", "it": "Granate", "pl": "Granaty", "pt-br": "Granadas"}),
+    ("Grenade", {"zh-cn": "手雷", "zh-tw": "手榴彈", "ja": "グレネード", "ko": "수류탄", "ru": "Граната", "de": "Granate", "fr": "Grenade", "es": "Granada", "it": "Granata", "pl": "Granat", "pt-br": "Granada"}),
+    ("Grenades", {"zh-cn": "手雷", "zh-tw": "手榴彈", "ja": "グレネード", "ko": "수류탄", "ru": "Гранаты", "de": "Granaten", "fr": "Grenades", "es": "Granadas", "it": "Granate", "pl": "Granaty", "pt-br": "Granadas"}),
     ("Plasteel", {"zh-cn": "塑钢", "zh-tw": "塑鋼", "ja": "プラスチール", "ko": "플라스틸", "ru": "Пласталь", "de": "Plaststahl", "fr": "Plastacier", "es": "Plastiacero", "it": "Plastacciaio", "pl": "Plastal", "pt-br": "Plastiaço"}),
-    ("Diamantine", {"zh-cn": "金刚砂", "zh-tw": "金剛晶石", "ja": "ダイヤマンタイン", "ko": "다이아몬드", "ru": "Диамантин", "de": "Diamantin", "es": "Diamantina", "it": "Diamantite", "pl": "Diamentyna", "pt-br": "Diamantina"}),
-    ("Aquila", {"zh-cn": "天鹰币", "zh-tw": "天鷹幣", "ja": "アクィラ", "ko": "아퀼라", "ru": "Аквила", "pl": "Orzełek"}),
+    ("Diamantine", {"zh-cn": "金刚砂", "zh-tw": "金剛晶石", "ja": "ダイヤマンタイン", "ko": "다이아몬드", "ru": "Диамантин", "de": "Diamantin", "fr": "Diamantine", "es": "Diamantina", "it": "Diamantite", "pl": "Diamentyna", "pt-br": "Diamantina"}),
+    ("Aquila", {"zh-cn": "天鹰币", "zh-tw": "天鷹幣", "ja": "アクィラ", "ko": "아퀼라", "ru": "Аквила", "de": "Aquila", "fr": "Aquila", "es": "Aquila", "it": "Aquila", "pl": "Orzełek", "pt-br": "Aquila"}),
     ("Rarity", {"zh-cn": "稀有度", "zh-tw": "稀有度", "ja": "レア度", "ko": "희귀도", "ru": "Редкость", "de": "Seltenheit", "fr": "Rareté", "es": "Rareza", "it": "Rarità", "pl": "Rzadkość", "pt-br": "Raridade"}),
     ("Voltaic", {"zh-cn": "驭电者", "zh-tw": "電流急竄", "ja": "ヴァルテイク", "ko": "전기", "ru": "Гальваник", "de": "Voltaisch", "fr": "Voltaïque", "es": "Eléctrico", "it": "Voltaico", "pl": "Galwaniczność", "pt-br": "Voltaico"}),
     ("Frenzy", {"zh-cn": "狂暴杀戮", "zh-tw": "血之狂熱", "ja": "フレンジー", "ko": "날뛰기", "ru": "Неистовство", "de": "Rausch", "fr": "Frénésie", "es": "Frenesí", "it": "Frenesia", "pl": "Szał", "pt-br": "Frenesi"}),
     ("Quelling", {"zh-cn": "平息", "zh-tw": "鎮靜", "ja": "抑制", "ko": "억제", "ru": "Подавление", "de": "Unterdrückend", "fr": "Atténuation", "es": "Supresor", "it": "Calmante", "pl": "Gaszenie", "pt-br": "Subjugando"}),
     ("Cleave", {"zh-cn": "劈裂值", "zh-tw": "順劈", "ja": "斬撃", "ko": "쪼개기", "ru": "Раскол", "de": "Spalten", "fr": "Transpercement", "es": "Hendidura", "it": "Fendente", "pl": "Rozszczepienie", "pt-br": "Talho"}),
     ("Stagger", {"zh-cn": "踉跄", "zh-tw": "踉蹌", "ja": "よろめき", "ko": "비틀거림", "ru": "Ошеломление", "de": "Überwältigen", "fr": "Vacillement", "es": "Tambaleo", "it": "Barcollamento", "pl": "Oszołomienie", "pt-br": "Desequilibrar"}),
-    ("Suppression", {"zh-cn": "压制", "zh-tw": "壓制", "ja": "サプレッション", "ko": "제압", "ru": "Подавление", "de": "Unterdrückung", "es": "Represión", "it": "Soppressione", "pl": "Tłumienie", "pt-br": "Supressão"}),
+    ("Suppression", {"zh-cn": "压制", "zh-tw": "壓制", "ja": "サプレッション", "ko": "제압", "ru": "Подавление", "de": "Unterdrückung", "fr": "Suppression", "es": "Represión", "it": "Soppressione", "pl": "Tłumienie", "pt-br": "Supressão"}),
     ("Rupture", {"zh-cn": "破裂", "zh-tw": "破裂", "ja": "破裂", "ko": "파열", "ru": "Разрыв", "de": "Zerbersten", "fr": "Éclatement", "es": "Ruptura", "it": "Esplosione", "pl": "Pęknięcie", "pt-br": "Ruptura"}),
     ("Bash", {"zh-cn": "猛击", "zh-tw": "猛砸", "ja": "バッシュ", "ko": "강타", "ru": "Удар", "de": "Hieb", "fr": "Volée", "es": "Golpe", "it": "Colpo", "pl": "Walnięcie bronią", "pt-br": "Surrar"}),
     ("Vent", {"zh-cn": "排气", "zh-tw": "冷卻", "ja": "通気", "ko": "환기", "ru": "Вентиляция", "de": "Entlüften", "fr": "Ventilation", "es": "Respiradero", "it": "Ventilazione", "pl": "Wentylacja", "pt-br": "Ventilação"}),
     ("Overheat", {"zh-cn": "过热", "zh-tw": "過熱", "ja": "オーバーヒート", "ko": "과열", "ru": "Перегрев", "de": "Überhitzen", "fr": "Surchauffe", "es": "Recalentamiento", "it": "Surriscaldamento", "pl": "Przegrzanie", "pt-br": "Superaquecido"}),
     ("Soulblaze", {"zh-cn": "灵魂之火", "zh-tw": "靈魂之火", "ja": "ソウルファイア", "ko": "소울블레이즈", "ru": "Духовное пламя", "de": "Seelenbrand", "fr": "Embrasement d'âme", "es": "Llamarada espiritual", "it": "Fiamma dell'anima", "pl": "Ogień Duszy", "pt-br": "Chama Anímica"}),
     ("Weakspot", {"zh-cn": "弱点", "zh-tw": "弱點", "ja": "弱点", "ko": "약점", "ru": "Слабое место", "de": "Schwachstelle", "fr": "Point faible", "es": "Punto débil", "it": "Punto debole", "pl": "Słaby punkt", "pt-br": "Ponto fraco"}),
-    ("Grimoires", {"zh-cn": "魔法书", "zh-tw": "魔導書", "ja": "魔術書", "ko": "그리모어", "ru": "Гримуары", "es": "Grimorios", "it": "Grimori", "pl": "Grymuary", "pt-br": "Grimórios"}),
+    ("Grimoires", {"zh-cn": "魔法书", "zh-tw": "魔導書", "ja": "魔術書", "ko": "그리모어", "ru": "Гримуары", "de": "Grimoires", "fr": "Grimoires", "es": "Grimorios", "it": "Grimori", "pl": "Grymuary", "pt-br": "Grimórios"}),
     ("Toughness", {"zh-cn": "韧性", "zh-tw": "韌性", "ja": "タフネス", "ko": "강인함", "ru": "Стойкость", "de": "Zähigkeit", "fr": "Robustesse", "es": "Dureza", "it": "Robustezza", "pl": "Wytrzymałość", "pt-br": "Resistência"}),
     ("Cooldown", {"zh-cn": "冷却时间", "zh-tw": "冷卻", "ja": "クールダウン", "ko": "쿨다운", "ru": "Перезарядка", "de": "Abklingzeit", "fr": "Temps de recharge", "es": "Recuperación", "it": "Tempo di ricarica", "pl": "Czas odnowienia", "pt-br": "Tempo de recarga"}),
     ("Critical", {"zh-cn": "暴击", "zh-tw": "暴擊", "ja": "クリティカル", "ko": "치명타", "ru": "Крит. удар", "de": "Kritischer Treffer", "fr": "Critique", "es": "Crítico", "it": "Critico", "pl": "Krytyczny", "pt-br": "Crítico"}),
     ("Stacks", {"zh-cn": "叠加", "zh-tw": "疊加層數", "ja": "スタック", "ko": "스택", "ru": "Заряды", "de": "Stapel", "fr": "Cumuls", "es": "Acumulaciones", "it": "Accumuli", "pl": "Poziomy kumulacji", "pt-br": "Acúmulos"}),
-    ("Charges", {"zh-cn": "充能", "zh-tw": "充能", "ja": "チャージ", "ko": "충전", "ru": "Заряды", "de": "Aufladungen", "es": "Cargas", "it": "Cariche", "pl": "Ładunki", "pt-br": "Cargas"}),
+    ("Charges", {"zh-cn": "充能", "zh-tw": "充能", "ja": "チャージ", "ko": "충전", "ru": "Заряды", "de": "Aufladungen", "fr": "Charges", "es": "Cargas", "it": "Cariche", "pl": "Ładunki", "pt-br": "Cargas"}),
     ("Dodges", {"zh-cn": "闪避", "zh-tw": "閃避", "ja": "回避", "ko": "회피", "ru": "Уклонения", "de": "Ausweichen", "fr": "Esquives", "es": "Esquivas", "it": "Schivate", "pl": "Uniki", "pt-br": "Esquivas"}),
     ("Regen", {"zh-cn": "恢复量", "zh-tw": "恢復", "ja": "回復", "ko": "재생", "ru": "Реген.", "de": "Regeneration", "fr": "Régénération", "es": "Regeneración", "it": "Rigenerazione", "pl": "Regeneracja", "pt-br": "Regeneração"}),
     ("Adrenaline", {"zh-cn": "肾上腺素", "zh-tw": "腎上腺素", "ja": "アドレナリン", "ko": "아드레날린", "ru": "Адреналин", "de": "Adrenalin", "fr": "Adrénaline", "es": "Adrenalina", "it": "Adrenalina", "pl": "Adrenalina", "pt-br": "Adrenalina"}),
@@ -365,7 +379,7 @@ MISSING_LOC = [
     ("Forge's Bellow", {"zh-cn": "熔炉怒吼", "zh-tw": "熔爐怒吼", "ja": "鍛造場の息吹", "ko": "모루의 함성", "ru": "Рев кузни", "de": "Schrei der Schmiede", "fr": "Beuglement de forge", "es": "Bramido de la forja", "it": "Ruggito della Forgia", "pl": "Ryk Kuźni", "pt-br": "Brado da Forja"}),
     ("Havoc Rewards", {"zh-cn": "浩劫奖励", "zh-tw": "浩劫獎勵", "ja": "ハヴォック報酬", "ko": "파괴 보상", "ru": "Награды верной смерти", "de": "Verwüstungsbelohnungen", "fr": "Récompenses de dévastation", "es": "Recompensas de pandemonio", "it": "Ricompense Scompiglio", "pl": "Nagrody spustoszenia", "pt-br": "Recompensas de Devastação"}),
     ("Kill Enemies", {"zh-cn": "击杀敌人", "zh-tw": "擊殺敵人", "ja": "敵を倒せ", "ko": "적 처치하기", "ru": "Убейте врагов", "de": "Töte Feinde", "fr": "Tuez les ennemis.", "es": "Mata a enemigos", "it": "Uccidi i nemici", "pl": "Zabij wrogów", "pt-br": "Matar inimigos"}),
-    ("Lieutenant Masozi", {"zh-cn": "马佐齐副官", "zh-tw": "馬佐齊中尉", "ja": "マソジ副官", "ko": "마소지 중위", "ru": "Лейтенант Масози", "es": "Teniente Masozi", "it": "Tenente Masozi", "pl": "porucznik Masozi", "pt-br": "Tenente Masozi"}),
+    ("Lieutenant Masozi", {"zh-cn": "马佐齐副官", "zh-tw": "馬佐齊中尉", "ja": "マソジ副官", "ko": "마소지 중위", "ru": "Лейтенант Масози", "de": "Lieutenant Masozi", "fr": "Lieutenant Masozi", "es": "Teniente Masozi", "it": "Tenente Masozi", "pl": "porucznik Masozi", "pt-br": "Tenente Masozi"}),
     ("Martyr's Skull", {"zh-cn": "殉道者头骨", "zh-tw": "殉道者之顱", "ja": "殉教者の髑髏", "ko": "순교자의 두개골", "ru": "Череп мученика", "de": "Schädel des Märtyrers", "fr": "Crâne du martyr", "es": "Cráneo de mártir", "it": "Teschio del Martire", "pl": "Czaszka męczennika", "pt-br": "Caveira do Mártir"}),
     ("Med Stimm", {"zh-cn": "医疗兴奋剂", "zh-tw": "醫療興奮劑", "ja": "医薬品", "ko": "약물", "ru": "Медицинский стимулятор", "de": "Med-Aufputschmittel", "fr": "Stimulant médical", "es": "Estimulante medicinal", "it": "Stimolante medicae", "pl": "Stymulator medyczny", "pt-br": "Med-estimulante"}),
     ("Medicae Station", {"zh-cn": "医疗站", "zh-tw": "醫療站", "ja": "メディケアステーション", "ko": "치료소", "ru": "Медстанция", "de": "Medicae-Station", "fr": "Station médicale", "es": "Estación médica", "it": "Stazione medicae", "pl": "Medstacja", "pt-br": "Estação de Remédios"}),

@@ -233,6 +233,157 @@ for _, lang in ipairs(LANGUAGES) do
         lang, checked, guards, skipped))
 end
 
+-- ---- 5: terms the language has no value for ----
+--
+-- The sweep above only walks terms that *have* a value in the language, so the other path was never
+-- exercised: a term whose entry has no value for the target language (all 131 Ukrainian-less terms,
+-- Aquila without German, Scab without Brazilian Portuguese...). The module is supposed to leave
+-- those alone - not mask them, not invent a token, not restore an empty string - and this section
+-- holds it to that with the real table (2026-09-30).
+print("== the missing-value path: terms the language has no wording for")
+for _, lang in ipairs(LANGUAGES) do
+    local usable, missing, checked = 0, 0, 0
+    for _, entry in ipairs(terms) do
+        local value = value_for(entry, lang)
+        if entry.en and value and value ~= "" then
+            usable = usable + 1
+        elseif entry.en then
+            missing = missing + 1
+        end
+    end
+    if glossary.count(lang) ~= usable then
+        fail(lang, "usable count", string.format("module says %d, the file has %d",
+            glossary.count(lang), usable))
+    end
+    for _, entry in ipairs(terms) do
+        local value = value_for(entry, lang)
+        if entry.en and #entry.en >= 3 and not (value and value ~= "") then
+            local source = "Use " .. entry.en .. " now"
+            local masked, tokens = glossary.mask(source, lang, true)
+            local unmasked = glossary.unmask(masked, tokens)
+            for _, token in ipairs(tokens) do
+                if not token.term or token.term == "" then
+                    fail(lang, "a term resolved to nothing", entry.en)
+                end
+                -- The bug this guards: a term with no wording for the language gets masked anyway and
+                -- is "restored" to its English, which puts an English word into translated text and
+                -- looks like it worked. A shorter, usable term may legitimately match inside the
+                -- phrase (Attack inside Attack Speed), so the expectation is built from the tokens.
+                if token.term:lower() == entry.en:lower() then
+                    fail(lang, "a term with no wording was restored to its English", entry.en)
+                end
+            end
+            if unmasked:find("⟦", 1, true) then
+                fail(lang, "placeholder left by a term with no wording", entry.en)
+            end
+            if unmasked ~= expected_from_tokens(source, tokens) then
+                fail(lang, "term with no wording round trip",
+                    string.format("%q -> %q", source, unmasked))
+            end
+            checked = checked + 1
+        end
+    end
+    -- one string holding both kinds: the term with a value is translated, the other keeps its English
+    local mixed_ok = false
+    for _, entry in ipairs(terms) do
+        local value = value_for(entry, lang)
+        if entry.en and #entry.en >= 4 and value and value ~= "" and value ~= entry.en then
+            for _, other in ipairs(terms) do
+                local absent = value_for(other, lang)
+                if other.en and #other.en >= 4 and other.en ~= entry.en
+                   and not (absent and absent ~= "") then
+                    local source = "Use " .. entry.en .. " and " .. other.en .. " now"
+                    local masked, tokens = glossary.mask(source, lang, true)
+                    local unmasked = glossary.unmask(masked, tokens)
+                    if unmasked:find("⟦", 1, true) then
+                        fail(lang, "mixed string left a placeholder", entry.en .. " + " .. other.en)
+                    elseif not unmasked:find(value, 1, true) then
+                        fail(lang, "mixed string lost the translated term", entry.en)
+                    elseif not unmasked:lower():find(other.en:lower(), 1, true) then
+                        fail(lang, "mixed string lost the untranslated term", other.en)
+                    end
+                    mixed_ok = true
+                    break
+                end
+            end
+        end
+        if mixed_ok then break end
+    end
+    print(string.format("  ok   %-6s %4d term(s) without a wording, %4d usable, mixed case %s",
+        lang, missing, usable, mixed_ok and "checked" or "not applicable"))
+end
+
+-- ---- 6: the shapes a hole can take, on a glossary written for the test ----
+--
+-- The real table only has one shape of hole (a language key that is simply absent). A generated file
+-- can also carry an empty string, and a term whose value is the English word itself - which is what
+-- the game does for a proper noun it does not translate (Aquila in German). Both have to behave:
+-- empty means "not usable", the same-as-English one is usable and protects the word from the engine.
+print("== the shapes of a hole: absent key, empty string, same as English")
+local scratch = os.getenv("TEMP") or "."
+scratch = scratch .. "\\at_lang_holes"
+os.execute('mkdir "' .. scratch .. '" 2>nul')
+os.execute('mkdir "' .. scratch .. '\\translations" 2>nul')
+local fh = assert(io.open(scratch .. "/translations/glossary.lua", "w"))
+fh:write([[
+return { terms = {
+    { en = "Absent Term", ["zh-cn"] = "缺席术语" },
+    { en = "Empty Term",  ["zh-cn"] = "空术语", ["ja"] = "" },
+    { en = "Same Term",   ["ja"] = "Same Term", ["zh-cn"] = "同名术语" },
+    { en = "Full Term",   ["ja"] = "フル", ["zh-cn"] = "完整术语" },
+} }
+]])
+fh:close()
+local holes = assert(loadfile(mods .. "/glossary.lua"))()
+holes.init({
+    MOD_DIR = scratch,
+    file_exists = function(p)
+        local f = io.open(p, "rb")
+        if f then f:close() return true end
+        return false
+    end,
+    load_lua_file = function(p)
+        local c = assert(loadfile(p))
+        return c()
+    end,
+})
+local ok, why = holes.load(true)
+if not ok then
+    fail("-", "the test glossary did not load", tostring(why))
+else
+    if holes.count("ja") ~= 2 then
+        fail("ja", "holes: usable count", string.format(
+            "expected 2 (same-as-English + real value; the absent key and the empty string are not usable), got %d",
+            holes.count("ja")))
+    end
+    for _, case in ipairs({
+        { lang = "ja", source = "Absent Term", expect = "Absent Term", why = "absent key", masked = false },
+        { lang = "ja", source = "Empty Term",  expect = "Empty Term",  why = "empty string", masked = false },
+        { lang = "ja", source = "Same Term",   expect = "Same Term",   why = "same as English", masked = true },
+        { lang = "ja", source = "Full Term",   expect = "フル",         why = "a real value", masked = true },
+        { lang = "de", source = "Full Term",   expect = "Full Term",   why = "language with no values", masked = false },
+    }) do
+        local masked, tokens = holes.mask(case.source, case.lang, true)
+        local unmasked = holes.unmask(masked, tokens)
+        if case.masked and #tokens == 0 then
+            fail(case.lang, "holes: nothing was masked (" .. case.why .. ")", case.source)
+        elseif not case.masked and #tokens > 0 then
+            fail(case.lang, "holes: masked what has no wording (" .. case.why .. ")", case.source)
+        end
+        if unmasked:find("⟦", 1, true) then
+            fail(case.lang, "holes: placeholder left (" .. case.why .. ")", case.source)
+        elseif unmasked ~= case.expect then
+            fail(case.lang, "holes: " .. case.why, string.format("%q -> %q (wanted %q)",
+                case.source, unmasked, case.expect))
+        end
+    end
+    local masked, tokens = holes.mask("Full Term and Absent Term", "ja", true)
+    local unmasked = holes.unmask(masked, tokens)
+    if unmasked ~= "フル and Absent Term" then
+        fail("ja", "holes: mixed string", string.format("%q", unmasked))
+    end
+end
+
 print("")
 if failures > 0 then
     print(string.format("%d failure(s)", failures))
