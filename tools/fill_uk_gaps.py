@@ -48,6 +48,60 @@ from common import key_hash  # noqa: E402
 # translation's vocabulary and style. Marked "hand" in the generated file so a Ukrainian speaker can
 # find everything that did not come from the community in one place.
 HAND = {
+    # --- the 2026-09-30 sweep: 127 terms the mods use that the community file does not carry as
+    # bare names. Written from the community's own compound wording, e.g. "Braced Autogun" =
+    # "Упірний автомат" (Autogun = Автомат), "Infantry Lasgun" = "Піхотна лазгвинтівка",
+    # "Spearhead Boltgun" = "Проривний болтер", "Blaze Force Sword" = "Силовий меч полум'я",
+    # "Battle Maul & Slab Shield" = "Бойовий буздиган і панцерний щит", "Vent Heat" = "Охолодити",
+    # "Critical Chance Boost" = "Підсилення критичного шансу", "Melee Damage" = "Шкода у
+    # ближньому бою". Every line is tagged `hand` in translations/uk_extra.lua so a Ukrainian
+    # speaker can review the ones that were composed rather than quoted.
+    "Autogun": "Автомат",
+    "Lasgun": "Лазгвинтівка",
+    "Boltgun": "Болтер",
+    "Shotguns": "Дробовики",
+    "Bayonet": "Багнет",
+    "Force Staff": "Силовий посох",
+    "Force Sword": "Силовий меч",
+    "Force Greatsword": "Дворучний силовий меч",
+    "Laspistol": "Лазпістолет",
+    "Stub Revolver": "Кустарний револьвер",
+    "Slab Shield": "Панцерний щит",
+    "Devil's Claw": "Кіготь диявола",
+    "Specialist": "Спеціаліст",
+    "Specialists": "Спеціалісти",
+    "Nearby Enemies": "Вороги поблизу",
+    "Enemy Types": "Типи ворогів",
+    "Elite Kill": "Вбивство еліти",
+    "Melee Attack": "Атака у ближньому бою",
+    "Melee Attacks": "Атаки у ближньому бою",
+    "Melee Attack Speed": "Швидкість атаки у ближньому бою",
+    "Melee Hits": "Влучання у ближньому бою",
+    "Melee Kills": "Вбивства у ближньому бою",
+    "Ranged Damage": "Шкода у дальньому бою",
+    "Ranged Kills": "Вбивства у дальньому бою",
+    "Damage Reduction": "Зменшення шкоди",
+    "Damage Taken": "Отримана шкода",
+    "Taking Damage": "Отримання шкоди",
+    "Toughness Damage": "Шкода по щитах",
+    "Critical Chance": "Критичний шанс",
+    "Movement Speed": "Швидкість руху",
+    "Stamina Regeneration": "Відновлення витривалості",
+    "Charge Up": "Заряджання",
+    "Charges": "Заряди",
+    "Stacks": "Стаки",
+    "Cleave": "Розсічення",
+    "Overheat": "Перегрів",
+    "Vent": "Охолодити",
+    "Warp Charge": "Варп-заряд",
+    "Soulblaze": "Полум'я душі",
+    "Weak Spot": "Слабке місце",
+    "Grenades": "Гранати",
+    "Grimoires": "Ґримоари",
+    "Havoc Assignment": "Божевільне завдання",
+    "Trust Level": "Рівень довіри",
+    "Emperor's Will": "Воля Імператора",
+    "Lieutenant Masozi": "Лейтенант Мазозі",
     # --- the 2026-09-29 update: weapons, map, enemies
     "Cruncher": "«Дробар»",                      # ru Громитель, pl Ubijak, de Zerknirscher
     "Thugshot": "«Самопал»",                     # ru Самопал, pl Zakapior, fr Scélérat
