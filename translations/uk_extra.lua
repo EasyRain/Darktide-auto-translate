@@ -48,7 +48,7 @@ return {
     ["Arc Efficiency"] = "Дугова Ефективність", -- community 'Arc Efficiency'
     ["Arc Maul"] = "Дуговий буздиган", -- community 'Arc Maul'
     ["Arc Rifle"] = "Дугова гвинтівка", -- community 'Arc Rifle'
-    ["Arch Daemonhost"] = "Архідемононосій", -- community 'Arch Daemonhost'
+    ["Arch Daemonhost"] = "Архі-демонхост", -- hand
     ["Archivum Sycorax"] = "Архівум Сікоракс", -- community 'Archivum Sycorax'
     ["Armour Piercing"] = "Бронебійний", -- community 'Armour Piercing'
     ["Armourbane"] = "Бронебій", -- community 'Armourbane'
