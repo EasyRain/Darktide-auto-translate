@@ -184,6 +184,29 @@ if os.path.exists(_UK_EXTRA_PATH):
         UK_EXTRA[unescape_lua(_en).lower()] = unescape_lua(_uk)
 
 
+# The community's wording for rows these blocks wrote themselves, where reading the two side by side
+# showed the community's is what a Ukrainian player expects: it capitalises a standalone label
+# ("Назад" for the Back button, not "назад"), uses the singular for a breed name, and picks the sense
+# that matches the game string ("Height" in the character creator is Зріст, not висота). Kept as a
+# reviewed list rather than "the community always wins" - see with_uk() for what that did.
+UK_OVERRIDE = {
+    'back': 'Назад', 'cancel': 'Скасувати', 'close': 'Закрити', 'default': 'Усталені налаштування',
+    'delete': 'Видалити', 'disable': 'Вимкнути', 'error': 'Помилка', 'help': 'Допомога',
+    'hide': 'Сховати', 'left': 'Ліворуч', 'next': 'Далі', 'options': 'Опції', 'right': 'Праворуч',
+    'select': 'Вибрати', 'show': 'Показати', 'height': 'Зріст',
+    'english': 'Англійська', 'french': 'Французька', 'german': 'Німецька', 'italian': 'Італійська',
+    'japanese': 'Японська', 'korean': 'Корейська', 'polish': 'Польська', 'portuguese': 'Португальська',
+    'russian': 'Російська', 'spanish': 'Іспанська',
+    'captain': 'Капітан', 'sniper': 'Снайпер', 'vanguard': 'Штурмовик', 'pox burster': 'Чумовибухач',
+    'monstrosity': 'Потвора',
+    # 3.2.2 renamed the Ogryn enemies: their compound is Скаб-Крушитель, so the Crusher is the
+    # one called Трощитель.
+    'crusher': 'Трощитель', 'crushers': 'Трощителі',
+    'mauler': 'Крушитель', 'maulers': 'Крушителі', 'scab mauler': 'Скаб-Крушитель',
+    'scab maulers': 'Скаб-Крушителі',
+}
+
+
 def with_uk(en, vals):
     """The same values with a Ukrainian value filled in where the community has none.
 
@@ -192,10 +215,21 @@ def with_uk(en, vals):
     the hand-written blocks: "On", "Other", "Confirm" and "Rampage!" are hand rows, so the community
     value attached to the *index* entry never reached them, and they were the last four terms
     without Ukrainian (measured 2026-09-29).
+
+    A row's own value wins over uk_extra, and UK_OVERRIDE wins over both. Letting uk_extra win in
+    general was tried on 2026-09-30 and reverted the next hour: the community translates the same
+    English differently per key, so "Bomber" came back as the shout "Бомбер!" and "Captains" as the
+    singular "Капітан". UK_OVERRIDE is the reviewed list of the cases where the community's wording is
+    simply better than what these blocks wrote earlier (labels it capitalises, "Height" = Зріст).
     """
+    key = unescape_lua(en).lower()
+    forced = UK_OVERRIDE.get(key)
+    if forced and vals.get('uk') != forced:
+        merged = dict(vals)
+        merged['uk'] = forced
+        return merged
     if vals.get('uk'):
         return vals
-    key = unescape_lua(en).lower()
     extra = UK_EXTRA.get(key) or (terms.get(key) or {}).get('uk')
     if not extra:
         return vals
@@ -206,6 +240,13 @@ def with_uk(en, vals):
 
 _filled = 0
 for _key, _langs in terms.items():
+    # UK_OVERRIDE first: these terms take their Ukrainian straight from the index, so without this the
+    # reviewed list only reached the hand-written blocks (2026-09-30).
+    _forced = UK_OVERRIDE.get(_key)
+    if _forced:
+        if _langs.get('uk') != _forced:
+            _langs['uk'] = _forced
+        continue
     if 'uk' not in _langs and _key in UK_EXTRA:
         _langs['uk'] = UK_EXTRA[_key]
         _filled += 1
@@ -830,9 +871,30 @@ lines.append('        -- full name ("Scab Mauler"), so a string that says only "
 # game's wording is authoritative and this row steps aside.
 breed_shadowed = []
 breed_used = 0
-for en, plural, vals in SHORT_BREEDS:
-    vals = with_uk(en, with_uk(plural or en, vals))
+
+
+def breed_values(en, plural, vals):
+    """Each spelling with its own Ukrainian.
+
+    A row carries one value map for both spellings, which is right for the languages the game uses the
+    same word for and wrong for Ukrainian: the plural is a different word ("Капітани" against
+    "Капітан"), and UK_OVERRIDE/uk_extra are keyed per spelling. The singular keeps the row's value; the
+    plural looks itself up and falls back to the row (2026-09-30).
+    """
+    row_uk = vals.get('uk')
+    out = []
     for spelling in [en] + ([plural] if plural else []):
+        base = vals if spelling == en else {k: v for k, v in vals.items() if k != 'uk'}
+        merged = with_uk(spelling, base)
+        if 'uk' not in merged and row_uk:
+            merged = dict(merged)
+            merged['uk'] = row_uk
+        out.append((spelling, merged))
+    return out
+
+
+for en, plural, vals in SHORT_BREEDS:
+    for spelling, svals in breed_values(en, plural, vals):
         if spelling.lower() in exported_keys:
             breed_shadowed.append(spelling)
             continue
@@ -840,8 +902,8 @@ for en, plural, vals in SHORT_BREEDS:
         emitted.add(spelling.lower())
         parts = ['en = ' + quote(spelling)]
         for lang in LANG_ORDER:
-            if lang in vals:
-                parts.append((LANG_KEY.get(lang, lang)) + ' = ' + quote(vals[lang]))
+            if lang in svals:
+                parts.append((LANG_KEY.get(lang, lang)) + ' = ' + quote(svals[lang]))
         lines.append('        { ' + ', '.join(parts) + ' },')
 lines.append('')
 lines.append('        -- hand written interface labels (general UI words, 16 languages)')

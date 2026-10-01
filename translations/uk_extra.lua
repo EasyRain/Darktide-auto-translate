@@ -28,7 +28,6 @@ return {
     ["All or Nothing"] = "Все або нічого", -- community 'All or Nothing'
     ["Alt"] = "Alt", -- community 'Alt'
     ["Always Prepared"] = "Завжди напоготові", -- community 'Always Prepared'
-    ["Ambuscade"] = "Засідка!", -- community 'Ambuscade!'
     ["Ammo"] = "Набої", -- community 'Ammo'
     ["Ammo Belt"] = "Пояс з набоями", -- community 'Ammo Belt'
     ["Ammo Crate"] = "Ящик із набоями", -- community 'Ammo Crate'
@@ -110,7 +109,7 @@ return {
     ["Bolstered Shield"] = "Посилений щит", -- community 'Bolstered Shield'
     ["Bolt Pistol"] = "Болт-пістолет", -- community 'Bolt Pistol'
     ["Boltgun"] = "Болтер", -- hand
-    ["Bomber"] = "Бомбер!", -- community 'Bomber!'
+    ["Bomber"] = "Бомбер", -- hand
     ["Bombers"] = "Бомбери", -- hand
     ["Bone Saw"] = "Кісткопилка", -- community 'Bone Saw'
     ["Bonebreaker"] = "«Кістколом»", -- hand
@@ -146,7 +145,7 @@ return {
     ["Canine Morale"] = "Собача мораль", -- community 'Canine Morale'
     ["Capacitance"] = "Ємність", -- community 'Capacitance'
     ["Captain"] = "Капітан", -- community 'Captain'
-    ["Captains"] = "Капітани", -- hand
+    ["Captains"] = "Капітани", -- hand (plural term)
     ["Carapace Armoured"] = "Панцерна броня", -- community 'Carapace Armoured'
     ["Carnival Nights"] = "Ночі Карнавалу", -- community 'Carnival Nights'
     ["Cartel Special"] = "Фірмовий від Картелю", -- community 'Cartel Special'
@@ -280,7 +279,6 @@ return {
     ["Dodge Distance"] = "Дистанція ухилення", -- community 'Dodge Distance'
     ["Dodges"] = "Ухилення", -- community 'Dodges'
     ["Dominate"] = "Домінування", -- community 'Dominate'
-    ["Done"] = "Готово!", -- community 'Done!'
     ["Door"] = "Двері", -- community 'Door'
     ["Double Tap Tag"] = "Подвійне натиснення для мітки", -- community 'Double Tap Tag'
     ["Double-Barrelled Shotgun"] = "Двоствольний дробовик", -- community 'Double-Barrelled Shotgun'
@@ -368,7 +366,7 @@ return {
     ["First Curio"] = "Перша реліквія", -- community 'First Curio'
     ["First Target"] = "Перша ціль", -- community 'First Target'
     ["Flak Armoured"] = "Флак-броня", -- community 'Flak Armoured'
-    ["Flamer"] = "Палій!", -- community 'Flamer!'
+    ["Flamer"] = "Палій", -- hand
     ["Flamers"] = "Палії", -- community 'Flamers'
     ["Fleeting Fire"] = "Швидкоплинний вогонь", -- hand
     ["Flight Lieutenant Masozi"] = "Лейтенант авіації Масозі", -- community 'Flight Lieutenant Masozi'
@@ -410,7 +408,7 @@ return {
     ["Grimoire"] = "Ґримоар", -- community 'Grimoire'
     ["Grimoires"] = "Ґримоарів", -- community 'Grimoires'
     ["Groaner"] = "Хрипун", -- community 'Groaner'
-    ["Gunner"] = "Стрілець!", -- community 'Gunner!'
+    ["Gunner"] = "Кулеметник", -- hand
     ["Gunners"] = "Кулеметники", -- community 'Gunners'
     ["Gunslinger"] = "Швидкостріл", -- community 'Gunslinger'
     ["Gurry \"Brunt\" Cernik"] = "Ґаррі «Брант» Кернік", -- community 'Gurry "Brunt" Cernik'
@@ -467,7 +465,7 @@ return {
     ["Holy Cause"] = "Свята мета", -- community 'Holy Cause'
     ["Holy Revenant"] = "Святий ревенант", -- community 'Holy Revenant'
     ["Honour Among Thieves"] = "Честь серед злодіїв", -- community 'Honour Among Thieves'
-    ["Hound"] = "Чумний Пес!", -- community 'Hound!'
+    ["Hound"] = "Чумний Пес", -- hand
     ["Hounds"] = "Пси", -- hand
     ["Hunted (Inferno)"] = "Полювання (інферно)", -- community 'Hunted (Inferno)'
     ["Hunted (Ventilation Purge)"] = "Полювання (очищення вентиляції)", -- community 'Hunted (Ventilation Purge)'
@@ -589,7 +587,7 @@ return {
     ["Massacre"] = "Різанина", -- community 'Massacre'
     ["Master-Crafted Shroudfield"] = "Досконалий покров тіней", -- community 'Master-Crafted Shroudfield'
     ["Matchmaking"] = "Підбір гравців", -- community 'Matchmaking'
-    ["Mauler"] = "Трощитель!", -- community 'Mauler!'
+    ["Mauler"] = "Крушитель", -- hand
     ["Maulers"] = "Трощителі", -- hand
     ["Max Power Reached"] = "Досягнуто максимальної потужності", -- community 'Max Power Reached'
     ["Maximum Firepower"] = "Максимальна потуга", -- community 'Maximum Firepower'
@@ -597,7 +595,7 @@ return {
     ["Med Stimm"] = "Мед-стим", -- community 'Med Stimm'
     ["Medicae Station"] = "Мед-станція", -- community 'Medicae Station'
     ["Medical Crate"] = "Мед-бокс", -- community 'Medical Crate'
-    ["Melee"] = "Ближньому бою", -- community 'Melee'
+    ["Melee"] = "Ближній бій", -- hand (context: label, nominative)
     ["Melee Attack"] = "Атака у ближньому бою", -- hand
     ["Melee Attack Speed"] = "Швидкість атаки у ближньому бою", -- hand
     ["Melee Attacks"] = "Атаки у ближньому бою", -- hand
@@ -621,7 +619,7 @@ return {
     ["Modifiers"] = "Модифікатори", -- community 'Modifiers'
     ["Moebian 21st"] = "Моебіанський 21-ий", -- community 'Moebian 21st'
     ["Momentum"] = "Імпульс", -- community 'Momentum'
-    ["Monstrosities"] = "Потвори", -- hand
+    ["Monstrosities"] = "Потвори", -- hand (plural term)
     ["Monstrosity"] = "Потвора", -- hand
     ["Monstrosity Hunter"] = "Мисливець на монстрів", -- community 'Monstrosity Hunter'
     ["Mortis Trials"] = "Смертельне випробування", -- community 'Mortis Trials'
@@ -735,7 +733,7 @@ return {
     ["Power Sword"] = "Силовий меч", -- community 'Power Sword'
     ["Power Weapon"] = "Силова зброя", -- community 'Power Weapon'
     ["Pox Burster"] = "Чумовибухач", -- community 'Pox Burster'
-    ["Pox Bursters"] = "Чумовибухачі", -- hand
+    ["Pox Bursters"] = "Чумовибухачі", -- hand (plural term)
     ["Pox Gas"] = "Чумний газ", -- community 'Pox Gas'
     ["Pox Gas (Tox Bomber)"] = "Чумний газ (Токсобомбер)", -- community 'Pox Gas (Tox Bomber)'
     ["Pox Hound"] = "Чумна гонча", -- community 'Pox Hound'
@@ -781,7 +779,7 @@ return {
     ["Quickdraw Stub Revolver"] = "Блискавичний пороховий револьвер", -- community 'Quickdraw Stub Revolver'
     ["Quietude"] = "Безмовність", -- community 'Quietude'
     ["Quit Game"] = "Вийти з гри", -- community 'Quit Game'
-    ["Rager"] = "Берсерк!", -- community 'Rager!'
+    ["Rager"] = "Берсерк", -- hand
     ["Ragers"] = "Скажені", -- community 'Ragers'
     ["Raid"] = "Наліт", -- community 'Raid'
     ["Railroaded"] = "Проведено по рейках", -- community 'Railroaded'
@@ -871,7 +869,7 @@ return {
     ["Scab Captain"] = "Скаб-Капітан", -- community 'Scab Captain'
     ["Scab Flamer"] = "Скаб-Вогнеметник", -- community 'Scab Flamer'
     ["Scab Gunner"] = "Скаб-Кулеметник", -- community 'Scab Gunner'
-    ["Scab Mauler"] = "Скаб-Крушитель", -- community 'Scab Mauler'
+    ["Scab Mauler"] = "Скаб-Крушитель", -- hand (follows the community's 3.2.2 rename)
     ["Scab Plasma Gunner"] = "Скаб-Плазмостріл", -- community 'Scab Plasma Gunner'
     ["Scab Radio Operator"] = "Скаб-Радіооператор", -- community 'Scab Radio Operator'
     ["Scab Rager"] = "Скаб-Берсерк", -- community 'Scab Rager'
@@ -910,7 +908,7 @@ return {
     ["Shock Troop Gauntlet"] = "Бійня штурмовиків", -- community 'Shock Troop Gauntlet'
     ["Shock Trooper"] = "Штурмовик", -- community 'Shock Trooper'
     ["Shotgun"] = "Дробовик", -- community 'Shotgun'
-    ["Shotgunner"] = "Дробостріл!", -- community 'Shotgunner!'
+    ["Shotgunner"] = "Дробостріл", -- hand
     ["Shotgunners"] = "Дробостріли", -- community 'Shotgunners'
     ["Shotguns"] = "Дробовики", -- hand
     ["Show"] = "Показати", -- community 'Show'
@@ -937,7 +935,7 @@ return {
     ["Smoke Grenade"] = "Димова граната", -- community 'Smoke Grenade'
     ["Smoke Screen"] = "Димова завіса", -- community 'Smoke Screen'
     ["Sniper"] = "Снайпер", -- community 'Sniper'
-    ["Snipers"] = "Снайпери", -- hand
+    ["Snipers"] = "Снайпери", -- hand (plural term)
     ["Social"] = "Спільнота", -- community 'Social'
     ["Soften Them Up"] = "Розігріти їх", -- community 'Soften Them Up'
     ["Solidity"] = "Міцність", -- community 'Solidity'
@@ -1057,7 +1055,7 @@ return {
     ["Third Curio"] = "Третя реліквія", -- community 'Third Curio'
     ["Threat"] = "Загроза", -- community 'Threat'
     ["Throneside"] = "Тронсайд", -- community 'Throneside'
-    ["Thugshot"] = "Бандитський постріл", -- community 'Thugshot'
+    ["Thugshot"] = "Мордостріл", -- community 'Thugshot'
     ["Thunder Hammer"] = "Громовий молот", -- community 'Thunder Hammer'
     ["Thy Wrath be Swift"] = "Нехай твій гнів буде стрімким", -- community 'Thy Wrath be Swift'
     ["To the Bitter End"] = "До гіркого кінця", -- hand
@@ -1068,13 +1066,13 @@ return {
     ["Toughness Damage"] = "Шкода по щитах", -- hand
     ["Toughness Damage Reduction"] = "Зменшення шкоди по щитам", -- community 'Toughness Damage Reduction'
     ["Towering Presence"] = "Домінуюча присутність", -- community 'Towering Presence'
-    ["Tox Bomber"] = "Токс-бомбер!", -- community 'Tox Bomber!'
+    ["Tox Bomber"] = "Токс-бомбер", -- hand
     ["Tox Bombers"] = "Токс-бомбери", -- hand
     ["Tox Flamer"] = "Токсинометник", -- community 'Tox Flamer'
     ["Trample"] = "Розчавлення", -- community 'Trample'
     ["Tranquility Through Slaughter"] = "Спокій через різанину", -- community 'Tranquility Through Slaughter'
     ["Transcendent"] = "Трансцендентний", -- community 'Transcendent'
-    ["Trapper"] = "Ловець!", -- community 'Trapper!'
+    ["Trapper"] = "Ловець", -- hand
     ["Trappers"] = "Ловці", -- hand
     ["Trench Fighter Drill"] = "Вишкіл окопного бійця", -- community 'Trench Fighter Drill'
     ["Trooper 1st Class"] = "Солдат 1-го класу", -- hand
@@ -1108,7 +1106,7 @@ return {
     ["Uprising"] = "Повстання", -- community 'Uprising'
     ["Valuable Distraction"] = "Гарна відволікашка", -- community 'Valuable Distraction'
     ["Vanguard"] = "Штурмовик", -- community 'Vanguard'
-    ["Vanguards"] = "Штурмовики", -- hand
+    ["Vanguards"] = "Штурмовики", -- hand (plural term)
     ["Vantage Point"] = "Вигідна позиція", -- community 'Vantage Point'
     ["Vent"] = "Охолодити", -- hand
     ["Vent Heat"] = "Охолодити", -- community 'Vent Heat'
@@ -1133,10 +1131,9 @@ return {
     ["Voltaic"] = "Шокуючий", -- community 'Voltaic'
     ["Voltaic Mandibles Augment"] = "Вольтове підсилення щелеп", -- community 'Voltaic Mandibles Augment'
     ["Voltaic Shock Mine"] = "Вольтова шок-міна", -- community 'Voltaic Shock Mine'
-    ["Volume"] = "Об’єм", -- community 'Volume'
+    ["Volume"] = "Гучність", -- hand (context: audio slider)
     ["Vulture's Mark"] = "Мітка стерв’ятника", -- community 'Vulture's Mark'
     ["Walk It Off"] = "Залишитись на ногах", -- community 'Walk It Off'
-    ["Warning"] = "Увага!", -- community 'Warning!'
     ["Warp Battery"] = "Вир-батарея", -- community 'Warp Battery'
     ["Warp Charge"] = "Варп-заряд", -- hand
     ["Warp Expenditure"] = "Витрати Виру", -- community 'Warp Expenditure'

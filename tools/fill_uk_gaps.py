@@ -48,6 +48,20 @@ from common import key_hash  # noqa: E402
 # translation's vocabulary and style. Marked "hand" in the generated file so a Ukrainian speaker can
 # find everything that did not come from the community in one place.
 HAND = {
+    # Breed names whose only community string is the kill shout ("Чумний Пес!", "Берсерк!"):
+    # the shout is the name plus an exclamation mark, and the compound names confirm the word the
+    # community uses for the breed ("Scab Gunner" = Скаб-Кулеметник, "Dreg Rager" = Дреґ-Берсерк).
+    # 3.2.2 renamed the two Ogryn enemies: their Mauler is Крушитель and their Crusher Трощитель.
+    "Bomber": "Бомбер",
+    "Tox Bomber": "Токс-бомбер",
+    "Trapper": "Ловець",
+    "Flamer": "Палій",
+    "Gunner": "Кулеметник",
+    "Hound": "Чумний Пес",
+    "Mauler": "Крушитель",
+    "Maulers": "Крушителі",
+    "Rager": "Берсерк",
+    "Shotgunner": "Дробостріл",
     # --- the 2026-09-30 sweep: 127 terms the mods use that the community file does not carry as
     # bare names. Written from the community's own compound wording, e.g. "Braced Autogun" =
     # "Упірний автомат" (Autogun = Автомат), "Infantry Lasgun" = "Піхотна лазгвинтівка",
@@ -266,6 +280,27 @@ def community_by_hash() -> dict[int, str]:
     return ukref.load_by_hash(str(UKREF), quiet=True)
 
 
+# Where the community has a value for the same English but means something else, or translated the one
+# key whose context is not this term's. Everything else follows the community.
+KEEP_OURS = {
+    # A standalone label needs the nominative; the community translates the word where it appears
+    # inside sentences (Ближньому бою / у ближньому бою).
+    "Melee": ("Ближній бій", "context: label, nominative"),
+    # The community has both; "Об'єм" is the 3D sense, this string is the audio slider.
+    "Volume": ("Гучність", "context: audio slider"),
+    # Plural terms: the community's string for the same English is the singular used as a label, and
+    # Ukrainian needs the plural where our term is plural (found 2026-09-30).
+    "Captains": ("Капітани", "plural term"),
+    "Monstrosities": ("Потвори", "plural term"),
+    "Pox Bursters": ("Чумовибухачі", "plural term"),
+    "Snipers": ("Снайпери", "plural term"),
+    "Vanguards": ("Штурмовики", "plural term"),
+    # The community renamed the two Ogryn enemies in 3.2.2: their compound is Скаб-Крушитель and
+    # their shout for the Crusher is Трощитель!, so our values follow that direction.
+    "Scab Mauler": ("Скаб-Крушитель", "follows the community's 3.2.2 rename"),
+}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--write", action="store_true")
@@ -289,12 +324,20 @@ def main() -> int:
 
     recovered, sources = {}, {}
     for en in gaps:
-        for candidate in (en, en + "!", en + ".", en + "?"):
-            hit = next((community[d] for d in by_en.get(candidate, ()) if d in community), None)
-            if hit:
-                recovered[en] = hit
-                sources[en] = "community '%s'" % candidate
-                break
+        # Exact match first. The punctuated spellings are a fallback only for a term the game itself
+        # does not carry bare: "Rampage" is "Rampage!" in the game, so that value belongs to it. If the
+        # bare English *is* a game string, the punctuated one is a different string - following it gave
+        # the enemy "Bomber" the shout "Бомбер!" and "Done" the "Готово!" of a different line
+        # (found 2026-09-30 when uk_extra started winning over the rows).
+        # Exact match only. Falling back to the punctuated spelling looked helpful and was not: the
+        # game has both "Gunner" (the enemy) and "Gunner!" (the shout a player hears when one dies),
+        # and importing the shout gave our breed rows "Стрілець!", "Чумний Пес!", "Берсерк!",
+        # "Дробостріл!" (found 2026-09-30). Terms whose game spelling really does carry the punctuation
+        # - "Rampage!" - are in the HAND table, where a human wrote them.
+        hit = next((community[d] for d in by_en.get(en, ()) if d in community), None)
+        if hit:
+            recovered[en] = hit
+            sources[en] = "community '%s'" % en
 
     # The community file wins where it has a value: it is a translation by Ukrainian speakers, and
     # the HAND table is this project's own wording, written when 3.2.0 had none for those terms.
@@ -303,6 +346,10 @@ def main() -> int:
     # for terms that now have an official wording (2026-09-30).
     values = {en: HAND[en] for en in HAND if en in gaps}
     values.update(recovered)
+    for en, (value, why) in KEEP_OURS.items():
+        if en in gaps:
+            values[en] = value
+            sources[en] = "hand (%s)" % why.splitlines()[0].strip()
     missing = [en for en in gaps if en not in values]
 
     print("glossary terms: %d" % len(gaps))
