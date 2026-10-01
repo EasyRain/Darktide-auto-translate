@@ -128,7 +128,6 @@ HAND = {
     "Disabler": "Блокувальник",                  # Trapper/Hound/Mutant in one class
     "Disablers": "Блокувальники",
     "Twins": "Близнюки",
-    "Arch Daemonhost": "Архі-демонхост",
     "Rodin Karnak, Prophet of Decay": "Родін Карнак, Пророк Розпаду",
     "Gurry \"Brunt\" Cernik": "Гаррі «Брант» Чернік",   # the community spells it this way
     "Infected Moebian 21st": "Заражений Мобіан 21-й",

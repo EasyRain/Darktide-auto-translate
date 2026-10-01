@@ -48,7 +48,6 @@ return {
     ["Arc Efficiency"] = "Дугова Ефективність", -- community 'Arc Efficiency'
     ["Arc Maul"] = "Дуговий буздиган", -- community 'Arc Maul'
     ["Arc Rifle"] = "Дугова гвинтівка", -- community 'Arc Rifle'
-    ["Arch Daemonhost"] = "Архі-демонхост", -- hand
     ["Archivum Sycorax"] = "Архівум Сікоракс", -- community 'Archivum Sycorax'
     ["Armour Piercing"] = "Бронебійний", -- community 'Armour Piercing'
     ["Armourbane"] = "Бронебій", -- community 'Armourbane'
@@ -244,6 +243,7 @@ return {
     ["Curios"] = "Реліквії", -- community 'Curios'
     ["Cyber-Mastiff"] = "Кібер-мастиф", -- community 'Cyber-Mastiff'
     ["Daemonhost"] = "Демононосій", -- community 'Daemonhost'
+    ["Daemonhost Gormaggoth"] = "Архідемононосій", -- community 'Daemonhost Gormaggoth'
     ["Damage"] = "Шкода", -- community 'Damage'
     ["Damage Reduction"] = "Зменшення шкоди", -- hand
     ["Damage Taken"] = "Отримана шкода", -- hand
