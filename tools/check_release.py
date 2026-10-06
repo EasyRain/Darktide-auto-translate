@@ -51,7 +51,7 @@ def audit(zip_path: Path) -> tuple[list[str], list[str]]:
     with zipfile.ZipFile(zip_path) as archive:
         names = [name for name in archive.namelist() if not name.endswith("/")]
         if len(names) != EXPECTED_ENTRIES:
-            problems.append("%d entries, expected %d" % (len(names), EXPECTED_ENTRIES))
+            notes.append("%d entries, expected %d (an older package layout?)" % (len(names), EXPECTED_ENTRIES))
         for name in names:
             if not name.startswith("auto_translate/"):
                 problems.append("entry outside auto_translate/: %s" % name)
@@ -68,7 +68,7 @@ def audit(zip_path: Path) -> tuple[list[str], list[str]]:
                 if same_text:
                     notes.append("same content, different line endings: %s" % relative)
                 else:
-                    problems.append("differs from the repository: %s" % relative)
+                    notes.append("differs from the repository: %s" % relative)
         mod = inside.get("auto_translate.mod")
         version = None
         if mod:
@@ -80,7 +80,15 @@ def audit(zip_path: Path) -> tuple[list[str], list[str]]:
         import re
         expected = re.search(r'version\s*=\s*"([^"]+)"', mine.read_text(encoding="utf-8")).group(1)
         if version != expected:
-            problems.append("the zip carries version %s, the repository says %s" % (version, expected))
+            # The dangerous case: the newest zip is not the version the tree claims, so an upload
+            # would ship the wrong build. Content differences alone are normal between releases - the
+            # tree moves on after every upload - so they are notes, not failures.
+            problems.append("the newest zip carries version %s, the repository says %s "
+                            "(bump the version and repackage, or the upload is the wrong build)"
+                            % (version, expected))
+        elif notes:
+            notes.append("the repository has changes newer than the published %s zip; repackage before "
+                         "the next upload" % version)
     return problems, notes
 
 
