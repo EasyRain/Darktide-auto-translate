@@ -1020,6 +1020,21 @@ function M.provider_health()
     return disabled_providers, provider_failures
 end
 
+-- Tells modules/engines.lua which free providers are still alive, so that "auto" stops choosing that
+-- tier once every one of them has been dropped for the session and the offline model takes over.
+-- Declared here, not at the top of the file: `engines` arrives through M.init() and `disabled_providers`
+-- is created further down, so anything earlier would capture a nil global (Lua resolves locals when the
+-- chunk is compiled).
+function M.wire_engine_health(e)
+    if e == nil or e.provider_usable ~= nil then
+        return
+    end
+    e.provider_usable = function(provider)
+        return not disabled_providers[provider]
+    end
+end
+
+
 -- ---------------------------------------------------------------------------
 -- Endpoints that hand out a session on a page load (Bing)
 -- ---------------------------------------------------------------------------
@@ -1411,6 +1426,7 @@ end
 
 -- Builds the queue from a scan report and starts (or resumes) work.
 function M.start(mod, report, lang)
+    M.wire_engine_health(engines)
     local engine = engines.resolve(mod, lang)
     local gap = engines.gap(engine, lang)
 

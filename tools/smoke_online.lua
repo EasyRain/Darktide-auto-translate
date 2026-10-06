@@ -705,8 +705,16 @@ local function resolve_with(key, engine)
 end
 
 check("resolve(key, auto) prefers the API", resolve_with("sk-test", "auto"), "online_api")
-check("resolve(no key, auto, model downloaded)", resolve_with("", "auto"), "local_base")
-check("resolve(nil key, auto, model downloaded)", resolve_with(nil, "auto"), "local_base")
+check("resolve(no key, auto, model downloaded) prefers the free tier",
+    resolve_with("", "auto"), "online_free")
+check("resolve(nil key, auto, model downloaded) does the same",
+    resolve_with(nil, "auto"), "online_free")
+-- ...and once every free provider has been dropped for the session, the model takes over: that is
+-- the case the 1.3B download exists for.
+engines.provider_usable = function() return false end
+check("resolve(no key, auto, model downloaded, free tier dead)",
+    resolve_with("", "auto"), "local_base")
+engines.provider_usable = nil
 check("resolve(key, explicit local) obeys the choice",
     resolve_with("sk-test", "local_base"), "local_base")
 -- The 3.3B tier was measured and removed: three times the memory and 2.2x the time for
@@ -1943,6 +1951,67 @@ do
     for _ = 1, rl.defaults.decay_after * 4 do rl.ok() end
     check("rate limit: never below the engine's own interval", online.min_interval_for_tests("online_api"), 0.25)
     rl.reset()
+end
+
+-- ---------------------------------------------------------------------------
+-- Engine preference order (2026-10-08): the offline model is the last tier, not the second.
+--
+-- The order used to be key -> offline model -> free endpoints, on the reasoning that the model needs no
+-- network. A measured run says its answers are far worse (105 of 165 refused, 39 more with invented
+-- numbering), so quality decides: key -> free endpoints -> model. The model is still chosen when every
+-- free provider has been dropped for the session, which is the case it exists for.
+local engines_path = here .. "/../scripts/mods/auto_translate/modules/engines.lua"
+local engines_ok, engines = pcall(function() return assert(loadfile(engines_path))() end)
+if not engines_ok then
+    check("engines.lua loads", tostring(engines), "ok")
+else
+    -- engines.model_available() reads util.MOD_DIR and util.file_exists, so it needs the same kind of
+    -- stub the module gets in the game. The dir does not exist here, which is what makes the model
+    -- unavailable - exactly the machine these assertions describe.
+    engines.init({
+        MOD_DIR = here .. "/../nonexistent-mod-dir",
+        file_exists = function() return false end,
+        info = function() end,
+        warn = function() end,
+        log = function() end,
+    }, nil)
+
+    local function settings(values)
+        return { get = function(_, key) return values[key] end }
+    end
+
+    local with_key = settings({ engine = "auto", online_api_key = "abc" })
+    check("order: a key wins", engines.resolve(with_key, "zh-cn"), "online_api")
+
+    engines.provider_usable = nil
+    local freeable = engines.free_tier_usable("zh-cn")
+    check("order: the free tier counts as usable by default", freeable, true)
+    if freeable then
+        check("order: no key and no model resolves to the free tier",
+            engines.resolve(settings({ engine = "auto" }), "zh-cn"), "online_free")
+    end
+
+    -- Every free provider dropped for the session: the tier stops counting. With no model on this
+    -- machine that leaves nil - the point is that it is not the free tier any more.
+    engines.provider_usable = function() return false end
+    check("order: a tier with every provider dropped is not usable",
+        engines.free_tier_usable("zh-cn"), false)
+    check("order: it no longer resolves to the free tier",
+        engines.resolve(settings({ engine = "auto" }), "zh-cn") == "online_free", false)
+    engines.provider_usable = nil
+
+    check("order: an explicit choice is left alone",
+        engines.resolve(settings({ engine = "local_base" }), "zh-cn"), "local_base")
+
+    -- online.lua is what tells engines.lua which providers are still alive: wire_engine_health() is
+    -- what M.start() calls, and with nothing dropped yet every provider answers usable.
+    if type(online.wire_engine_health) == "function" then
+        online.wire_engine_health(engines)
+        check("the health hook installs", type(engines.provider_usable), "function")
+        check("and an untouched provider is usable", engines.provider_usable("mymemory"), true)
+    else
+        check("online.wire_engine_health exists", type(online.wire_engine_health), "function")
+    end
 end
 
 print(string.format("%d failure(s) in total", failures))

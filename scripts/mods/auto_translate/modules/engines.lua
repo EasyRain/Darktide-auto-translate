@@ -343,15 +343,41 @@ end
 --      conversion truncated a 102 character description to 13 characters and read "curios" as
 --      "curiosity", while DeepL gets the same string right - so a player who has a key should
 --      get the better engine by default.
---   2. the offline model, when it is downloaded. It needs no network at all, so it beats the
---      free endpoints for anyone who has it (those are rate limited and can be filtered).
---   3. the free public endpoints - no key, no 1.4 GB download. This is the tier that makes
---      "no key and no model" translate at all, which is why it is in this chain and in the
---      options again; it is last because it is the least reliable of the three.
+--   2. the free public endpoints - no key needed, and measured against the offline model they are the
+--      better of the two: an in-game run of the model returned 165 answers, 105 of them refused and 39
+--      carrying numbering it invented (2026-10-08), while the free hosts return ordinary machine
+--      translation. They stop counting as available only once every one of them has been dropped for
+--      the session (see free_tier_usable below).
+--   3. the offline model, when it is downloaded - the last resort. Needing no network at all is what
+--      it is for: a machine with no route to the free hosts still translates.
 --
 -- There is exactly one offline model to fall back to now (see the note at the top of the
 -- file): a bigger model was measured and did not earn its cost, and a smaller one was
 -- measured and was not good enough.
+-- Filled in by modules/online.lua, which knows which providers this session has dropped (a network
+-- that resets Google's TLS handshake, for instance). Default nil: a caller that never sets it keeps
+-- the plain "is the tier configured at all" answer.
+M.provider_usable = nil
+
+-- Is the free tier worth planning a run around? At least one provider has to exist and not have been
+-- dropped. Without this, a machine that cannot reach any of them would keep choosing the tier and
+-- never reach the offline model that is sitting right there.
+function M.free_tier_usable(lang)
+    local providers = M.providers_for("online_free", lang)
+    if #providers == 0 then
+        return false
+    end
+    if type(M.provider_usable) ~= "function" then
+        return true
+    end
+    for _, provider in ipairs(providers) do
+        if M.provider_usable(provider) then
+            return true
+        end
+    end
+    return false
+end
+
 function M.resolve(mod, lang)
     local wanted = mod:get("engine") or "auto"
     if wanted ~= "auto" then
@@ -363,12 +389,12 @@ function M.resolve(mod, lang)
         return "online_api"
     end
 
-    if M.model_available("local_base") then
-        return "local_base"
+    if M.free_tier_usable(lang) then
+        return "online_free"
     end
 
-    if #M.providers_for("online_free", lang) > 0 then
-        return "online_free"
+    if M.model_available("local_base") then
+        return "local_base"
     end
 
     return nil

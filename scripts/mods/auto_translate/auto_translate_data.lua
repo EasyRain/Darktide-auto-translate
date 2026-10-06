@@ -82,11 +82,13 @@ return {
                     {
                         setting_id = "engine",
                         type = "dropdown",
-                        -- "auto" resolves to: keyed API -> downloaded offline model -> free public
-                        -- endpoints. The API comes first because the offline model is measurably
-                        -- weaker on long text; the model beats the free endpoints because it needs
-                        -- no network; the free tier is last and exists so that a player with no key
-                        -- and no download still translates.
+                        -- "auto" resolves to: keyed API -> free public endpoints -> downloaded
+                        -- offline model. Quality decides the first two steps: the model is the
+                        -- weakest option (an in-game run had 105 of 165 answers refused, and 39 more
+                        -- carried numbering it invented), while the free hosts return ordinary
+                        -- machine translation. The model is there so that a network which cannot
+                        -- reach the free hosts still translates, and a tier whose providers have all
+                        -- been dropped for the session stops counting as available.
                         -- (Selecting a local engine explicitly still pauses with a notice
                         -- when its model has not been downloaded.)
                         default_value = "auto",
