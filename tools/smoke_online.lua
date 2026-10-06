@@ -98,6 +98,14 @@ check("text_is_safe('Ammo', '弹药')", online.text_is_safe("Ammo", "弹药"), t
 check("text_is_safe('Ammo', '弹\u{2047}药')", online.text_is_safe("Ammo", "弹\226\129\135药"), false)
 check("text_is_safe('%s', '没有任何问题')", online.text_is_safe("%s", "没有任何问题"), false)
 check("text_is_safe('%d ms', '%d 毫秒')", online.text_is_safe("%d ms", "%d 毫秒"), true)
+-- The offline engine's signature failure: it prefixes its own index. Seen live on 2026-10-08,
+-- in 39 of its 165 answers.
+check("text_is_safe('Bar direction', '[1] 条纹方向') - added index",
+    online.text_is_safe("Bar direction", "[1] 条纹方向"), false)
+check("text_is_safe('Bar direction', '条纹方向') - no index",
+    online.text_is_safe("Bar direction", "条纹方向"), true)
+check("text_is_safe('Press [1] to continue', '按 [1] 继续') - the source had it",
+    online.text_is_safe("Press [1] to continue", "按 [1] 继续"), true)
 check("text_is_safe('Ammo', '')", online.text_is_safe("Ammo", ""), false)
 
 -- The truncation guard, with the string that got through in game: the offline model

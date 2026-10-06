@@ -396,6 +396,21 @@ local function too_short(source, translated, lang)
     return char_count(translated) * divisor < source_chars
 end
 
+-- Hoisted above its first use: finish() formats it into the parked notice, and a local declared
+-- after that function is not in its scope - Lua read a global, got nil, and the failed
+-- string.format fell back to the raw message, '%d key(s) were parked...' (2026-10-08).
+local MAX_REFUSALS = 3
+
+ -- The "[n]" markers a translation carries have to be the ones the source had. This is the same
+ -- rule tools/check_stores.lua applies to a written store, applied while the answer is still in
+ -- hand: the local model prefixes its own index ("[1] 条纹方向"), and 39 of its 165 answers did
+ -- on 2026-10-08, so refusing parks the entry instead of showing a number to a player.
+local function bracket_marks(text)
+    local out = {}
+    for mark in text:gmatch("%[%d+%]") do out[#out + 1] = mark end
+    return table.concat(out, " ")
+end
+
 -- Returns true when the translation is safe to store, or false plus a reason.
 -- `lang` is the target language: the length bar depends on it (see too_short). It is optional so
 -- that callers which only guard the format specifiers can still call this with two arguments.
@@ -406,6 +421,12 @@ function M.text_is_safe(source, translated, lang)
 
     if translated:find(UNK_MARKER, 1, true) then
         return false, "the model could not represent part of the text (unknown tokens)"
+    end
+
+    local source_marks, translated_marks = bracket_marks(source), bracket_marks(translated)
+    if source_marks ~= translated_marks then
+        return false, string.format("the [n] markers differ (source '%s', translation '%s')",
+                                    source_marks, translated_marks)
     end
 
     if too_short(source, translated, lang) then
@@ -2176,7 +2197,6 @@ end
 -- whose two BetterBots strings were refused on every launch. Every engine spends the same budget
 -- now; switching engine (or service) picks the key up again, which is exactly when a retry can
 -- produce something better.
-local MAX_REFUSALS = 3
 
 -- Whether the engine should try this string again after `refusals` refusals.
 local function retry_after_refusal(refusals)
