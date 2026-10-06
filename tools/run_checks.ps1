@@ -42,6 +42,7 @@ $checks = @(
     @{ name = 'stores';    hint = 'the played-with stores are clean';      cmd = { & $lua tools\check_stores.lua } },
     @{ name = 'core';      hint = 'at_cli selftest (native core)';         cmd = { & bin\at_cli.exe selftest } },
     @{ name = 'fixtures';  hint = 'real captured provider responses';      cmd = { cmd /c tests\run_fixtures.bat } }
+    @{ name = 'selfcheck'; hint = 'the FFI-surface check behaves as documented'; cmd = { python tools\selftest_check_exports.py } }
 )
 
 if ($List) {

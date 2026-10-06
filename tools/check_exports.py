@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""check_exports.py - the FFI surface, both directions.
+"""check_exports.py - the FFI surface, both directions, with a call-site coverage report.
 
 Two failures have the same shape: the Lua and the native core disagree about a symbol, and neither
 shows up at build time.
@@ -8,19 +8,23 @@ shows up at build time.
                                   middle of a translation run (the original reason for this check);
   called but never declared       LuaJIT raises "missing declaration for symbol" the moment the
                                   symbol is touched. 0.3.4 shipped exactly that for
-                                  at_set_model_threads, and because the call sits in the offline
-                                  model path it aborted the startup pipeline for those users - a
-                                  Nexus report with no log (2026-10-08). The suite passed because
-                                  nothing exercised the local model.
+                                  at_set_model_threads, and because the call sits in the offline model
+                                  path it aborted the startup pipeline for those users - a Nexus
+                                  report with no log (2026-10-08). It had been in every release since
+                                  v0.2.1; nothing exercised the local model, so nothing noticed.
 
-Both directions are checked here, in one place, statically: no game needed.
+The report at the end says where each symbol is used and marks the ones only reached on a cold path
+(the offline model needs a 1.4 GB download, so those are the calls a normal test run never makes).
 
-    python tools/check_exports.py [path/to/at_core.dll]
+    python tools/check_exports.py [path/to/at_core.dll] [--coverage] [--quiet]
 
-Exits non-zero and lists what is wrong. The image test is the same one as before: a name that is
-absent from the file is proof of a mistake, while presence in the image is good evidence (not proof)
-of an export.
+Exits 0 when the surface agrees, 1 on any problem, 2 when there is no DLL to look at. The image test
+is evidence, not proof: a name absent from the file is proof of a mistake, presence is not proof of an
+export.
 """
+from __future__ import annotations
+
+import argparse
 import re
 import sys
 from pathlib import Path
@@ -30,9 +34,23 @@ REPO = HERE.parent
 MODULES = REPO / "scripts" / "mods" / "auto_translate" / "modules"
 DEFAULT_DLLS = [
     REPO / "bin" / "at_core.dll",
-    Path(r"D:\Steam\steamapps\common\Warhammer 40,000 Darktide\mods\auto_translate\bin\at_core.dll"),
     Path(r"D:\Steam\steamapps\common\Warhammer 40,000 DARKTIDE\mods\auto_translate\bin\at_core.dll"),
 ]
+
+# Paths a normal session does not walk unless the player chose them. A symbol first used here is the
+# kind that ships broken: the suite passes, the game only complains for the players who opt in.
+COLD_MARKERS = ("is_local", "model", "offline", "download")
+
+
+def strip_lua_comments(source: str) -> str:
+    """Comments out, code in.
+
+    A stray `core.at_foo(` inside a comment must not count as a call, so the blocks and the line
+    comments go first. Strings are left alone - the quotes in this codebase do not contain `--`.
+    """
+    source = re.sub(r"--\[\[.*?\]\]", lambda m: "\n" * m.group(0).count("\n"), source, flags=re.S)
+    source = re.sub(r"--\[=+\[.*?\]=+\[", lambda m: "\n" * m.group(0).count("\n"), source, flags=re.S)
+    return re.sub(r"--[^\n]*", "", source)
 
 
 def lua_sources() -> list[Path]:
@@ -51,66 +69,110 @@ def declared_names() -> set[str]:
     return names
 
 
-def called_names() -> dict[str, list[str]]:
-    """Symbols used through the loaded library, wherever they are used.
-
-    Any mention counts, not only a call: `pcall(core.at_set_model_threads, n)` passes the function and
-    a regex that insists on "(" right after the name would walk straight past it - which is how the
-    first version of this audit missed the very symbol it was written for.
-    """
-    out: dict[str, list[str]] = {}
-    for path in lua_sources():
-        source = path.read_text(encoding="utf-8", errors="replace")
-        for match in re.finditer(r"\b(?:core|handle|lib|self\.core)\.(at_[a-z0-9_]+)\b", source):
-            line = source.count("\n", 0, match.start()) + 1
-            out.setdefault(match.group(1), []).append("%s:%d" % (path.name, line))
+def enclosing_functions(source: str) -> list[tuple[int, str]]:
+    """(line, function name) for every function definition, in file order."""
+    out = []
+    for match in re.finditer(r"^\s*(?:local\s+)?function\s+([\w\.:]+)\s*\(", source, re.M):
+        out.append((source.count("\n", 0, match.start()) + 1, match.group(1)))
     return out
 
 
-def header_names() -> set[str]:
+def called_sites() -> dict[str, list[dict]]:
+    """Every use of the loaded library, with file, line, enclosing function and cold-path marker.
+
+    Any mention counts, not only a call: `pcall(core.at_set_model_threads, n)` passes the function and
+    a regex that insists on "(" right after the name walks straight past it - which is how the first
+    version of this audit missed the very symbol it was written for.
+    """
+    out: dict[str, list[dict]] = {}
+    for path in lua_sources():
+        source = strip_lua_comments(path.read_text(encoding="utf-8", errors="replace"))
+        functions = enclosing_functions(source)
+        for match in re.finditer(r"\b(?:core|handle|lib|self\.core)\.(at_[a-z0-9_]+)\b", source):
+            symbol = match.group(1)
+            line = source.count("\n", 0, match.start()) + 1
+            name = next((fn for start, fn in reversed(functions) if start <= line), "?")
+            # Cold means "a plain run does not reach this". The function name is a weak signal
+            # (M.start runs both paths), so the guard above the call is the better one - that is how
+            # at_set_model_threads, the symbol that shipped broken, is reached only under `if
+            # is_local then` and was still reported as warm by the first version of this heuristic.
+            lines = source.split("\n")
+            window = lines[max(0, line - 40):line - 1]
+            guards = " ".join(above for above in window if re.match(r"\s*(?:else)?if\b", above))
+            context = lines[line - 2] if line >= 2 else ""
+            # The symbol name itself is the strongest hint ("at_set_model_threads", "at_download_total"),
+            # then the guard that protects the call, then the line it sits on.
+            haystack = " ".join((symbol, name, context, guards))
+            cold = any(marker in haystack for marker in COLD_MARKERS)
+            out.setdefault(symbol, []).append(
+                {"file": path.name, "line": line, "fn": name, "cold": cold})
+    return out
+
+
+def header_names(repo: Path | None = None) -> set[str]:
     names: set[str] = set()
-    for path in sorted((REPO / "src").glob("*.h")):
+    for path in sorted(((repo or REPO) / "src").glob("*.h")):
         names.update(re.findall(r"AT_API\s+[\w\s\*]+?\b(at_[a-z0-9_]+)\s*\(", path.read_text(
             encoding="utf-8", errors="replace")))
     return names
 
 
+def audit(dll: Path) -> tuple[int, list[str], dict[str, list[dict]], set[str], set[str]]:
+    """The verdict, as data, so tests can call it without a process or a real repository."""
+    image = dll.read_bytes()
+    declared = declared_names()
+    called = called_sites()
+    headers = header_names()
+
+    problems = []
+    for name, sites in sorted(called.items()):
+        where = ", ".join(sorted({"%s:%d" % (s["file"], s["line"]) for s in sites}))
+        if name not in declared:
+            problems.append("called but never declared with ffi.cdef: %s (%s)" % (name, where))
+        if name not in headers:
+            problems.append("called but not declared in src/*.h:        %s (%s)" % (name, where))
+    for name in sorted(declared):
+        if name.encode("ascii") not in image:
+            problems.append("declared but not in the image:             %s" % name)
+    return (1 if problems else 0), problems, called, declared, headers
+
+
 def main() -> int:
-    candidates = [Path(sys.argv[1])] if len(sys.argv) > 1 else DEFAULT_DLLS
+    parser = argparse.ArgumentParser()
+    parser.add_argument("dll", nargs="?", help="path to at_core.dll")
+    parser.add_argument("--coverage", action="store_true", help="list every call site")
+    parser.add_argument("--quiet", action="store_true", help="only print problems")
+    args = parser.parse_args()
+
+    candidates = [Path(args.dll)] if args.dll else DEFAULT_DLLS
     dll = next((path for path in candidates if path.is_file()), None)
     if dll is None:
         print("no at_core.dll found; build it first (build.bat) or pass a path")
         return 2
 
-    image = dll.read_bytes()
-    declared = declared_names()
-    called = called_names()
-    headers = header_names()
+    status, problems, called, declared, headers = audit(dll)
+    if not args.quiet:
+        print("dll        : %s (%d bytes)" % (dll, dll.stat().st_size))
+        print("surface    : %d called, %d declared, %d in src/*.h"
+              % (len(called), len(declared), len(headers)))
+    for problem in problems:
+        print("  FAIL %s" % problem)
 
-    undeclared = sorted(name for name in called if name not in declared)
-    unheadered = sorted(name for name in called if name not in headers)
-    absent = sorted(name for name in declared if name.encode("ascii") not in image)
+    if args.coverage and not args.quiet:
+        print("\ncall sites (cold = only reached when the player opts into that path)")
+        for name in sorted(called):
+            for site in called[name]:
+                print("  %-34s %-18s %-28s %s"
+                      % (name, site["file"], site["fn"], "cold" if site["cold"] else ""))
 
-    print("dll        : %s (%d bytes)" % (dll, len(image)))
-    print("surface    : %d called, %d declared, %d in src/*.h"
-          % (len(called), len(declared), len(headers)))
-
-    failed = False
-    for name in undeclared:
-        failed = True
-        print("  FAIL called but never declared with ffi.cdef: %s (%s)"
-              % (name, ", ".join(sorted(set(called[name])))))
-    for name in unheadered:
-        failed = True
-        print("  FAIL called but not declared in src/*.h:        %s (%s)"
-              % (name, ", ".join(sorted(set(called[name])))))
-    for name in absent:
-        failed = True
-        print("  FAIL declared but not in the image:             %s" % name)
-
-    if failed:
-        return 1
-    print("  ok   every symbol the Lua calls is declared, in src/*.h and in the image")
+    if status:
+        return status
+    if not args.quiet:
+        cold = sorted({name for name, sites in called.items() if all(s["cold"] for s in sites)})
+        if cold:
+            print("  note: only used on a cold path (a plain test run never calls these): %s"
+                  % ", ".join(cold))
+        print("  ok   every symbol the Lua calls is declared, in src/*.h and in the image")
     return 0
 
 
