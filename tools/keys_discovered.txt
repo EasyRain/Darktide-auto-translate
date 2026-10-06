@@ -134,3 +134,10 @@ loc_weapon_mark_stubrevolver_p1_m2
 loc_weapon_mark_thunderhammer_2h_p1_m1
 loc_weapon_mark_thunderhammer_2h_p1_m2
 loc_weapon_mark_transonic_sword_transonic_knife_p1_m1
+# Mission-modifier display names (found by hand, 2026-10-06): the key names come from the game's
+# own settings file (scripts/settings/expeditions/expedition_mission_flags.lua) and both resolve
+# in the index. They are the player-visible siblings of the loc_circumstance_*_title condition
+# names we already carry - the theme modifiers Night Mission (theme_darkness) and Dawn Mission
+# (theme_dawn, new in 1.13.2). The other 19 keys in that family are sentences, not names.
+loc_expeditions_modifier_simple_theme_darkness
+loc_expeditions_modifier_simple_theme_dawn

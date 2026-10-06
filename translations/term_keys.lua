@@ -674,8 +674,10 @@ return {
         "loc_trait_bespoke_toughness_regen_on_punching_elites",
         "loc_trait_bespoke_uninterruptable_while_charging_and_movement",
         "loc_view_back",
-        -- discovered against the localisation index (133)
+        -- discovered against the localisation index (135)
         "loc_archetype_specialization_zealot_maniac_description_short",
+        "loc_expeditions_modifier_simple_theme_darkness",
+        "loc_expeditions_modifier_simple_theme_dawn",
         "loc_weapon_mark_arc_rifle_p1_m1",
         "loc_weapon_mark_autogun_p1_m1",
         "loc_weapon_mark_autogun_p1_m2",
