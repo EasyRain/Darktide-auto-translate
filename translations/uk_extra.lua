@@ -251,6 +251,7 @@ return {
     ["Dance of Death"] = "Танець смерті", -- community 'Dance of Death'
     ["Dark Communion"] = "Темне причастя", -- community 'Dark Communion'
     ["Dark Rituals"] = "Темні ритуали", -- hand
+    ["Dawn Mission"] = "Місія «Світанок»", -- community 'Dawn Mission'
     ["Deactivate"] = "Деактивувати", -- community 'Deactivate'
     ["Deadside Run"] = "Вилазка в Смертокрай", -- community 'Deadside Run'
     ["Default"] = "Усталені налаштування", -- community 'Default'
@@ -644,6 +645,7 @@ return {
     ["Nearby Enemies"] = "Вороги поблизу", -- hand
     ["Needle Pistol"] = "Голчастий пістолет", -- community 'Needle Pistol'
     ["Next"] = "Далі", -- community 'Next'
+    ["Night Mission"] = "Нічна Місія", -- community 'Night Mission'
     ["No Escape"] = "Без втечі", -- community 'No Escape'
     ["No Guts, No Glory"] = "Без сміливості — без слави", -- community 'No Guts, No Glory'
     ["No Lenience"] = "Без поблажок", -- community 'No Lenience'

@@ -29,6 +29,9 @@ import re
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from lua_source import code_only  # noqa: E402
+
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent
 MODULES = REPO / "scripts" / "mods" / "auto_translate" / "modules"
@@ -40,17 +43,6 @@ DEFAULT_DLLS = [
 # Paths a normal session does not walk unless the player chose them. A symbol first used here is the
 # kind that ships broken: the suite passes, the game only complains for the players who opt in.
 COLD_MARKERS = ("is_local", "model", "offline", "download")
-
-
-def strip_lua_comments(source: str) -> str:
-    """Comments out, code in.
-
-    A stray `core.at_foo(` inside a comment must not count as a call, so the blocks and the line
-    comments go first. Strings are left alone - the quotes in this codebase do not contain `--`.
-    """
-    source = re.sub(r"--\[\[.*?\]\]", lambda m: "\n" * m.group(0).count("\n"), source, flags=re.S)
-    source = re.sub(r"--\[=+\[.*?\]=+\[", lambda m: "\n" * m.group(0).count("\n"), source, flags=re.S)
-    return re.sub(r"--[^\n]*", "", source)
 
 
 def lua_sources() -> list[Path]:
@@ -86,7 +78,7 @@ def called_sites() -> dict[str, list[dict]]:
     """
     out: dict[str, list[dict]] = {}
     for path in lua_sources():
-        source = strip_lua_comments(path.read_text(encoding="utf-8", errors="replace"))
+        source = code_only(path.read_text(encoding="utf-8", errors="replace"))
         functions = enclosing_functions(source)
         for match in re.finditer(r"\b(?:core|handle|lib|self\.core)\.(at_[a-z0-9_]+)\b", source):
             symbol = match.group(1)
