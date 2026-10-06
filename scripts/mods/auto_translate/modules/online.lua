@@ -71,6 +71,7 @@ void at_online_bootstrap_clear(void);
 const char* at_online_error(void);
 int at_online_lang_code_for(const char*, const char*, char*, int);
 int at_set_model_dir(const char*);
+int at_set_model_threads(int);
 int at_model_ready(void);
 int at_model_status(void);
 int at_load_model_async(void);
@@ -1463,7 +1464,15 @@ function M.start(mod, report, lang)
         -- model is loaded, so a change mid-session cannot apply - and saying that is the
         -- point of the check below (the setting's tooltip promises a restart).
         local wanted_threads = threads_setting(mod)
-        if not core.at_set_model_threads(wanted_threads) then
+        -- pcall, because indexing a symbol the cdef never declared raises "missing declaration for
+        -- symbol" and that aborted the whole startup pipeline: offline users on 0.3.4 reported it
+        -- through Nexus (2026-10-08). A thread cap is not worth the engine - and a mod folder whose
+        -- at_core.dll could not be replaced (the game holds it open) is the other way to get here.
+        local applied, result = pcall(core.at_set_model_threads, wanted_threads)
+        if not applied then
+            util.warn(mod, "the native core does not accept a thread cap (%s); using its default",
+                tostring(result))
+        elseif not result then
             local current = core.at_model_threads()
             if wanted_threads ~= 0 and current ~= wanted_threads then
                 M.state.threads_pending = true

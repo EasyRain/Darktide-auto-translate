@@ -28,7 +28,7 @@ $mods = if ($env:AT_MODS) { $env:AT_MODS } else { 'D:\Steam\steamapps\common\War
 
 $checks = @(
     @{ name = 'syntax';    hint = 'LuaJIT parses all 14 Lua files';        cmd = { python tools\lua_syntax_check.py } },
-    @{ name = 'exports';   hint = 'every at_* in the Lua CDEF is in the DLL'; cmd = { python tools\check_exports.py } },
+    @{ name = 'exports';   hint = 'the FFI surface: every at_* the Lua calls is declared and in the DLL'; cmd = { python tools\check_exports.py } },
     @{ name = 'loc';       hint = 'the mod UI: key counts, 12 languages';  cmd = { python tools\check_localization.py } },
     @{ name = 'online';    hint = 'providers, batching, options tree';     cmd = { & $lua tools\smoke_online.lua } },
     @{ name = 'keys';      hint = 'the key list rebuilds without losing keys'; cmd = { python tools\build_term_keys.py $mods --keep-version } },
