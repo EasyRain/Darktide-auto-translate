@@ -19,7 +19,8 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-TARGETS = [ROOT / "translations" / "glossary.lua", ROOT / "translations" / "term_keys.lua"]
+TARGETS = [ROOT / "translations" / "glossary.lua", ROOT / "translations" / "term_keys.lua",
+           ROOT / "translations" / "uk_extra.lua"]
 MODS = Path(os.environ.get("AT_MODS", r"D:\Steam\steamapps\common\Warhammer 40,000 DARKTIDE\mods"))
 
 
@@ -50,7 +51,7 @@ def main() -> int:
     if stale:
         print("the generated files changed when regenerated: run the generators and commit them")
         return 1
-    print("  ok   regenerating changes nothing (both files are up to date)")
+    print("  ok   regenerating changes nothing (all %d file(s) are up to date)" % len(TARGETS))
     return 0
 
 

@@ -128,6 +128,35 @@ def main() -> int:
     else:
         print("  format specifiers match the English text everywhere")
 
+    # 4. the keys this mod asks for by name. A typo does not fail anything at runtime - the game
+    # shows the raw key in the UI - so it has to be caught here. Only this mod's own calls count:
+    # `target:localize("mod_name")` in options_refresh.lua asks another mod for its key, and those
+    # keys are not in this file by design. Keys built at runtime (target:localize(key)) cannot be
+    # checked statically and are reported as a count.
+    MOD_DIR = ROOT / "scripts" / "mods" / "auto_translate"
+    literal, dynamic = {}, 0
+    for path in sorted(MOD_DIR.rglob("*.lua")):
+        text = path.read_text(encoding="utf-8", errors="replace")
+        for match in re.finditer(r'\bmod:localize\(\s*("(?:[^"\\]|\\.)*"|[^)\s][^)]*)?', text):
+            argument = (match.group(1) or "").strip()
+            if argument.startswith('"'):
+                literal.setdefault(argument.strip('"'), []).append(
+                    "%s:%d" % (path.name, text.count("\n", 0, match.start()) + 1))
+            elif argument:
+                dynamic += 1
+    unknown_keys = {key: where for key, where in literal.items() if key not in entries}
+    if unknown_keys:
+        problems += len(unknown_keys)
+        print("  keys the code asks for that the file does not define:")
+        for key, where in sorted(unknown_keys.items()):
+            print(f"    {key:34} {', '.join(where)}")
+    else:
+        print(f"  all {len(literal)} key(s) the code asks for by name exist")
+    unused_keys = [key for key in order if key not in literal]
+    if unused_keys:
+        print(f"  note: {len(unused_keys)} key(s) defined and never asked for by a literal name"
+              + (f" ({dynamic} call(s) build the key at runtime)" if dynamic else ""))
+
     # 3. empty values, which would silently fall back to English
     empties = [(key, language) for key in order for language, text in entries[key].items() if not text]
     if empties:

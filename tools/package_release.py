@@ -37,6 +37,11 @@ STATIC_FILES = [
     "bin/at_core.dll",
     "translations/glossary.lua",
 ]
+
+# In the zip for the reader, not read by the game: tools/deploy_to_game.ps1 leaves it
+# alone and tools/check_deploy.py must not ask for it.
+NOT_DEPLOYED = {"README.md"}
+
 DYNAMIC_DIRS = [
     ("scripts/mods/auto_translate", "*.lua"),
 ]

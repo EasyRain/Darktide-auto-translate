@@ -42,6 +42,9 @@ $checks = @(
     @{ name = 'stores';    hint = 'the played-with stores are clean';      cmd = { & $lua tools\check_stores.lua } },
     @{ name = 'core';      hint = 'at_cli selftest (native core)';         cmd = { & bin\at_cli.exe selftest } },
     @{ name = 'fixtures';  hint = 'real captured provider responses';      cmd = { cmd /c tests\run_fixtures.bat } }
+    @{ name = 'version';  hint = 'mod, core source, README and the DLL agree'; cmd = { python tools\check_version.py --selftest; python tools\check_version.py } }
+    @{ name = 'deploy';   hint = 'the game folder holds what the repository holds'; cmd = { python tools\check_deploy.py --selftest; python tools\check_deploy.py } }
+    @{ name = 'release';  hint = 'the newest zip matches the repository';      cmd = { python tools\check_release.py --selftest; python tools\check_release.py } }
     @{ name = 'api';      hint = 'every module.member the code uses exists';   cmd = { python tools\check_module_api.py --selftest; python tools\check_module_api.py } }
     @{ name = 'changelog';hint = 'Nexus changelogs fit 255 and match their stated length'; cmd = { python tools\check_changelog.py --selftest; python tools\check_changelog.py } }
     @{ name = 'lf';       hint = 'every text file keeps LF endings';          cmd = { python tools\check_line_endings.py --selftest; python tools\check_line_endings.py } }
