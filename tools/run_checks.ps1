@@ -42,6 +42,7 @@ $checks = @(
     @{ name = 'stores';    hint = 'the played-with stores are clean';      cmd = { & $lua tools\check_stores.lua } },
     @{ name = 'core';      hint = 'at_cli selftest (native core)';         cmd = { & bin\at_cli.exe selftest } },
     @{ name = 'fixtures';  hint = 'real captured provider responses';      cmd = { cmd /c tests\run_fixtures.bat } }
+    @{ name = 'model';    hint = 'the offline engine runs through the module (skips without the model)'; cmd = { & $lua tools\smoke_local_model.lua } }
     @{ name = 'version';  hint = 'mod, core source, README and the DLL agree'; cmd = { python tools\check_version.py --selftest; python tools\check_version.py } }
     @{ name = 'deploy';   hint = 'the game folder holds what the repository holds'; cmd = { python tools\check_deploy.py --selftest; python tools\check_deploy.py } }
     @{ name = 'release';  hint = 'the newest zip matches the repository';      cmd = { python tools\check_release.py --selftest; python tools\check_release.py } }
