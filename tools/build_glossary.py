@@ -204,6 +204,15 @@ UK_OVERRIDE = {
     'crusher': 'Трощитель', 'crushers': 'Трощителі',
     'mauler': 'Крушитель', 'maulers': 'Крушителі', 'scab mauler': 'Скаб-Крушитель',
     'scab maulers': 'Скаб-Крушителі',
+    # Orthography only (2026-10-10): same string and same sense as the row we already ship - the
+    # typographic apostrophe and quotes Ukrainian uses, and a capital where the community's own row
+    # for that English sits under a different key and lower-cases a proper noun.
+    '++redacted++': '++ВИДАЛЕНО++',
+    'blaze force sword': 'Силовий меч полум’я',
+    'hive scum': 'Покидьок вулику',
+    'shredder autopistol': 'Автопістолет «Шредер»',
+    "the commodore's vestures": 'Убрання Коммодора',
+    'the mourningstar': 'Скорботна Зоря',
 }
 
 
