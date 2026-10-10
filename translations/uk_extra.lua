@@ -316,7 +316,7 @@ return {
     ["Empowered Psionics"] = "Посилена псіоніка", -- community 'Empowered Psionics'
     ["Empyric Resolve"] = "Емпірична рішучість", -- community 'Empyric Resolve'
     ["Empyric Shock"] = "Емпіричний шок", -- community 'Empyric Shock'
-    ["Enclavum Baross"] = "Енклавум Баросс", -- community 'Enclavum Baross'
+    ["Enclavum Baross"] = "Анклав Баросс", -- community 'Enclavum Baross'
     ["End of the Line"] = "Кінець колії", -- community 'End of the Line'
     ["Endless Hordes"] = "Нескінченні Орди", -- community 'Endless Hordes'
     ["Endless Hordes (Pox Gas)"] = "Нескінченні Орди (Чумний Газ)", -- community 'Endless Hordes (Pox Gas)'

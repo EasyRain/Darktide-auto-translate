@@ -36,7 +36,10 @@ def main() -> int:
         ("build_term_keys.py", [sys.executable, "tools/build_term_keys.py", str(MODS), "--keep-version"]),
     ]
     for label, command in steps:
-        result = subprocess.run(command, cwd=str(ROOT), capture_output=True, text=True)
+        # encoding matters: the builders print Ukrainian and Chinese, and this machine's default is
+        # GBK - without it the reader thread died on a byte 0xa1 and the check misreported a failure.
+        result = subprocess.run(command, cwd=str(ROOT), capture_output=True, text=True,
+                                encoding="utf-8", errors="replace")
         if result.returncode != 0:
             print("  FAIL %s exited %d" % (label, result.returncode))
             tail = (result.stderr or result.stdout or "").strip().split("\n")[-3:]

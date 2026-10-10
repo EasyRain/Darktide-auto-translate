@@ -72,7 +72,8 @@ def main() -> int:
 
     cli = None
     if CLI.is_file():
-        result = subprocess.run([str(CLI), "info"], capture_output=True, text=True)
+        result = subprocess.run([str(CLI), "info"], capture_output=True, text=True,
+                                encoding="utf-8", errors="replace")
         match = re.search(r"([0-9]+\.[0-9]+\.[0-9]+)", result.stdout)
         cli = match.group(1) if match else "unreported"
     problems = audit(io.open(MOD, encoding="utf-8").read(),
