@@ -3,7 +3,7 @@ REM Builds bin\at_core.dll (the native core, now including the offline NLLB engi
 REM and bin\at_cli.exe (out-of-game test tool).
 REM
 REM The CTranslate2 and SentencePiece libraries live outside this repository, in
-REM <workspace>\third_party. They are static (/MT, matching the compiler default
+REM <workspace>\tools\third_party. They are static (/MT, matching the compiler default
 REM here) so the DLL stays self-contained: a DLL's own directory is NOT searched
 REM for its dependencies when it is loaded, so shipping a ctranslate2.dll beside
 REM at_core.dll would not reliably work inside the game.
@@ -21,13 +21,13 @@ if errorlevel 1 (
   exit /b 1
 )
 
-set TP=%~dp0..\..\third_party
+set TP=%~dp0..\..\tools\third_party
 
 if not exist bin mkdir bin
 
 if not exist "%TP%\ct2_libs.bat" (
   echo FAILED: "%TP%\ct2_libs.bat" not found
-  echo         run third_party\build_probe.ps1's generator or third_party\gen_libs.ps1 first
+  echo         run tools\third_party\build_probe.ps1's generator or third_party\gen_libs.ps1 first
   exit /b 1
 )
 call "%TP%\ct2_libs.bat"

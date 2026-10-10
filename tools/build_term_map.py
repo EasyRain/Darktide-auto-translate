@@ -38,7 +38,18 @@ sys.path.insert(0, SKILL)
 from common import key_hash  # noqa: E402
 
 
-def rows() -> list[tuple[str, str, str]]:
+CACHE = os.path.join(ROOT, "refs", "localizations", "ukrainian", "UkrainianLocalization", "scripts",
+                     "mods", "UkrainianLocalization", "uk_cache.sqlite")
+
+
+def rows() -> list[tuple[str, str, str, str]]:
+    """(en, key, hash, source).
+
+    Two sources. Our own key list first (the keys the installed mods reference, which is what the
+    glossary is built from). Then the community cache, which is keyed by hash and therefore supplies the
+    loc key for terms our list never mentioned - it is what closes the gap for names like "Melee" or
+    "Skitarii", which no mod references by key.
+    """
     started = time.time()
     text = io.open(KEYS, encoding="utf-8").read()
     keys = re.findall(r'"((?:[^"\\]|\\.)*)"', text)
@@ -48,12 +59,34 @@ def rows() -> list[tuple[str, str, str]]:
         by_hash.setdefault(digest.upper(), en)
     con.close()
     out = []
+    covered = set()
     for key in keys:
-        en = by_hash.get(key_hash(key))
+        digest = key_hash(key)
+        en = by_hash.get(digest)
         if en:
-            out.append((en, key, key_hash(key)))
+            out.append((en, key, digest, "keys"))
+            covered.add(en)
+    # the glossary's terms, for the ones the key list does not reach
+    glossary = io.open(os.path.join(REPO, "translations", "glossary.lua"), encoding="utf-8").read()
+    terms = [m.group(1) for m in re.finditer(r'\ben = "((?:[^"\\]|\\.)*)"', glossary)]
+    term_hash = {}
+    for digest, en in by_hash.items():
+        term_hash.setdefault(en, digest)
+    if os.path.exists(CACHE):
+        cache = sqlite3.connect(CACHE)
+        cache_keys = {}
+        for digest, key in cache.execute("SELECT hash, key FROM uk"):
+            cache_keys.setdefault(digest.upper(), key)
+        cache.close()
+        for term in terms:
+            if term in covered:
+                continue
+            digest = term_hash.get(term)
+            key = cache_keys.get(digest) if digest else None
+            if key:
+                out.append((term, key, digest, "uk_cache"))
     out.sort()
-    print("  %d key(s) -> %d resolved in %.1f s" % (len(keys), len(out), time.time() - started))
+    print("  %d key(s) + glossary -> %d row(s) in %.1f s" % (len(keys), len(out), time.time() - started))
     return out
 
 
@@ -64,7 +97,7 @@ def main() -> int:
     # the row (the first version did exactly that, and table_diff's mapA then matched nothing)
     buffer = io.StringIO()
     writer = csv.writer(buffer, lineterminator="\n")
-    writer.writerow(["en", "key", "hash"])
+    writer.writerow(["en", "key", "hash", "source"])
     writer.writerows(data)
     body = buffer.getvalue()
     if check:
