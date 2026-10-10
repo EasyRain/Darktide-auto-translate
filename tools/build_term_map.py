@@ -60,6 +60,7 @@ def rows() -> list[tuple[str, str, str, str]]:
     con.close()
     out = []
     covered = set()
+    key_by_hash = {}   # hash -> key, filled from the game source below
     for key in keys:
         digest = key_hash(key)
         en = by_hash.get(digest)
@@ -72,6 +73,26 @@ def rows() -> list[tuple[str, str, str, str]]:
     term_hash = {}
     for digest, en in by_hash.items():
         term_hash.setdefault(en, digest)
+    # third source: the toolkit's scan of the decompiled game source (game-data/index/game_keys.csv,
+    # key,hash,en,resource). It reaches UI and settings strings that no mod references by key and that the
+    # community cache may not have translated either, which is exactly the gap the first two leave.
+    game_keys = os.path.join(ROOT, "game-data", "index", "game_keys.csv")
+    if os.path.exists(game_keys):
+        with io.open(game_keys, encoding="utf-8", newline="") as handle:
+            for row in csv.DictReader(handle):
+                digest = (row.get("hash") or "").upper()
+                if not digest or digest in key_by_hash:
+                    continue
+                key_by_hash[digest] = row.get("key") or ""
+        for term in terms:
+            if term in covered:
+                continue
+            digest = term_hash.get(term)
+            key = key_by_hash.get(digest) if digest else None
+            if key:
+                out.append((term, key, digest, "game_source"))
+                covered.add(term)
+
     if os.path.exists(CACHE):
         cache = sqlite3.connect(CACHE)
         cache_keys = {}
@@ -85,6 +106,7 @@ def rows() -> list[tuple[str, str, str, str]]:
             key = cache_keys.get(digest) if digest else None
             if key:
                 out.append((term, key, digest, "uk_cache"))
+                covered.add(term)
     out.sort()
     print("  %d key(s) + glossary -> %d row(s) in %.1f s" % (len(keys), len(out), time.time() - started))
     return out

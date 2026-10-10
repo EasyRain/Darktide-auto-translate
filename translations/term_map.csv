@@ -32,13 +32,13 @@ Activating {talent_name:%s} replenishes {toughness:%s} Toughness.,loc_talent_ada
 Adamant Will,loc_talent_adamant_forceful_stamina_block_and_push_alt,D182E514,keys
 "Adds {min_stack_count:%s}-{max_stack_count:%s} stacks of 2.5% Brittleness to hit enemies, based on charge level.",loc_trait_bespoke_rend_armor_on_charged_shots_desc,363A7233,keys
 Admonition Champion,loc_breed_display_name_cultist_captain,00065DB0,keys
-Adrenaline,loc_term_glossary_adrenaline,C4F3B84D,uk_cache
+Adrenaline,loc_term_glossary_adrenaline,C4F3B84D,game_source
 Adrenaline Frenzy,loc_talent_broker_keystone_adrenaline_junkie,016DDA96,keys
 "Affects Recoil, Spread and Sway after firing the weapon.",loc_stats_display_stability_stat_desc,E45EA7D1,keys
 "Affects Stamina efficiency, as well as the length and speed of dashes.",loc_stats_display_defense_stat_desc,31E02F3D,keys
 Agile,loc_trait_bespoke_dodge_count_reset_on_weakspot_hit,C9F41884,keys
 Agile Engagement,loc_talent_veteran_kill_grants_damage_to_other_slot,5C365733,keys
-Aim Down Sights,loc_ranged_attack_secondary_ads,21274199,uk_cache
+Aim Down Sights,loc_ranged_attack_secondary_ads,21274199,game_source
 Alice Hallowette,loc_npc_full_name_purser_a,4016F5AC,keys
 "All Attacks have {smite_chance:%s} chance on Hit to {talent_name:%s} the target. This cannot occur while at critical Peril, and has a Cooldown of {time:%s}s.",loc_talent_psyker_smite_on_hit_desc,F3B40F4B,keys
 All or Nothing,loc_trait_bespoke_power_bonus_scaled_on_stamina,C92A8C2A,keys
@@ -51,7 +51,7 @@ Always Prepared,loc_talent_veteran_weapon_switch_replenish_ammo,5FFFFAEB,keys
 Ambuscade,loc_talent_zealot_increased_flanking_damage,5116647A,keys
 Ammo,loc_stats_display_ammo_stat,3C457F93,keys
 Ammo Belt,loc_talent_adamant_ammo_belt,3D362BB3,keys
-Ammo Crate,loc_pickup_pocketable_ammo_crate_01,0450D46C,uk_cache
+Ammo Crate,loc_pickup_pocketable_ammo_crate_01,0450D46C,game_source
 "Ammo Crates also restore Grenades.
 Medi-Packs Heal {damage_heal:%s} faster, cleanse Corruption & Replenish {toughness:%s} Toughness per second.",loc_talent_veteran_better_deployables_description,2E81989A,keys
 Ammo Stash,loc_talent_ogryn_increased_ammo,4D649644,keys
@@ -88,7 +88,7 @@ Assault Chainaxe,loc_weapon_family_chainaxe_p1_m1,CA7DA17A,keys
 Assault Chainaxe,loc_weapon_family_chainaxe_p1_m2,DB9F4F19,keys
 Assault Chainsword,loc_weapon_family_chainsword_p1_m1,FD52F2A6,keys
 Assault Chainsword,loc_weapon_family_chainsword_p1_m2,1E34B208,keys
-Assignment Rank,loc_havoc_onboarding_order_title,0C9AABBD,uk_cache
+Assignment Rank,loc_havoc_onboarding_order_title,0C9AABBD,game_source
 Atonement,loc_circumstance_saints_core_default_title,D9677BBD,keys
 Atonement (Hunting Grounds),loc_circumstance_saints_core_hunting_grounds_title,3E116F4E,keys
 Atonement (Power Supply Interruption),loc_circumstance_saints_core_darkness_title,F732DF8C,keys
@@ -105,7 +105,7 @@ Backstab Kills restore {ability_cooldown:%s} Ability Cooldown.,loc_talent_zealot
 Backstabber,loc_talent_zealot_increased_backstab_damage,5730DC87,keys
 Banishing Light,loc_talent_zealot_channel_staggers,8E8044DB,keys
 Barber-Chirurgeon,loc_body_shop_view_display_name,887A7048,keys
-Bash,loc_weapon_special_weapon_bash,08239F1E,uk_cache
+Bash,loc_weapon_special_weapon_bash,08239F1E,game_source
 Batter,loc_talent_ogryn_bleed_on_multiple_hit,E541397F,keys
 Battle Maul & Slab Shield,loc_weapon_family_ogryn_powermaul_slabshield_p1_m1,006B316E,keys
 Battle Maul & Slab Shield,loc_weapon_family_ogryn_powermaul_slabshield_p1_m2,489ED685,keys
@@ -167,7 +167,7 @@ Break the Line,loc_talent_adamant_charge_ability_name,C274EA7A,keys
 Breaking Dissent,loc_talent_adamant_damage_vs_staggered_aura,66408E93,keys
 Bring it Down!,loc_talent_veteran_big_game_hunter,3FD6B675,keys
 Bruiser,loc_talent_ogryn_cooldown_on_elite_kills,B17401B3,keys
-Brunt's Armoury,loc_credits_goods_vendor_title_text,AD1C7251,uk_cache
+Brunt's Armoury,loc_credits_goods_vendor_title_text,AD1C7251,game_source
 Brute Conscripts,loc_circumstance_live_abhuman_01_title,E85D7D9B,keys
 Brute Conscripts plus Hi-Intensity Hunting Grounds,loc_circumstance_live_abhuman_02_title,F3174893,keys
 Brute Conscripts plus Hi-Intensity Shock Troop Gauntlet,loc_circumstance_live_abhuman_07_title,167AE85E,keys
@@ -196,7 +196,7 @@ Cancel,loc_popup_button_cancel,14D07AE7,keys
 Cancel,loc_popup_button_cancel_settings_reset_default,3895D787,keys
 Canine Morale,loc_talent_adamant_pinning_dog_kills_buff_allies,4FBC08D1,keys
 Capacitance,loc_talent_cryptic_power_keyword,ECC15A9F,keys
-Captain,loc_npc_full_name_enemy_captain_officer_a,03310CA9,uk_cache
+Captain,loc_npc_full_name_enemy_captain_officer_a,03310CA9,game_source
 Carapace Armoured,loc_weapon_stats_display_super_armor,33E005B0,keys
 Carnival Nights,loc_circumstance_player_journey_08_title,165509FC,keys
 Cartel Special,loc_talent_broker_stimm,7A34C61A,keys
@@ -209,7 +209,7 @@ Castigator's Stance,loc_talent_adamant_stance_ability_name,126C5EF0,keys
 Quell to reduce {#color(216,237,190)}Peril{#reset()}.",loc_ranged_warp_charge_desc,1E1F2C55,keys
 Catch a Breath,loc_talent_veteran_replenish_toughness_outside_melee,F5A9FBB6,keys
 Cause an Explosion at your Cyber-Mastiff's Location. Staggering and Electrocuting nearby Enemies. {max_charges:%s} Charges. {cooldown:%s}s Cooldown.,loc_talent_ability_detonate_description,29C13C22,keys
-Celerity Stimm,loc_pickup_syringe_pocketable_04,353BECFE,uk_cache
+Celerity Stimm,loc_pickup_syringe_pocketable_04,353BECFE,game_source
 Chance of landing a Critical Hit and how much Damage it will do.,loc_stats_display_crit_stat_desc,FD10F5AC,keys
 Change Operative,loc_exit_to_main_menu_display_name,901687D8,keys
 Channeled Force,loc_talent_psyker_force_staff_bonus,4DF98799,keys
@@ -243,7 +243,7 @@ Chasm Terminus,loc_zone_name_transit_short,8BE6B526,keys
 Chastise the Wicked,loc_talent_zealot_2_combat,B89423E1,keys
 Chem,loc_weapon_keyword_chem,3D6EB897,keys
 Chem Grenade,loc_talent_broker_blitz_tox_grenade,5ECC7244,keys
-Chem Toxin,loc_term_glossary_broker_toxin,5EA7EDC3,uk_cache
+Chem Toxin,loc_term_glossary_broker_toxin,5EA7EDC3,game_source
 Chemical Dependency,loc_talent_broker_keystone_chemical_dependency,3C3F00CA,keys
 Chink in their Armour,loc_talent_veteran_snipers_focus_rending_bonus,7387777E,keys
 Chorus of Spiritual Fortitude,loc_talent_zealot_bolstering_prayer,B1A2EE76,keys
@@ -279,18 +279,18 @@ Combat Blade,loc_weapon_family_combatknife_p1_m2,F9A9605B,keys
 Combat Shotgun,loc_weapon_family_shotgun_p1_m1,D0BDE35C,keys
 Combat Shotgun,loc_weapon_family_shotgun_p1_m2,653C203F,keys
 Combat Shotgun,loc_weapon_family_shotgun_p1_m3,5D6766F7,keys
-Combat Stimm,loc_pickup_syringe_pocketable_03,75F91CC9,uk_cache
+Combat Stimm,loc_pickup_syringe_pocketable_03,75F91CC9,game_source
 Commendation from Condemnation,loc_talent_adamant_charge_toughness_name,1F97A4E8,keys
 Commissar Dukane,loc_npc_full_name_commissar_a,43F35D8D,keys
 Commissary,loc_cosmetics_vendor_view_title,6DC8553A,keys
-Commodore's Vestures,loc_item_source_premium_store,E2E4DE7E,uk_cache
+Commodore's Vestures,loc_item_source_premium_store,E2E4DE7E,game_source
 Comms-Plex 154/2f,loc_mission_name_hm_complex,D106A294,keys
-Companion,loc_arbites_customization_dog_title,3FF1128E,uk_cache
+Companion,loc_arbites_customization_dog_title,3FF1128E,game_source
 Competitive Urge,loc_talent_veteran_ally_kills_increase_damage,9D5CB643,keys
 Complete a Havoc Assignment,loc_havoc_reward_objective_order,E478DABD,keys
 Complete {count:%d} missions,loc_contracts_task_label_complete_missions,26FCB34A,keys
 Complete {count:%d} missions with no player deaths,loc_contracts_task_label_complete_mission_no_death,74D16BAC,keys
-Concentration Stimm,loc_pickup_syringe_pocketable_02,752E775C,uk_cache
+Concentration Stimm,loc_pickup_syringe_pocketable_02,752E775C,game_source
 Concussive,loc_talent_adamant_melee_weakspot_hits_count_as_stagger,CC861343,keys
 Conditioning,loc_talent_veteran_weapon_switch_stamina_reduction,FAD1D72B,keys
 Confident Strike,loc_trait_bespoke_toughness_recovery_on_chained_attacks,A38B21E9,keys
@@ -303,9 +303,9 @@ Consignment Yard HL-17-36,loc_mission_name_fm_cargo,BCFEB333,keys
 Contaminated Stimms,loc_havoc_stimmed_minions_name,8C614EAE,keys
 Continuous hits to a Single Target applies {rending_multiplier:%s} Brittleness for {duration:%s} seconds to the target. Stacks {max_stacks:%s} times.,loc_talent_veteran_continous_hits_apply_rending_description,29626C69,keys
 Contract completion reward:,loc_contracts_contract_reward_label,B0C6E2AB,keys
-Contracts,loc_contracts_view,6FF0C82E,uk_cache
+Contracts,loc_contracts_view,6FF0C82E,game_source
 Corrupted Communications Devices,loc_objective_side_mission_communications_hack,29563B2B,keys
-Corruption,loc_corruption_tutorial,25AE8EF7,uk_cache
+Corruption,loc_corruption_tutorial,25AE8EF7,game_source
 Counter-Fire,loc_talent_veteran_combat_ability_ranged_enemies_outlines,7B0F97A3,keys
 Covering Fire,loc_talent_veteran_replenish_toughness_and_boost_allies,8C3AE6D0,keys
 Coward Culling,loc_talent_ogryn_damage_vs_suppressed,C8846F9A,keys
@@ -313,7 +313,7 @@ Coward Culling,loc_talent_ogryn_damage_vs_suppressed,C8846F9A,keys
 Cranial Corruption,loc_havoc_enemies_parasite_headshot_name,F4410696,keys
 Credits,loc_credits_view_title,9DE5D2E8,keys
 Creeping Flames,loc_talent_psyker_warpfire_on_shout,E809F338,keys
-Critical,loc_weapon_details_crit,2F6C0A0B,uk_cache
+Critical,loc_weapon_details_crit,2F6C0A0B,game_source
 Critical Bonus,loc_stats_display_crit_stat,E8EB5F4A,keys
 Critical Chance Boost,loc_talent_crit_chance_low,3EC7F5EF,keys
 Critical Hits also count up towards triggering Fury.,loc_talent_zealot_fanatic_rage_crits_desc,8365D45A,keys
@@ -338,7 +338,7 @@ Crusher,loc_weapon_family_powermaul_2h_p1_m1,029552DB,keys
 Crusher,loc_weapon_family_powermaul_2h_p1_m2,DE236AB1,keys
 Crystalline Will,loc_talent_psyker_alternative_peril_explosion,FEF3E1DE,keys
 Ctrl,loc_keyboard_input_ctrl,DB823D57,keys
-Curio,loc_item_type_gadget,EA7DEE9F,uk_cache
+Curio,loc_item_type_gadget,EA7DEE9F,game_source
 Curios,loc_inventory_loadout_group_attachments,2BC7E06A,keys
 "Customise your Wargear, Cosmetics and Talents.",loc_character_view_display_name_description,DCF4C0A7,keys
 Cyber-Mastiff,loc_inventory_title_slot_companion_gear_full,222BE16D,uk_cache
@@ -367,7 +367,7 @@ Deadside Run,loc_mission_name_exp_wastes,EAF5BF2A,keys
 Deal up to {max_damage:%s} Damage (increases as your Peril increases).,loc_talent_psyker_damage_based_on_warp_charge_desc,BFD23655,keys
 Deal up to {max_damage:%s} Ranged Base Damage. Bonus is reduced the nearer the target. ,loc_talent_veteran_increased_damage_based_on_range_desc,E92E3FAB,keys
 Decreases Ability Cooldown for you and Allies in Coherency by {cooldown:%s} on Elite or Specialist Kill.,loc_talent_psyker_elite_kills_give_combat_ability_cd_coherency_desc,10DB9900,keys
-Default,loc_setting_mix_preset_flat,2B601D19,uk_cache
+Default,loc_setting_mix_preset_flat,2B601D19,game_source
 Defences,loc_stats_display_defense_stat,21C53CB6,keys
 Delayed Detonation,loc_weapon_keyword_delayed_detonation,1F8855D5,keys
 Delight in Destruction,loc_talent_ogryn_damage_reduction_per_bleed,3984145B,keys
@@ -398,7 +398,7 @@ Desperado,loc_talent_broker_ability_focus,E77F3E99,keys
 Desperado,loc_talent_veteran_increased_melee_crit_chance_and_melee_finesse,CD3136FE,keys
 Desperation,loc_talent_zealot_increased_damage_on_low_stamina,00B548F8,keys
 Determined,loc_talent_veteran_supression_immunity,829E5480,keys
-Diamantine,loc_currency_name_diamantine,49C74921,uk_cache
+Diamantine,loc_currency_name_diamantine,49C74921,game_source
 Diligent Patrol,loc_achievement_missions_adamant_2_objective_1_name,C27B4B37,uk_cache
 Direct hits apply {num_stacks:%s} Stacks of {rending_percentage:%s} Brittleness for {duration:%s}s. Stacks {max_stacks:%s} times,loc_trait_bespoke_armor_rending_from_dot_burning_desc,C674072F,keys
 Disable,loc_action_interaction_disable,B0BE1BDD,uk_cache
@@ -498,7 +498,7 @@ Upon exiting {talent_name:%s}, you become Exhausted for {exhaust_duration:%s}s, 
 
 Base Cooldown: {cooldown:%s}s.",loc_talent_broker_ability_punk_rage_desc,C1BA71AB,keys
 Equip,loc_weapon_inventory_equip_button,A08C95D6,keys
-Error,loc_popup_header_error,9444A32D,uk_cache
+Error,loc_popup_header_error,9444A32D,game_source
 Esc,loc_keyboard_input_esc,640C1554,keys
 Espionage,loc_mission_type_06_name,2473E06D,keys
 Essence Harvest,loc_talent_psyker_toughness_regen_on_soul,15A3A4D2,keys
@@ -559,7 +559,7 @@ Force Swords,loc_class_selection_unique_weapon_psyker_melee_1,528485A6,uk_cache
 Force Weapon,loc_weapon_keyword_warp_weapon,AFCFACC2,keys
 Force of Will,loc_talent_adamant_staggers_replenish_toughness,FB06B425,keys
 Forceful,loc_talent_adamant_forceful,C9C8172F,keys
-Forge's Bellow,loc_talent_broker_ability_punk_rage_sub_3,FC8121DD,uk_cache
+Forge's Bellow,loc_talent_broker_ability_punk_rage_sub_3,FC8121DD,game_source
 Fortitude in Fellowship,loc_talent_zealot_increased_coherency_regen,3443581D,keys
 Frag Bomb,loc_ability_ogryn_grenade_demolition,7212DEB4,keys
 Frag Grenade,loc_ability_frag_grenade,86BB6780,keys
@@ -609,7 +609,7 @@ Grenadier,loc_talent_veteran_extra_grenade,034B1131,keys
 Grenadier Gauntlet,loc_weapon_family_ogryn_gauntlet_p1_m1,96A1522F,keys
 Grenadiers,loc_breed_grenadier_generic_name,DA0E9DEC,keys
 Grievous Wounds,loc_talent_zealot_increased_stagger_on_weakspot_melee,A2C5C269,keys
-Grimoires,loc_contract_task_pickup_type_grimoire,E04A2B6F,uk_cache
+Grimoires,loc_contract_task_pickup_type_grimoire,E04A2B6F,game_source
 Groaner,loc_breed_display_name_chaos_newly_infected,4287A113,keys
 Guaranteed chance to gain {talent_name:%s} on Elite Kills.,loc_talent_psyker_empowered_ability_on_elite_kills_description,23C36E9E,keys
 Gunners,loc_breed_gunner_generic_name,D10A1483,keys
@@ -623,7 +623,7 @@ Hammer of Judgement,loc_talent_adamant_multiple_hits_attack_speed,FA31C3CC,keys
 Hammer of the Emperor,loc_circumstance_story_nomansland_03_title,5621B673,keys
 Hard Knocks,loc_talent_ogryn_big_bully_heavy_hits,EB9AC8B6,keys
 Havoc,loc_havoc_name,DCD29469,keys
-Havoc Rewards,loc_havoc_reset_rewards,7460A8C3,uk_cache
+Havoc Rewards,loc_havoc_reset_rewards,7460A8C3,game_source
 Head,loc_inventory_title_slot_gear_head,2537F42F,keys
 Heal {corruption:%s} Corruption from the current Wound for you and Allies in Coherency every {interval:%s}s.,loc_talent_zealot_corruption_healing_coherency_improved_desc,AFC49DC9,keys
 Heat Management,loc_stats_display_heat_management_powersword_2h,D3055A43,keys
@@ -641,12 +641,12 @@ Heavy Sword,loc_weapon_family_combatsword_p2_m1,61F12735,keys
 Heavy Sword,loc_weapon_family_combatsword_p2_m2,0F60A403,keys
 Heavy Sword,loc_weapon_family_combatsword_p2_m3,2BF7B148,keys
 Heavyweight,loc_talent_ogryn_ogryn_fighter,AB9A0418,keys
-Height,loc_body_height,88AE8B67,uk_cache
+Height,loc_body_height,88AE8B67,game_source
 Heinous Rituals,loc_havoc_chaos_ritual_name,93459895,keys
 Helbore Lasgun,loc_weapon_family_lasgun_p2_m1,95217161,keys
 Helbore Lasgun,loc_weapon_family_lasgun_p2_m2,D40F9E77,keys
 Helbore Lasgun,loc_weapon_family_lasgun_p2_m3,B6A39D2F,keys
-Help,loc_action_interaction_help,B2BE3702,uk_cache
+Help,loc_action_interaction_help,B2BE3702,game_source
 Heresy,loc_achievement_difficulty_04,6C845AC9,keys
 Heresy,loc_mission_board_danger_high,0D1630BF,keys
 Heretical Disruption,loc_circumstance_nurgle_manifestation_title,18527152,keys
@@ -809,7 +809,7 @@ Keeping Protocol,loc_talent_execution_order_perma_buff,7222D71D,keys
 Keystone,loc_glossary_talent_keystone,343FF503,keys
 Keystone Modifier,loc_glossary_talent_keystone_modifier,B4BFC4A4,keys
 Kickback,loc_weapon_family_ogryn_thumper_p1_m1,23042ED1,keys
-Kill Enemies,loc_psyker_ability_objective,3699094C,uk_cache
+Kill Enemies,loc_psyker_ability_objective,3699094C,game_source
 Kill Order,loc_talent_adamant_dog_damage_after_ability,4F3D7EB4,keys
 Kill Zone,loc_talent_veteran_ranged_power_out_of_melee,BB890AA8,keys
 Kill {count:%d} Monstrosities,loc_contracts_task_label_kill_bosses,4CAEF649,keys
@@ -859,7 +859,7 @@ Latrine Shovel,loc_weapon_family_ogryn_club_p1_m3,FEBE89C4,keys
 Leave Mission,loc_leave_mission_display_name,2FF35522,keys
 Leave No One Behind,loc_talent_veteran_movement_speed_towards_downed,43F6C65B,keys
 Leave Session,loc_popup_reconnect_to_session_leave_button,A8140FB1,keys
-Left,loc_alias_view_navigate_left,7DE16F62,uk_cache
+Left,loc_alias_view_navigate_left,7DE16F62,game_source
 Left Arrow,loc_keyboard_input_arrow_left,BE44044D,keys
 Let Faith be Thy Armour,loc_talent_zealot_3_tier_4_ability_1,BCFA2BC8,keys
 Light 'em Up,loc_talent_ogryn_special_ammo_fire_shots,482F870D,keys
@@ -930,7 +930,7 @@ March,loc_talent_adamant_movement_speed_on_block,BA21AD6E,keys
 Marksman,loc_talent_veteran_ability_marksman,782C6CCB,keys
 Marksman's Focus,loc_talent_veteran_snipers_focus,90F993D2,keys
 Martyr's Purpose,loc_talent_zealot_damage_taken_restores_cd,2D55BE3C,keys
-Martyr's Skull,loc_pickup_collectible,B5CFC91C,uk_cache
+Martyr's Skull,loc_pickup_collectible,B5CFC91C,game_source
 Martyrdom,loc_talent_zealot_2_base_1,B6381770,keys
 Martyrdom,loc_talent_zealot_martyrdom,15D87F95,keys
 Massacre,loc_talent_ogryn_crit_chance_on_kill,B46DB274,keys
@@ -947,7 +947,7 @@ Measure of the explosion Damage.,loc_stats_display_explosion_damage_stat_desc,80
 Measure of the explosion Radius.,loc_stats_display_explosion_stat_desc,86A8721C,keys
 Measure of the time it takes to Reload.,loc_stats_display_reload_speed_stat_desc,87757B51,keys
 Mechanicus Power Sword,loc_weapon_family_powersword_p3_m1,8F21598E,keys
-Med Stimm,loc_pickup_pocketable_01,D66BF8A2,uk_cache
+Med Stimm,loc_pickup_pocketable_01,D66BF8A2,game_source
 Medicae Station,loc_health_station,0D7F3E92,uk_cache
 Medical Crate,loc_pickup_pocketable_medical_crate_01,EC7BCC9B,keys
 Medium,loc_contracts_contract_complexity_medium,228B643C,keys
@@ -959,7 +959,7 @@ Melee Hits on Bleeding Enemies grant {crit_chance:%s} Critical Chance for {durat
 
 Stacks {max_stacks:%s} times and lasts {duration:%s}s. ",loc_talent_veteran_crits_rend_description,0ABC5D93,keys
 Melee Critical Hits reduce the cooldown of Chastise the Wicked by {time:%.1f} second(s).,loc_talent_maniac_cooldown_on_melee_crits_desc,22324D3C,keys
-Melee Damage,loc_weapon_stats_display_melee_damage,28B5E4A6,uk_cache
+Melee Damage,loc_weapon_stats_display_melee_damage,28B5E4A6,game_source
 Melee Damage Boost,loc_talent_melee_damage_boost_medium,CB9E7B48,keys
 "Melee Hits grants you a stack of {adrenaline:%s}. Critical Melee Hits grants {on_crit:%s} additional Stack. Not gaining a stack within {duration:%s}s will remove a stack instead.
 
@@ -1110,7 +1110,7 @@ MkVIII,loc_weapon_mark_dual_stubpistols_p1_m1,1D96E928,keys
 Mobile,loc_weapon_keyword_mobile,05D05C4D,keys
 Mobile Emplacement,loc_talent_ogryn_bracing_reduces_damage_taken,D5FDB21F,keys
 Mobility,loc_stats_display_mobility_stat,5331382B,keys
-Modifiers,loc_item_information_stats_title_modifiers,C1020946,uk_cache
+Modifiers,loc_item_information_stats_title_modifiers,C1020946,game_source
 Moebian 21st,loc_havoc_armored_infected_name,268056A6,keys
 Momentum,loc_trait_bespoke_toughness_recovery_on_multiple_hits,E4CB3EFD,keys
 Monstrosity Hunter,loc_talent_adamant_monster_hunter,BD4A689A,keys
@@ -1156,8 +1156,8 @@ No Stopping Me!,loc_talent_ogryn_windup_is_uninterruptible,C63C5E99,keys
 Noble Prerogative,loc_circumstance_story_spillway_01_title,1BBC3D64,keys
 Non-Warp Ranged Critical Hits Quell {percent:%s} Peril.,loc_talent_psyker_ranged_crits_vent_desc,70CB8763,keys
 Non-Weakspot Hits grant {strength:%s} Weakspot Strength on next Weakspot Hit. {max_stacks:%s} Max Stacks.,loc_talent_adamant_stacking_weakspot_strength_desc,DA09F0CC,keys
-None,loc_setting_com_wheel_tap_none,528E1B4C,uk_cache
-Noospheric Command,loc_talent_cryptic_servo_skull_improved_tagging,DD8D8400,uk_cache
+None,loc_setting_com_wheel_tap_none,528E1B4C,game_source
+Noospheric Command,loc_talent_cryptic_servo_skull_improved_tagging,DD8D8400,game_source
 Not Far Behind,loc_talent_adamant_pinning_dog_bonus_moving_towards,8F9342AF,keys
 Number of Stamina segments.,loc_stats_display_stamina_title_desc,91C28C80,keys
 Nuncio-Aquila,loc_talent_ability_area_buff_drone,82756B8C,keys
@@ -1187,7 +1187,7 @@ One Motion,loc_talent_veteran_reduce_swap_time,834FFCCA,keys
 One with the Warp,loc_talent_psyker_toughness_damage_reduction_from_warp_charge,96A29F5E,keys
 Only In Death Does Duty End,loc_talent_veteran_combat_ability_revives,9533A7E9,keys
 Onslaught,loc_talent_veteran_continous_hits_apply_rending,89EF54AB,keys
-Open the Gate,loc_objective_psykhanium_machine_open_gate_desc,0F9E828A,uk_cache
+Open the Gate,loc_objective_psykhanium_machine_open_gate_desc,0F9E828A,game_source
 Opening Salvo,loc_talent_veteran_bonus_crit_chance_on_ammo,F15FDE11,keys
 Operations,loc_zone_name_operations_short,3844B5A4,keys
 Operative,loc_character_view_display_name,C220CC49,keys
@@ -1196,7 +1196,7 @@ Operative Selection,loc_hud_presence_main_menu,4A3AFA1F,keys
 Opportunist,loc_trait_bespoke_armor_penetration_against_staggered,738F6C19,keys
 Options,loc_options_view_display_name,9AEA3B99,keys
 Other,loc_settings_menu_group_other_settings,44CDF9DC,keys
-Other Talents,loc_tactical_overlay_build_talents_other,0B50AE5B,uk_cache
+Other Talents,loc_tactical_overlay_build_talents_other,0B50AE5B,game_source
 Out for Blood,loc_circumstance_player_journey_010_title,668AA946,keys
 Out for Blood,loc_talent_veteran_all_kills_replenish_toughness,E1EC88BF,keys
 Outgunned,loc_circumstance_plasma_smugglers_default_title,A1C2E3F7,keys
@@ -1247,7 +1247,7 @@ Plague Ogryn,loc_plague_ogryn_name,635EBD0B,keys
 Plasma Gun,loc_weapon_family_plasmagun_p1_m1,0B2B5978,keys
 Plasma Gun,loc_weapon_family_plasmagun_p1_m2,5C41DC62,keys
 Plasma Guns,loc_class_selection_unique_weapon_veteran_ranged_1,95C33D4B,uk_cache
-Plasteel,loc_currency_name_plasteel,3D1781D7,uk_cache
+Plasteel,loc_currency_name_plasteel,3D1781D7,game_source
 Plasteel Plates,loc_talent_adamant_plasteel_plates,EF3C0C4A,keys
 Point-Blank Barrage,loc_talent_ogryn_combat_ability_special_ammo,7E117AB1,keys
 Polish,loc_group_finder_language_polish,9F428461,uk_cache
@@ -1271,7 +1271,7 @@ Pox Gas (Tox Bomber),loc_circumstance_toxic_gas_cultist_grenadier_title,C7FD40DB
 Pox Hound,loc_breed_display_name_chaos_hound,70CA843D,keys
 Poxburster,loc_breed_display_name_chaos_poxwalker_bomber,AF175846,keys
 Poxwalker,loc_breed_display_name_chaos_poxwalker,B3631240,keys
-Poxwalkers,loc_credits_view_poxwalkers_title,353BA961,uk_cache
+Poxwalkers,loc_credits_view_poxwalkers_title,353BA961,game_source
 Preacher,loc_archetype_specialization_zealot_maniac,854B23DD,keys
 Precise,loc_weapon_keyword_accurate,96E6A606,keys
 Precision Strikes,loc_talent_veteran_increased_weakspot_damage,C82BFB26,keys
@@ -1299,7 +1299,7 @@ Psykhanium,loc_mission_name_tg_basic_combat_01,67C1294F,keys
 Psykhanium,loc_training_ground_view,563EA9F8,keys
 Psykinetic's Aura,loc_talent_psyker_elite_kills_give_combat_ability_cd_coherency,11CF3850,keys
 Psykinetic's Wrath,loc_talent_psyker_2_combat,F79DD1BD,keys
-Pull the Lever,loc_objective_psykhanium_pull_power_lever_01_header,F6F7B252,uk_cache
+Pull the Lever,loc_objective_psykhanium_pull_power_lever_01_header,F6F7B252,game_source
 Pulverise,loc_talent_ogryn_bleed_on_bull_rush,335781C4,keys
 Punishing Fire,loc_trait_bespoke_shot_power_bonus_after_weapon_special_cleave,E215D96E,keys
 Punishment,loc_talent_zealot_multi_hits_increase_impact,0AA70F49,keys
@@ -1334,12 +1334,12 @@ Rampage,loc_trait_bespoke_increased_melee_damage_on_multiple_hits,AB832D02,uk_ca
 Rampage!,loc_talent_broker_ability_punk_rage,B37505A2,keys
 Rampaging Enemies,loc_havoc_bolstering_enemies_name,B24F55E2,keys
 Range,loc_stats_display_range_stat,36469D55,keys
-Ranged,loc_setting_ranged,29575DA3,uk_cache
-Ranged Attacks,loc_glossary_term_ranged_attacks,377DD245,uk_cache
+Ranged,loc_setting_ranged,29575DA3,game_source
+Ranged Attacks,loc_glossary_term_ranged_attacks,377DD245,game_source
 Ranged Attacks apply {stacks:%s} Stacks of Burn while {ability:%s} is active.,loc_talent_ogryn_special_ammo_fire_shots_desc,7817206A,keys
 Ranged Damage Boost,loc_talent_ranged_damage_medium,4530D417,keys
-Ranged Specialist,loc_achievement_secondary_weapon_max_expertise_name,ED99AF69,uk_cache
-Ranged Weapons,loc_glossary_term_ranged_weapons,9245BC66,uk_cache
+Ranged Specialist,loc_achievement_secondary_weapon_max_expertise_name,ED99AF69,game_source
+Ranged Weapons,loc_glossary_term_ranged_weapons,9245BC66,game_source
 Ransacked Routes,loc_circumstance_barren_default_title,20F8FA45,keys
 Ransacked Routes (Hunting Grounds),loc_circumstance_barren_hunting_grounds_title,ACA66447,keys
 Ransacked Routes (Power Supply Interruption),loc_circumstance_barren_darkness_title,3FBC4AEF,keys
@@ -1347,7 +1347,7 @@ Ransacked Routes (Shock Troop Gauntlet),loc_circumstance_barren_waves_of_special
 Ransacked Routes (Ventilation Purge),loc_circumstance_barren_ventilation_title,547300D5,keys
 Rapid Fire,loc_weapon_keyword_rapid_fire,19ACD01E,keys
 Rapid Movement,loc_talent_adamant_sprinting_sliding,C99D6967,keys
-Rarity,loc_inventory_item_grid_sort_title_rarity,0D0C2CFC,uk_cache
+Rarity,loc_inventory_item_grid_sort_title_rarity,0D0C2CFC,game_source
 Rating lower than,loc_discard_items_view_rating_lower,599E4F5B,keys
 Ravage,loc_weapon_keyword_sawing,09DE5A4A,keys
 Razor-Jaw Augment,loc_talent_adamant_dog_pounces_bleed_nearby,FD617D6E,keys
@@ -1373,7 +1373,7 @@ Regen,loc_player_stats_element_stat_title_stamina_regen,B2825678,uk_cache
 Regen Rate,loc_player_stats_element_stat_title_toughness_regen_rate,84496064,uk_cache
 Relay Station,loc_interactable_lever_small_rotate_antenna_03,94F24A50,uk_cache
 Relay Station TRS-150,loc_mission_name_dm_propaganda,BD5BA486,keys
-Relic,loc_pickup_side_mission_consumable_01,9B41E691,uk_cache
+Relic,loc_pickup_side_mission_consumable_01,9B41E691,game_source
 Relic Blade,loc_weapon_family_powersword_2h_p1_m1,8860ADDB,keys
 Relic Blade,loc_weapon_family_powersword_2h_p1_m2,94AF3A54,keys
 Relics in Ruins,loc_circumstance_leftover_default_title,1311C13B,keys
@@ -1446,7 +1446,7 @@ Restore Settings,loc_popup_header_settings_reset_default,5D5A06FA,keys
 Restoring Faith,loc_talent_zealot_heal_damage_taken,A90F2F4A,keys
 Retaliatory Force,loc_talent_adamant_perfect_block_damage_boost,70A444B4,keys
 Retributor's Stance,loc_talent_zealot_quickness_toughness_per_stack,AF56F063,keys
-Right,loc_alias_view_right,1E65F6C3,uk_cache
+Right,loc_alias_view_right,1E65F6C3,game_source
 Right Arrow,loc_keyboard_input_arrow_right,40B9D1F9,keys
 Righteous Warrior,loc_talent_zealot_fanatic_rage_improved,4AE53808,keys
 Rinda Karnak,loc_breed_display_name_renegade_twin_captain_two,ED688785,keys
@@ -1479,7 +1479,7 @@ Sapper Shovel,loc_weapon_family_combataxe_p3_m1,57378755,keys
 Sapper Shovel,loc_weapon_family_combataxe_p3_m2,38028D86,keys
 Sapper Shovel,loc_weapon_family_combataxe_p3_m3,977C80DD,keys
 Savvy Operator,loc_achievement_missions_broker_2_objective_1_name,5D87A2C5,uk_cache
-Scab,loc_contract_task_enemy_type_renegade,55BFE926,uk_cache
+Scab,loc_contract_task_enemy_type_renegade,55BFE926,game_source
 Scab Bomber,loc_breed_display_name_renegade_grenadier,5749EE30,keys
 Scab Bruiser,loc_breed_display_name_renegade_melee,61F0A3A7,keys
 Scab Captain,loc_breed_display_name_renegade_captain,E5DA7D45,keys
@@ -1547,7 +1547,7 @@ Sire Melk's Requisitorium,loc_contract_view_intro_title,0E4B56A6,keys
 Sire Melk's Requisitorium,loc_marks_vendor_view_title,68F20CD7,keys
 Sister Hestia Prine,loc_npc_full_name_boon_vendor_a,D4032BDE,keys
 Skirmisher,loc_talent_veteran_damage_damage_after_sprinting,0C863DA8,keys
-Skitarii,loc_dlc_cryptic_name,CCC8A86B,uk_cache
+Skitarii,loc_dlc_cryptic_name,CCC8A86B,game_source
 Skitarius,loc_class_cryptic_name,CE63BED1,keys
 Skitarius,loc_class_cryptic_title,DA82C9BC,keys
 Skull Weight,loc_interactable_skull_weight,77B7283C,uk_cache
@@ -1558,8 +1558,8 @@ Smash 'Em!,loc_talent_ogryn_toughness_on_single_heavy,3757286D,keys
 Smelter Complex HL-17-36,loc_mission_name_dm_forge,9ED042F5,keys
 Smite,loc_ability_psyker_chain_lightning,EB65C907,keys
 Smoke Grenade,loc_ability_smoke_grenade,C98E8BAF,keys
-Smoke Screen,loc_achievement_veteran_smoke_grenade_engulfed_name,E7E5322D,uk_cache
-Sniper,loc_item_weapon_variant_killshot,253EBCE9,uk_cache
+Smoke Screen,loc_achievement_veteran_smoke_grenade_engulfed_name,E7E5322D,game_source
+Sniper,loc_item_weapon_variant_killshot,253EBCE9,game_source
 Sniper Gauntlet (Ventilation Purge),loc_circumstance_ventilation_purge_with_snipers_title,A97F0B5C,keys
 Social,loc_social_view_display_name,D1924E87,keys
 Soften Them Up,loc_talent_ogryn_targets_recieve_damage_increase_debuff,133DE1C0,keys
@@ -1582,8 +1582,8 @@ Spending Stamina replenishes {toughness:%s} Toughness over {time:%s}s.,loc_talen
 Spillway,loc_mission_name_spillway,6C09CE95,keys
 Spreadshot,loc_weapon_keyword_spread_shot,01C22E5D,keys
 Stability,loc_stats_display_stability_stat,CA57B042,keys
-Stagger,loc_stagger,06F8E07F,uk_cache
-Stagger Enemies,loc_ability_psyker_objective_3,6A66FD65,uk_cache
+Stagger,loc_stagger,06F8E07F,game_source
+Stagger Enemies,loc_ability_psyker_objective_3,6A66FD65,game_source
 "Staggering Attacks grants you {stack:%s} Stack(s) of Force lasting {stack_duration:%s}s. At {max_stacks:%s} Stacks gain Forceful for {duration:%s}s.
 
 Forceful makes you Stun Immune, grants {power_level:%s} Strength and {tdr:%s} Toughness Damage Reduction.",loc_talent_adamant_forceful_desc,15F5E364,keys
@@ -1604,7 +1604,7 @@ Each stack of Focus grants {power:%s} Ranged Finesse Power, and {reload_speed:%s
 Stay Close!,loc_talent_ogryn_toughness_regen_aura,E1D180E7,keys
 Steady Grip,loc_talent_ogryn_toughness_regen_while_bracing,E009E53E,keys
 Stealth Duration is increased to {duration_2:%s}s.,loc_talent_zealot_increased_stealth_duration_description,98E2B480,keys
-Stimm Component,loc_stimm_lab_recipe,6B378D8E,uk_cache
+Stimm Component,loc_stimm_lab_recipe,6B378D8E,game_source
 Stimm Lab,loc_broker_stimm_builder_view_display_name,0C5A5CCD,keys
 Stimm Supply,loc_talent_broker_ability_stimm_field,56107528,keys
 Stolen Rations,loc_circumstance_stolen_rations_core_default_title,D5BFDA08,keys
@@ -1631,8 +1631,8 @@ Subductor Shotpistol and Riot Shield,loc_weapon_family_shotpistol_shield_p1_m1,C
 Sunder,loc_trait_bespoke_infinite_armor_cleave_on_activated_attacks,C2BA97F2,keys
 Supercharge,loc_trait_bespoke_armor_rend_on_activated_attacks,EDE57171,keys
 Superiority Complex,loc_talent_veteran_increase_damage_vs_elites,2B206EFD,keys
-Suppress Enemies,loc_suppression_objective_1,B3137F66,uk_cache
-Suppression,loc_weapon_stats_display_suppression,6CB84702,uk_cache
+Suppress Enemies,loc_suppression_objective_1,B3137F66,game_source
+Suppression,loc_weapon_stats_display_suppression,6CB84702,game_source
 Suppression Force,loc_talent_adamant_staggered_enemies_deal_less_damage,55F60CA1,keys
 Suppression Protocols,loc_talent_adamant_hitting_multiple_gives_tdr,9F1031C7,keys
 Surety of Arms,loc_talent_psyker_reload_speed_warp,D9A5F4A2,keys
@@ -1660,17 +1660,17 @@ Tactical Reload,loc_talent_ranger_reload_speed_empty_mag,2BE2BACA,keys
 Tainted Airwaves,loc_circumstance_communication_hack_01_title,5EF02CA8,keys
 Tainted Airwaves plus Hi-Intensity Hunting Grounds,loc_circumstance_communication_hack_02_title,8D8DC76F,keys
 Tainted Airwaves plus Hi-Intensity Shock Troop Gauntlet,loc_circumstance_communication_hack_07_title,4EEA3B49,keys
-Tainted Communications Device,loc_pickup_side_mission_communications_hack_device,85038EEC,uk_cache
+Tainted Communications Device,loc_pickup_side_mission_communications_hack_device,85038EEC,game_source
 Tainted Sacrament,loc_circumstance_skulls_guns_default_title,7219BE6E,keys
 Tainted Sacrament (Hunting Grounds),loc_circumstance_skulls_guns_hunting_grounds_title,9766C4A9,keys
 Tainted Sacrament (Power Supply Interruption),loc_circumstance_skulls_guns_darkness_title,9771E851,keys
 Tainted Sacrament (Pox Gas),loc_circumstance_skulls_guns_gas_title,C47D64AE,keys
 Tainted Sacrament (Shock Troop Gauntlet),loc_circumstance_skulls_guns_waves_of_specials_title,AE65A33E,keys
 Tainted Sacrament (Ventilation Purge),loc_circumstance_skulls_guns_ventilation_title,39F8B578,keys
-Tainted Skull,loc_tainted_skull_pickup,000F307B,uk_cache
+Tainted Skull,loc_tainted_skull_pickup,000F307B,game_source
 Talents,loc_talent_view_display_name,F93E51EC,keys
 Talents,loc_talents_view_display_name,C652E220,keys
-Tancred Bastion,loc_character_commendations_07_name,C9F8C096,uk_cache
+Tancred Bastion,loc_character_commendations_07_name,C9F8C096,game_source
 Target Down!,loc_talent_veteran_improved_tag_dead_bonus,76B4CA1D,keys
 Target Neutralised,loc_talent_adamant_elite_special_kills_replenish_toughness,E8D1B55A,keys
 Target Priority,loc_talent_adamant_increased_damage_to_high_health,C8D87CAA,keys
@@ -1679,7 +1679,7 @@ Target Selection,loc_talent_adamant_pinning_dog_elite_damage,2A3CBA7C,keys
 Target receives {stacks:%s} Stacks of {rending:%s} Brittleness on direct projectile hit. Debuff lasts for {time:%s} seconds and can have a maximum of {max_stacks:%s} stacks.,loc_trait_bespoke_armor_rend_on_projectile_hit_desc,42048F77,keys
 Target the Weak,loc_talent_adamant_staggered_enemies_take_more_damage,E1845001,keys
 Targeted Brutality,loc_talent_adamant_charge_cooldown_name,0C2DD4DB,keys
-Targeted Toxin,loc_talent_broker_passive_reduced_damage_by_toxined,78D6F9F3,uk_cache
+Targeted Toxin,loc_talent_broker_passive_reduced_damage_by_toxined,78D6F9F3,game_source
 Targets Acquired,loc_talent_adamant_forceful_ranged,C6A4C517,keys
 "Taunt Enemies within {radius:%s}m, making them attack only you for {duration:%s}s.
 
@@ -1735,7 +1735,7 @@ Thermal Resistance,loc_stats_display_heat_management,0E36A79E,keys
 Thick Skin,loc_talent_ogryn_2_base_3,277672AA,keys
 Third Curio,loc_inventory_title_slot_attachment_3,8C05223B,keys
 This Talent will lock some other Talents.,loc_talent_mechanic_mutually_exclusive,5554DEB2,keys
-Threat,loc_setting_com_wheel_tap_threat,0555C610,uk_cache
+Threat,loc_setting_com_wheel_tap_threat,0555C610,game_source
 Throneside,loc_zone_name_throneside_short,1F426773,keys
 Throw a Stun Grenade that electrocutes and stuns all enemies within its blast radius.,loc_ability_shock_grenade_description,1E60594F,keys
 Throw a box of grenades with great strength and enthusiasm for high Damage against a Single Enemy.,loc_ability_ogryn_grenade_box_description,77E8D4ED,keys
@@ -1853,9 +1853,9 @@ Using your Blitz while {talent_name:%s} is active replenishes {toughness:%s} Tou
 Using your Combat Ability makes your {talent_name:%s} charge {smite_attack_speed:%s} faster and generate {warp_charge_cost:%s} less Peril for {duration:%s}s.,loc_talent_psyker_ability_increase_brain_burst_speed_desc,EE94FFDD,keys
 Using your Combat Ability while {talent_name:%s} is active refreshes the duration of {talent_name:%s}.,loc_talent_adamant_forceful_refresh_on_ability_desc,816B978E,keys
 Valuable Distraction,loc_talent_ogryn_taunt_damage_taken_increase,F8D4D8B8,keys
-Vanguard,loc_item_weapon_variant_linesman,2558266E,uk_cache
+Vanguard,loc_item_weapon_variant_linesman,2558266E,game_source
 Vantage Point,loc_achievement_missions_veteran_2_objective_1_name,CED6BF4E,uk_cache
-Vent Heat,loc_weapon_special_weapon_vent,7B327795,uk_cache
+Vent Heat,loc_weapon_special_weapon_vent,7B327795,game_source
 Ventilation Purge,loc_circumstance_ventilation_purge_title,E1849DF0,keys
 Venting Shriek,loc_talent_psyker_shout_vent_warp_charge,90F1BCF1,keys
 Versatile,loc_weapon_keyword_versatile,7B4C10FB,keys
@@ -1871,7 +1871,7 @@ Vigil Station Oblivium,loc_mission_name_hm_cartel,79D0E935,keys
 Vigilant Autogun,loc_weapon_family_autogun_p3_m1,C5F5F722,keys
 Vigilant Autogun,loc_weapon_family_autogun_p3_m2,C6AB86F3,keys
 Vigilant Autogun,loc_weapon_family_autogun_p3_m3,7CB8FCBE,keys
-Virulent Strain,loc_talent_broker_passive_toxin_infected_enemies_take_increased_damage,C1ABBD9D,uk_cache
+Virulent Strain,loc_talent_broker_passive_toxin_infected_enemies_take_increased_damage,C1ABBD9D,game_source
 Viscosity,loc_stimm_lab_viscosity,05A8D9AD,keys
 Voice of Command,loc_talent_veteran_combat_ability_stagger_nearby_enemies,36C11826,keys
 Voidblast Force Staff,loc_weapon_family_forcestaff_p1_m1,EFBD923B,keys
@@ -1881,7 +1881,7 @@ Volley Fire,loc_talent_veteran_2_combat_ability,2B30F2CA,keys
 Voltaic,loc_achievement_horde_win_electric_archetype_name,0D98E631,uk_cache
 Voltaic Mandibles Augment,loc_talent_adamant_dog_attacks_electrocute,CB0985B3,keys
 Voltaic Shock Mine,loc_talent_ability_shock_mine,DB593AF0,keys
-Volume,loc_stimm_lab_volume,0938B400,uk_cache
+Volume,loc_stimm_lab_volume,0938B400,game_source
 Vulture's Mark,loc_talent_broker_keystone_vultures_mark_on_kill,A46E752F,keys
 Waiting for Fatshark Friend Code...,loc_social_menu_find_player_wait_for_input,7FC046C2,keys
 Walk It Off,loc_talent_adamant_stamina_regens_toughness,69689F35,keys
@@ -1897,7 +1897,7 @@ Warp Speed,loc_ability_psyker_overcharge_movement_speed,EDE1E14C,keys
 Warp Splitting,loc_talent_psyker_cleave_from_peril,EF20ACCE,keys
 Warp Unbound,loc_talent_psyker_overcharge_infinite_casting,E3743A11,keys
 Warren 6-19,loc_mission_name_cm_raid,84189FDD,keys
-Weakspot,loc_weapon_details_weakspot,3A8527D3,uk_cache
+Weakspot,loc_weapon_details_weakspot,3A8527D3,game_source
 "Weakspot Kills count as {second:%s}s spent in {talent_name:%s}. 
 
 For each second spent in {talent_name:%s}, you now also gain {finesse_damage_per_stack:%s} Finesse Damage ({max_finesse_damage%s} max) which lingers for {duration:%s}s after leaving {talent_name:%s}.",loc_ability_psyker_overcharge_weakspot_description,492219AB,keys
