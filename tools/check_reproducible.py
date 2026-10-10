@@ -20,7 +20,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 TARGETS = [ROOT / "translations" / "glossary.lua", ROOT / "translations" / "term_keys.lua",
-           ROOT / "translations" / "uk_extra.lua"]
+           ROOT / "translations" / "uk_extra.lua", ROOT / "translations" / "term_map.csv"]
 MODS = Path(os.environ.get("AT_MODS", r"D:\Steam\steamapps\common\Warhammer 40,000 DARKTIDE\mods"))
 
 
@@ -34,6 +34,8 @@ def main() -> int:
         ("build_glossary.py", [sys.executable, "tools/build_glossary.py"]),
         ("fill_uk_gaps.py", [sys.executable, "tools/fill_uk_gaps.py", "--write"]),
         ("build_term_keys.py", [sys.executable, "tools/build_term_keys.py", str(MODS), "--keep-version"]),
+        # the bridge both other tools want: glossary English -> the game's loc key (not shipped)
+        ("build_term_map.py", [sys.executable, "tools/build_term_map.py"]),
     ]
     for label, command in steps:
         # encoding matters: the builders print Ukrainian and Chinese, and this machine's default is
