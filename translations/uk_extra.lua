@@ -12,6 +12,7 @@ return {
     ["\"Devil's Claw\" Sword"] = "Меч «Кіготь диявола»", -- community '"Devil's Claw" Sword'
     ["++REDACTED++"] = "++ВИДАЛЕНО++", -- community '++REDACTED++'
     ["Abilities"] = "Здібності", -- community 'Abilities'
+    ["Abilities Used"] = "Використано здібностей", -- community 'Abilities Used'
     ["Ability"] = "Здібність", -- community 'Ability'
     ["Ability Modifier"] = "Модифікатор здібності", -- community 'Ability Modifier'
     ["Account Wallet"] = "Гаманець облікового запису", -- community 'Account Wallet'
@@ -68,6 +69,8 @@ return {
     ["Atonement (Pox Gas)"] = "«Спокута» (Чумний газ)", -- hand
     ["Atonement (Ventilation Purge)"] = "«Спокута» (Очищення вентиляції)", -- hand
     ["Attack Speed"] = "Швидкість атаки", -- community 'Attack Speed'
+    ["Attacks Blocked"] = "Заблоковано атак", -- community 'Attacks Blocked'
+    ["Attacks Dodged"] = "Ухилено атак", -- community 'Attacks Dodged'
     ["Attention Seeker"] = "Шукач уваги", -- community 'Attention Seeker'
     ["Aura"] = "Аура", -- community 'Aura'
     ["Auric"] = "Хаос", -- community 'Auric'
@@ -102,6 +105,7 @@ return {
     ["Blessed Armament"] = "Благословене озброєння", -- community 'Blessed Armament'
     ["Blinder"] = "Хлопушка", -- community 'Blinder'
     ["Blitz"] = "Бліц", -- community 'Blitz'
+    ["Blitzes Used"] = "Використано Натисків", -- community 'Blitzes Used'
     ["Blocked"] = "Заблоковано", -- community 'Blocked'
     ["Blood Redemption"] = "Кровна спокута", -- community 'Blood Redemption'
     ["Bloodlust"] = "Кровожерність", -- community 'Bloodlust'
@@ -124,6 +128,7 @@ return {
     ["Break the Line"] = "Прорвати лінію", -- community 'Break the Line'
     ["Breaking Dissent"] = "Придушення непокори", -- community 'Breaking Dissent'
     ["Bruiser"] = "Бійцюга", -- community 'Bruiser'
+    ["Brunt"] = "Брант", -- community 'Brunt'
     ["Brunt's Armoury"] = "Зброярня Бранта", -- community 'Brunt's Armoury'
     ["Brute Conscripts"] = "Громили-призовники", -- hand
     ["Brutes and Blasts"] = "Громили та Вибухи", -- community 'Brutes and Blasts'
@@ -224,6 +229,7 @@ return {
     ["Counter-Fire"] = "Вогонь у відповідь", -- community 'Counter-Fire'
     ["Covering Fire"] = "Прикривальний вогонь", -- community 'Covering Fire'
     ["Coward Culling"] = "Винищення боягузів", -- community 'Coward Culling'
+    ["Cragtown"] = "Скельне містечко", -- community 'Cragtown'
     ["Cranial Corruption"] = "Розклад черепу", -- community 'Cranial Corruption'
     ["Credits"] = "Титри", -- community 'Credits'
     ["Creeping Flames"] = "Повзучі полум’я", -- community 'Creeping Flames'
@@ -244,7 +250,9 @@ return {
     ["Cyber-Mastiff"] = "Кібер-мастиф", -- community 'Cyber-Mastiff'
     ["Daemonhost"] = "Демононосій", -- community 'Daemonhost'
     ["Daemonhost Gormaggoth"] = "Архідемононосій", -- community 'Daemonhost Gormaggoth'
+    ["Dam Workers Hab Delta-9"] = "Житловий блок працівників дамби «Дельта-9»", -- community 'Dam Workers Hab Delta-9'
     ["Damage"] = "Шкода", -- community 'Damage'
+    ["Damage Dealt"] = "Завдано шкоди", -- community 'Damage Dealt'
     ["Damage Reduction"] = "Зменшення шкоди", -- hand
     ["Damage Taken"] = "Отримана шкода", -- hand
     ["Damnation"] = "Прокляття", -- community 'Damnation'
@@ -308,9 +316,13 @@ return {
     ["Ecclesiarch's Call"] = "Поклик еклезіарха", -- community 'Ecclesiarch's Call'
     ["Efficiency"] = "Ефективність", -- community 'Efficiency'
     ["Efficient Killer"] = "Ефективний убивця", -- community 'Efficient Killer'
+    ["Effluent Processing Hub"] = "Вузол очищення стічних вод", -- community 'Effluent Processing Hub'
+    ["Effluent Run-Off Delta-63"] = "Скид стічних вод «Дельта-63»", -- community 'Effluent Run-Off Delta-63'
+    ["Effluent Run-Off Gamma-12"] = "Скид стічних вод «Гамма-12»", -- community 'Effluent Run-Off Gamma-12'
     ["Electrokinetic Force Staff"] = "Електрокінетичний силовий посох", -- community 'Electrokinetic Force Staff'
     ["Elite Kill"] = "Вбивство еліти", -- hand
     ["Elite Resistance"] = "Елітний опір", -- community 'Elite Resistance'
+    ["Elites Killed"] = "Вбито елітних ворогів", -- community 'Elites Killed'
     ["Empathic Evasion"] = "Емпатичне ухилення", -- community 'Empathic Evasion'
     ["Emperor's Will"] = "Воля Імператора", -- hand
     ["Empowered Psionics"] = "Посилена псіоніка", -- community 'Empowered Psionics'
@@ -321,6 +333,7 @@ return {
     ["Endless Hordes"] = "Нескінченні Орди", -- community 'Endless Hordes'
     ["Endless Hordes (Pox Gas)"] = "Нескінченні Орди (Чумний Газ)", -- community 'Endless Hordes (Pox Gas)'
     ["Enduring Faith"] = "Непохитна віра", -- community 'Enduring Faith'
+    ["Enemies Staggered"] = "Ошелешено ворогів", -- community 'Enemies Staggered'
     ["Enemy Types"] = "Типи ворогів", -- hand
     ["Energy Leakage"] = "Витік енергії", -- community 'Energy Leakage'
     ["Enervating Threshold"] = "Послаблюючий поріг", -- community 'Enervating Threshold'
@@ -473,6 +486,7 @@ return {
     ["Hunter's Resolve"] = "Рішучість мисливця", -- community 'Hunter's Resolve'
     ["Hunting Grounds"] = "Мисливські угіддя", -- community 'Hunting Grounds'
     ["Huntsman's Shotgun"] = "Мисливський дробовик", -- community 'Huntsman's Shotgun'
+    ["Hydro Barrier IX"] = "Гідробар'єр 9", -- community 'Hydro Barrier IX'
     ["I Shall Not Fall"] = "Я не впаду", -- community 'I Shall Not Fall'
     ["Immolation Grenade"] = "Граната спалення", -- community 'Immolation Grenade'
     ["Impact Boost"] = "Підсилення удару", -- community 'Impact Boost'
@@ -516,6 +530,7 @@ return {
     ["Kill Enemies"] = "Вбити ворогів", -- community 'Kill Enemies'
     ["Kill Order"] = "Наказ на вбивство", -- community 'Kill Order'
     ["Kill Zone"] = "Зона ураження", -- community 'Kill Zone'
+    ["Kills"] = "Вбивства", -- community 'Kills'
     ["Kinetic Deflection"] = "Кінетичне відбиття", -- community 'Kinetic Deflection'
     ["Kinetic Flayer"] = "Кінетичний здирач", -- community 'Kinetic Flayer'
     ["Kinetic Presence"] = "Кінетична присутність", -- community 'Kinetic Presence'
@@ -619,8 +634,10 @@ return {
     ["Mobility"] = "Мобільність", -- community 'Mobility'
     ["Modifiers"] = "Модифікатори", -- community 'Modifiers'
     ["Moebian 21st"] = "Моебіанський 21-ий", -- community 'Moebian 21st'
+    ["Moebian VIth Outpost"] = "Форпост Моебіанського 6-го", -- community 'Moebian VIth Outpost'
     ["Momentum"] = "Імпульс", -- community 'Momentum'
     ["Monstrosities"] = "Потвори", -- hand (plural term)
+    ["Monstrosities Damage Dealt"] = "Завдано шкоди потворам", -- community 'Monstrosities Damage Dealt'
     ["Monstrosity"] = "Потвора", -- hand
     ["Monstrosity Hunter"] = "Мисливець на монстрів", -- community 'Monstrosity Hunter'
     ["Mortis Trials"] = "Смертельне випробування", -- community 'Mortis Trials'
@@ -841,6 +858,7 @@ return {
     ["Restoring Faith"] = "Відновлення віри", -- community 'Restoring Faith'
     ["Retaliatory Force"] = "Сила відплати", -- community 'Retaliatory Force'
     ["Retributor's Stance"] = "Стійка відплати", -- community 'Retributor's Stance'
+    ["Revives"] = "Піднято союзників", -- community 'Revives'
     ["Right"] = "Праворуч", -- community 'Right'
     ["Right Arrow"] = "Стрілка вправо", -- community 'Right Arrow'
     ["Righteous Warrior"] = "Праведний воїн", -- community 'Righteous Warrior'
@@ -864,6 +882,7 @@ return {
     ["Salvage"] = "Брухт", -- community 'Salvage'
     ["Sanctuary"] = "Святилище", -- community 'Sanctuary'
     ["Sapper Shovel"] = "Саперна лопата", -- community 'Sapper Shovel'
+    ["Saves"] = "Врятовано союзників", -- community 'Saves'
     ["Savvy Operator"] = "Тямущий оператор", -- community 'Savvy Operator'
     ["Scab"] = "Скабів", -- community 'Scab'
     ["Scab Bomber"] = "Скаб-Бомбер", -- community 'Scab Bomber'
@@ -953,6 +972,7 @@ return {
     ["Special Melee Attack"] = "Особлива атака ближнього бою", -- community 'Special Melee Attack'
     ["Specialist"] = "Спеціаліст", -- hand
     ["Specialists"] = "Спеціалісти", -- hand
+    ["Specialists Killed"] = "Вбито спеціалістів", -- community 'Specialists Killed'
     ["Spillway"] = "Водоскид", -- community 'Spillway'
     ["Spreadshot"] = "Дробовий постріл", -- community 'Spreadshot'
     ["Stability"] = "Стабільність зброї", -- community 'Stability'
@@ -1027,7 +1047,9 @@ return {
     ["The Blight Spreads"] = "Поширення Зарази", -- community 'The Blight Spreads'
     ["The Carnival"] = "Карнавал", -- community 'The Carnival'
     ["The Commodore's Vestures"] = "Убрання Коммодора", -- community 'The Commodore's Vestures'
+    ["The Dam"] = "Дамба", -- community 'The Dam'
     ["The Depths"] = "Глибини", -- community 'The Depths'
+    ["The Drain"] = "Сток", -- community 'The Drain'
     ["The Emperor's Bullet"] = "Куля Імператора", -- hand
     ["The Emperor's Fading light (I)"] = "Згасаюче світло Імператора (I)", -- community 'The Emperor's Fading light (I)'
     ["The Emperor's Fist"] = "Кулак імператора", -- community 'The Emperor's Fist'
@@ -1040,9 +1062,12 @@ return {
     ["The Meat Grinder"] = "М'ясорубка", -- community 'The Meat Grinder'
     ["The Mourningstar"] = "Скорботна Зоря", -- community 'The Mourningstar'
     ["The Orthus Offensive"] = "Ортуський наступ", -- community 'The Orthus Offensive'
+    ["The Pipes"] = "Труби", -- community 'The Pipes'
+    ["The Psyker's Lair"] = "Лігво Псикани", -- community 'The Psyker's Lair'
     ["The Psykhanium"] = "Псиканіум", -- community 'The Psykhanium'
     ["The Quickening"] = "Прискорення", -- community 'The Quickening'
     ["The Road to No Man's Land"] = "Шлях до Нічиїх Земель", -- community 'The Road to No Man's Land'
+    ["The Sopp"] = "Трясовина", -- community 'The Sopp'
     ["The Tancred Bastion"] = "Бастіон танкреда", -- community 'The Tancred Bastion'
     ["The Theatre of Castigation"] = "Театр Покарання", -- community 'The Theatre of Castigation'
     ["The Theatre of Humility"] = "Театр Смирення", -- community 'The Theatre of Humility'
@@ -1060,6 +1085,7 @@ return {
     ["Thugshot"] = "Мордостріл", -- community 'Thugshot'
     ["Thunder Hammer"] = "Громовий молот", -- community 'Thunder Hammer'
     ["Thy Wrath be Swift"] = "Нехай твій гнів буде стрімким", -- community 'Thy Wrath be Swift'
+    ["Time In Coherency"] = "Час у Єдності", -- community 'Time In Coherency'
     ["To the Bitter End"] = "До гіркого кінця", -- hand
     ["Too Stubborn to Die"] = "Надто впертий, щоб померти", -- community 'Too Stubborn to Die'
     ["Torrent"] = "Потік", -- community 'Torrent'
@@ -1149,6 +1175,7 @@ return {
     ["Warp Unbound"] = "Розкутий Вир", -- community 'Warp Unbound'
     ["Warren 6-19"] = "Катакомби 6-19", -- community 'Warren 6-19'
     ["Weak Spot"] = "Слабке місце", -- hand
+    ["Weak Spot Hits"] = "Влучання в голову", -- community 'Weak Spot Hits'
     ["Weakspot"] = "Слабке місце", -- community 'Weakspot'
     ["Weapon Special"] = "Особлива атака", -- community 'Weapon Special'
     ["Weapons Specialist"] = "Спеціаліст по зброї", -- community 'Weapons Specialist'
@@ -1159,6 +1186,7 @@ return {
     ["Wildfire"] = "Пожежа", -- community 'Wildfire'
     ["Withering Fire"] = "Спустошливий вогонь", -- community 'Withering Fire'
     ["Won't Give In"] = "Не здамся", -- community 'Won't Give In'
+    ["Worker Hab Phi-Gamma-4"] = "Робітничий житловий блок «Фі-Гамма-4»", -- community 'Worker Hab Phi-Gamma-4'
     ["Wounds"] = "Поранення", -- community 'Wounds'
     ["Writ of Execution"] = "Грамота страти", -- community 'Writ of Execution'
     ["Writ of Judgement"] = "Указ правосуддя", -- community 'Writ of Judgement'

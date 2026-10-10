@@ -16,6 +16,7 @@ A Critical Hit increases the base Damage of your next Attack by {melee:%s} (Mele
 A Critical Hit makes you count as Dodging against Ranged Attacks for {duration:%s}s.,loc_talent_psyker_dodge_after_crits_description,654D056C,keys
 A successful Dodge grants {damage:%s} Damage Reduction for {duration:%s}s.,loc_talent_reduced_damage_after_dodge_description,D65317F7,keys
 Abilities,loc_class_abilities_title,5D27C41F,keys
+Abilities Used,loc_stat_display_abilities_used,28AB5CB3,keys
 Ability,loc_glossary_term_class_ability,EDE72D3E,keys
 Ability Modifier,loc_glossary_talent_ability_modifier,C34A5633,keys
 Account Wallet,loc_main_menu_account_wallet_title,DCCA8A9E,keys
@@ -95,6 +96,8 @@ Atonement (Power Supply Interruption),loc_circumstance_saints_core_darkness_titl
 Atonement (Pox Gas),loc_circumstance_saints_core_gas_title,6BB424DD,keys
 Atonement (Shock Troop Gauntlet),loc_circumstance_saints_core_waves_of_specials_title,0E7C934F,keys
 Atonement (Ventilation Purge),loc_circumstance_saints_core_ventilation_title,5E782969,keys
+Attacks Blocked,loc_stat_display_attacks_blocked,6CDEF844,keys
+Attacks Dodged,loc_stat_display_attacks_dodged,F18C0297,keys
 Attention Seeker,loc_talent_ranged_enemies_taunt,0BD15ECE,keys
 Aura,loc_glossary_term_aura,6C7317E3,keys
 Auric,loc_group_finder_difficulty_auric,E758679F,keys
@@ -140,6 +143,7 @@ Blitz,loc_tactical_overlay_build_blitz,4BED9EEA,keys
 {blinder:%s}: {blinder_stacks:%s} stacks.
 {missile_launcher:%s}: {missile_launcher_stacks:%s} stacks.
 {chem_grenade:%s}: {chem_grenade_stacks:%s} stacks.",loc_talent_broker_passive_blitz_inflicts_toxin_desc_02,8757C0F2,keys
+Blitzes Used,loc_stat_display_blitzes_used,C26EC4D5,keys
 Blocked,loc_social_menu_player_blocked,521DB57D,keys
 Blocking an Attack reduces your Push Cost by {push_cost_multiplier:%s} for {duration:%s}s.,loc_talent_ogryn_blocking_reduces_push_cost_desc,6C8DC539,keys
 Blocking or Pushing Enemies Taunts them for {duration:%s}s.,loc_talent_ranged_enemies_taunt_description,A01A7F7F,keys
@@ -167,6 +171,7 @@ Break the Line,loc_talent_adamant_charge_ability_name,C274EA7A,keys
 Breaking Dissent,loc_talent_adamant_damage_vs_staggered_aura,66408E93,keys
 Bring it Down!,loc_talent_veteran_big_game_hunter,3FD6B675,keys
 Bruiser,loc_talent_ogryn_cooldown_on_elite_kills,B17401B3,keys
+Brunt,loc_npc_short_name_quarter_master_a,B6A533DD,keys
 Brunt's Armoury,loc_credits_goods_vendor_title_text,AD1C7251,game_source
 Brute Conscripts,loc_circumstance_live_abhuman_01_title,E85D7D9B,keys
 Brute Conscripts plus Hi-Intensity Hunting Grounds,loc_circumstance_live_abhuman_02_title,F3174893,keys
@@ -310,6 +315,7 @@ Counter-Fire,loc_talent_veteran_combat_ability_ranged_enemies_outlines,7B0F97A3,
 Covering Fire,loc_talent_veteran_replenish_toughness_and_boost_allies,8C3AE6D0,keys
 Coward Culling,loc_talent_ogryn_damage_vs_suppressed,C8846F9A,keys
 "Cower, Miscreants!",loc_talent_adamant_damage_vs_suppressed,966E20B7,keys
+Cragtown,loc_depths_chasm_short,7FB1E4D2,keys
 Cranial Corruption,loc_havoc_enemies_parasite_headshot_name,F4410696,keys
 Credits,loc_credits_view_title,9DE5D2E8,keys
 Creeping Flames,loc_talent_psyker_warpfire_on_shout,E809F338,keys
@@ -345,7 +351,9 @@ Cyber-Mastiff,loc_inventory_title_slot_companion_gear_full,222BE16D,uk_cache
 Daemonhost,loc_breed_display_name_chaos_daemonhost,69FD22D7,keys
 Daemonhost,loc_daemonhost_name,836E5F82,keys
 Daemonhost Gormaggoth,loc_torment_daemonhost_name,FEE78E60,keys
+Dam Workers Hab Delta-9,loc_depths_chasm_full,5A40ABD6,keys
 Damage,loc_stats_display_damage_stat,79671E78,keys
+Damage Dealt,loc_stat_display_damage_dealt,CF6E681B,keys
 Damage delivered to additional Enemies Hit beyond the main target.,loc_stats_display_cleave_damage_stat_desc,31E3E0FC,keys
 Damage inflicted by the powered up/activated attacks on Power Maul and similar power weapons.,loc_stats_display_power_output_desc,9C925059,keys
 Damnation,loc_achievement_difficulty_05,16E29D41,keys
@@ -449,8 +457,12 @@ Ecclesiarch's Call,loc_talent_zealot_zealot_channel_grants_offensive_buff,1627F3
 Effective Range of the weapon before Damage fall-off kicks in.,loc_stats_display_range_stat_desc,E073AF95,keys
 Efficiency,loc_trait_bespoke_first_shot_ammo_cost_reduction,18073829,keys
 Efficient Killer,loc_talent_adamant_exterminator_toughness,4BDA8FE5,keys
+Effluent Processing Hub,loc_lair_full,284ABD80,keys
+Effluent Run-Off Delta-63,loc_nurgle_infested_sewers_full,0C19B8D9,keys
+Effluent Run-Off Gamma-12,loc_cartel_sewers_full,B6FFE77D,keys
 Electrokinetic Force Staff,loc_weapon_family_forcestaff_p3_m1,86C06997,keys
 Elite Resistance,loc_circumstance_min_resistance_max_challenge_title,0944383F,keys
+Elites Killed,loc_stat_display_elites_killed,3B75C3DE,keys
 Empathic Evasion,loc_talent_psyker_dodge_after_crits,390D90D6,keys
 Empowered Psionics,loc_talent_psyker_empowered_ability,9BAC9DAB,keys
 Empyric Resolve,loc_talent_psyker_warp_glass_cannon,81E0C6D7,keys
@@ -464,6 +476,7 @@ Endless Hordes (Pox Gas),loc_circumstance_endless_hordes_gas_title,634EB61B,keys
 Endless Hordes (Shock Troop Gauntlet),loc_circumstance_endless_hordes_waves_of_specials_title,A84C6D3C,keys
 Endless Hordes (Ventilation Purge),loc_circumstance_endless_hordes_ventilation_title,DF135645,keys
 Enduring Faith,loc_talent_zealot_toughness_melee_effectiveness,8EF2C52D,keys
+Enemies Staggered,loc_stat_display_enemies_staggered,E3CFF36F,keys
 "Enemies Within, Enemies Without",loc_talent_zealot_toughness_regen_in_melee,3991C347,keys
 Enemies affected by {talent_name:%s} take {base_damage:%s} Base Damage from all sources.,loc_talent_ogryn_taunt_damage_taken_increase_description,07B19158,keys
 Enemies damaged by you take {damage:%s} more Damage for {duration:%s} seconds.,loc_talent_ogryn_targets_recieve_damage_increase_debuff_desc,9A140089,keys
@@ -726,6 +739,7 @@ Hunting Grounds,loc_circumstance_hunting_grounds_title,4232F7D2,keys
 Hunting Grounds (Power Supply Interruption),loc_circumstance_darkness_hunting_grounds_title,A1AE5FE5,keys
 Hunting Grounds (Stolen Rations),loc_circumstance_stolen_rations_core_hunting_grounds_title,E9AFA025,keys
 Huntsman's Shotgun,loc_weapon_family_shotgun_p3_m1,CCE3CFBE,keys
+Hydro Barrier IX,loc_cartel_outpost_transition_full,A0A7EC33,keys
 I Shall Not Fall,loc_talent_zealot_martyrdom_grants_toughness,92244E63,keys
 "If an Enemy you have Tagged dies, grant {damage:%s} Damage for each stack of Focus Target applied, to you and Allies in Coherency. Lasts {duration:%s}s.",loc_talent_veteran_improved_tag_dead_coherency_bonus_description,DF1F9C55,keys
 "If an Enemy you have Tagged dies, replenish {toughness:%s} Toughness and {stamina:%s} Stamina for each stack of Focus Target applied, to you and Allies in Coherency.",loc_talent_veteran_improved_tag_dead_bonus_description,57DA5A14,keys
@@ -831,6 +845,7 @@ Killing an Enemy grants {crit_chance:%s} Critical Chance for {duration:%s}s. Sta
 Killing an Enemy with Soulblaze has a {chance:%s} chance to grant you a Warp Charge.,loc_talent_psyker_warpfire_generates_souls_desc,D52DAC75,keys
 Killing an enemy by firing both barrels makes your next Reload {reload_speed:%s} faster.,loc_trait_bespoke_reload_speed_on_ranged_weapon_special_kill_desc,8C79E8C3,keys
 Killing an enemy with a Melee Attack grants {damage%s} Ranged Damage and killing an enemy with a Ranged Attack grants {damage%s} Melee Damage. Lasts {duration%s}s.,loc_talent_veteran_kill_grants_damage_to_other_slot_desc,27DB301B,keys
+Kills,loc_stat_display_total_kills,DDDF772F,keys
 "Kills have a {chance:%s} chance to Empower your next Blitz.
 
 Empowered {blitz_one:%s}:
@@ -1112,7 +1127,10 @@ Mobile Emplacement,loc_talent_ogryn_bracing_reduces_damage_taken,D5FDB21F,keys
 Mobility,loc_stats_display_mobility_stat,5331382B,keys
 Modifiers,loc_item_information_stats_title_modifiers,C1020946,game_source
 Moebian 21st,loc_havoc_armored_infected_name,268056A6,keys
+Moebian VIth Outpost,loc_cartel_outpost_full,FE3647CA,keys
+Moebian VIth Outpost,loc_cartel_outpost_short,46BDC4D0,keys
 Momentum,loc_trait_bespoke_toughness_recovery_on_multiple_hits,E4CB3EFD,keys
+Monstrosities Damage Dealt,loc_stat_display_boss_damage_dealt,40DFFB34,keys
 Monstrosity Hunter,loc_talent_adamant_monster_hunter,BD4A689A,keys
 More Burst Limiter Overrides!,loc_talent_ogryn_increased_leadbelcher_chance,FE93DBDF,keys
 Mortis Trials,loc_horde_title,822EFA13,keys
@@ -1446,6 +1464,7 @@ Restore Settings,loc_popup_header_settings_reset_default,5D5A06FA,keys
 Restoring Faith,loc_talent_zealot_heal_damage_taken,A90F2F4A,keys
 Retaliatory Force,loc_talent_adamant_perfect_block_damage_boost,70A444B4,keys
 Retributor's Stance,loc_talent_zealot_quickness_toughness_per_stack,AF56F063,keys
+Revives,loc_stat_display_revives,17A067E9,keys
 Right,loc_alias_view_right,1E65F6C3,game_source
 Right Arrow,loc_keyboard_input_arrow_right,40B9D1F9,keys
 Righteous Warrior,loc_talent_zealot_fanatic_rage_improved,4AE53808,keys
@@ -1478,6 +1497,7 @@ Sanctuary,loc_talent_psyker_force_field_grants_toughness,E330A9D7,keys
 Sapper Shovel,loc_weapon_family_combataxe_p3_m1,57378755,keys
 Sapper Shovel,loc_weapon_family_combataxe_p3_m2,38028D86,keys
 Sapper Shovel,loc_weapon_family_combataxe_p3_m3,977C80DD,keys
+Saves,loc_stat_display_saves,41D651CB,keys
 Savvy Operator,loc_achievement_missions_broker_2_objective_1_name,5D87A2C5,uk_cache
 Scab,loc_contract_task_enemy_type_renegade,55BFE926,game_source
 Scab Bomber,loc_breed_display_name_renegade_grenadier,5749EE30,keys
@@ -1578,6 +1598,7 @@ Spearhead Boltgun,loc_weapon_family_bolter_p1_m2,F242B722,keys
 Special Action,loc_weapon_action_title_special,C9B65577,keys
 Special Attacks gain {stagger:%s} Stagger and ignore Hit Mass Bonus from Armour.,loc_trait_bespoke_pass_trough_armor_on_weapon_special_and_stagger_desc,FECA3F1B,keys
 Special Melee Attack,loc_weapon_special_special_attack,E84887C6,keys
+Specialists Killed,loc_stat_display_specials_killed,DF0AE4B0,keys
 Spending Stamina replenishes {toughness:%s} Toughness over {time:%s}s.,loc_talent_adamant_stamina_regens_toughness_description,557D9510,keys
 Spillway,loc_mission_name_spillway,6C09CE95,keys
 Spreadshot,loc_weapon_keyword_spread_shot,01C22E5D,keys
@@ -1696,7 +1717,9 @@ The Bigger they Are ...,loc_talent_ranger_volley_fire_big_game_hunter,10C563CD,k
 The Blight Spreads,loc_havoc_enemies_corrupted_name,F9D86580,keys
 The Carnival,loc_zone_name_carnival_short,3D37812E,keys
 The Commodore's Vestures,loc_store_view_display_name,FA52F78B,keys
+The Dam,loc_cartel_outpost_transition_short,224E6AF5,keys
 The Depths,loc_zone_name_depths_short,E9030EFC,keys
+The Drain,loc_nurgle_infested_sewers_short,E1357FF3,keys
 The Emperor's Bullet,loc_talent_zealot_improved_melee_after_no_ammo,A4750ADF,keys
 The Emperor's Fading light (I),loc_havoc_increased_difficulty_name,9B1EE585,keys
 The Emperor's Fading light (II),loc_havoc_highest_difficulty_name,8478BC56,keys
@@ -1710,11 +1733,14 @@ The Master's Retribution,loc_talent_zealot_3_tier_3_ability_1,8FB484CA,keys
 The Meat Grinder,loc_training_grounds_view_shooting_range_text,A984BE85,keys
 The Mourningstar,loc_hud_presence_hub,86F8A7A4,keys
 The Orthus Offensive,loc_mission_name_km_enforcer_twins,DF8B9524,keys
+The Pipes,loc_cartel_sewers_short,00317DC0,keys
+The Psyker's Lair,loc_lair_short,5DF87E30,keys
 The Psykhanium,loc_hud_presence_training_grounds,873AE04F,keys
 The Psykhanium,loc_training_grounds_view_display_name,0EDD1295,keys
 The Quickening,loc_talent_psyker_aura_reduced_ability_cooldown,B6A94636,keys
 The Range and Size of the Flame. Affects how many enemies are Hit and Suppressed.,loc_stats_display_flame_size_stat_desc,7B4A0298,keys
 The Road to No Man's Land,loc_nomansland_display_name,58C88D83,keys
+The Sopp,loc_dam_transition_short,136CAC7E,keys
 The Tancred Bastion,loc_mission_name_prologue,72809F9F,keys
 The Theatre of Castigation,loc_horde_island_rooftops_name,1908265E,keys
 The Theatre of Humility,loc_horde_island_void_name,343AC889,keys
@@ -1776,6 +1802,7 @@ Thugshot,loc_weapon_family_ogryn_thumper_p1_m3,391E80FA,keys
 Thunder Hammer,loc_weapon_family_thunderhammer_2h_p1_m1,E6918022,keys
 Thunder Hammer,loc_weapon_family_thunderhammer_2h_p1_m2,0C91039C,keys
 Thy Wrath be Swift,loc_talent_zealot_movement_speed_on_damaged,2B1F657C,keys
+Time In Coherency,loc_stat_display_time_in_coherency,51F3EDEB,keys
 To the Bitter End,loc_talent_zealot_3_tier_3_ability_3,64F5F85B,keys
 Too Stubborn to Die,loc_talent_ogryn_toughness_gain_increase_on_low_health,70213004,keys
 Torrent,loc_weapon_keyword_spray_n_pray,2300FF0F,keys
@@ -1897,6 +1924,7 @@ Warp Speed,loc_ability_psyker_overcharge_movement_speed,EDE1E14C,keys
 Warp Splitting,loc_talent_psyker_cleave_from_peril,EF20ACCE,keys
 Warp Unbound,loc_talent_psyker_overcharge_infinite_casting,E3743A11,keys
 Warren 6-19,loc_mission_name_cm_raid,84189FDD,keys
+Weak Spot Hits,loc_stat_display_headshots,D795FCDB,keys
 Weakspot,loc_weapon_details_weakspot,3A8527D3,game_source
 "Weakspot Kills count as {second:%s}s spent in {talent_name:%s}. 
 
@@ -1941,6 +1969,7 @@ Replenishes one pulse every {cooldown:%s}s while not wielded. Stacks {stacks:%s}
 Wildfire,loc_talent_psyker_warpfire_spread,19F630C7,keys
 Withering Fire,loc_talent_adamant_damage_after_reloading,8AE492A7,keys
 Won't Give In,loc_talent_ogryn_tanky_with_downed_allies,229FA257,keys
+Worker Hab Phi-Gamma-4,loc_dam_transition_full,E1906CD2,keys
 Wounds,loc_player_stats_element_stat_title_wounds,F38B05D6,uk_cache
 Writ of Execution,loc_talent_adamant_stance_elite_kills_stack_damage,E294998F,keys
 Writ of Judgement,loc_talent_adamant_bullet_rain_ability,E22C0CC7,keys
