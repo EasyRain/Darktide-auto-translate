@@ -20,7 +20,11 @@ from pathlib import Path
 
 DOC = Path(r"D:\DshWorkSpace\Darktide\projects\auto_translate\07-release-testing.md")
 LIMIT = 255
-HEADING = re.compile(r"^## ([0-9]+\.[0-9]+\.[0-9]+) Nexus 更新日志（(\d+)/255[^）]*）\s*$", re.M)
+HEADING = re.compile(r"^## ([0-9]+\.[0-9]+\.[0-9]+) Nexus (?:更新日志|文件说明)（(\d+)/255[^）]*）\s*$", re.M)
+# The detailed changelog goes in the changelog tab: a player has to open it, so it may be long - but it
+# is still English, still player-facing, and its stated length still has to match.
+DETAIL_HEADING = re.compile(r"^## ([0-9]+\.[0-9]+\.[0-9]+) Nexus changelog \(detailed, (\d+) chars[^)]*\)\s*$", re.M)
+DETAIL_LIMIT = 4000
 BLOCK = re.compile(r"```\s*\n(.*?)\n```", re.S)
 
 
@@ -36,12 +40,40 @@ def entries(text: str) -> list[dict]:
     return out
 
 
+def newest(entries_list: list[dict]) -> dict | None:
+    """The highest version, not the first in the file: the sections are in no particular order."""
+    if not entries_list:
+        return None
+    return max(entries_list, key=lambda e: tuple(int(part) for part in e["version"].split(".")))
+
+
+def audit_detail(text: str) -> list[str]:
+    """The detailed changelog: same rules, a much larger limit."""
+    problems = []
+    match = DETAIL_HEADING.search(text)
+    if not match:
+        return ["no detailed changelog heading found in %s" % DOC.name]
+    block = BLOCK.search(text, match.end())
+    if not block:
+        return ["the detailed changelog heading has no fenced block"]
+    body = block.group(1).strip()
+    if len(body) != int(match.group(2)):
+        problems.append("detailed %s: the heading says %s characters, the text is %d"
+                        % (match.group(1), match.group(2), len(body)))
+    if len(body) > DETAIL_LIMIT:
+        problems.append("detailed %s: %d characters is past the %d limit"
+                        % (match.group(1), len(body), DETAIL_LIMIT))
+    if body and not body.isascii():
+        problems.append("detailed %s: not ASCII" % match.group(1))
+    return problems
+
+
 def audit(text: str) -> list[str]:
     problems = []
     found = entries(text)
     if not found:
         return ["no changelog heading found in %s" % DOC.name]
-    newest = found[0]
+    newest = max(found, key=lambda e: tuple(int(p) for p in e["version"].split(".")))
     for entry in found:
         if entry["length"] != entry["stated"]:
             problems.append("%s: the heading says %d characters, the text is %d"
@@ -60,7 +92,7 @@ def selftest() -> int:
         ("## 0.9.9 Nexus 更新日志（99/255）\n\n```\nshort text\n```\n", 1, "wrong stated length"),
         ("## 0.9.9 Nexus 更新日志（%d/255）\n\n```\n%s\n```\n" % (LIMIT + 5, "x" * (LIMIT + 5)), 1,
          "over the limit"),
-        ("## 0.9.9 Nexus 更新日志（4/255）\n\n```\n汉字\n```\n", 1, "not English"),
+        ("## 0.9.9 Nexus 更新日志（2/255）\n\n```\n汉字\n```\n", 1, "not English"),
     ]
     failures = 0
     for text, expected, label in cases:
@@ -81,6 +113,15 @@ def main() -> int:
 
     text = io.open(DOC, encoding="utf-8").read()
     problems = audit(text)
+    # The detailed changelog is a newer convention: it is required for the newest entry only, because the
+    # entries before 0.3.8 were written when the file description was the only text.
+    top = newest(entries(text))
+    detail = DETAIL_HEADING.search(text)
+    if top and (not detail or detail.group(1) != top["version"]):
+        problems.append("the newest version %s has no detailed changelog (see DETAIL_HEADING)"
+                        % top["version"])
+    else:
+        problems += audit_detail(text)
     if problems:
         for problem in problems:
             print("  FAIL %s" % problem)
