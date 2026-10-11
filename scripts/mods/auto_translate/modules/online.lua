@@ -2169,6 +2169,7 @@ local function dispatch(mod)
             -- token list and every part can be restored independently. The model only
             -- has to copy the markers it is given.
             local masked, item_tokens = glossary.mask(one.en, M.state.lang, true)
+            masked, item_tokens = relax_mask(masked, item_tokens, one.relax)
             parts[i] = masked
             tokens[i] = item_tokens
             joined[i] = string.format("[%d] %s", i, masked)
@@ -3645,11 +3646,15 @@ function M.update(mod, dt)
             if result == 0 and http_code >= 200 and http_code < 300 then
                 local len = len_buf[0]
                 local body = len > 0 and ffi.string(body_buf, len) or ""
-                local ok, why, transport = handle_response(mod, req, body)
+                -- The fourth value is the refusal code ("tokens", "lines", "unsafe", ...). Dropping it
+                -- here was a real bug: fail_item() decides whether a lost placeholder is worth another
+                -- provider, and whether to retry with that term sent as plain text, from exactly that
+                -- code - so on this path both sat dead and the same provider repeated the same mistake.
+                local ok, why, transport, code = handle_response(mod, req, body)
                 if ok then
                     note_success(mod, req)
                 else
-                    fail_item(mod, req, why, 0, transport)
+                    fail_item(mod, req, why, 0, transport, code)
                 end
             elseif result == 0 then
                 -- completed, but the service answered with an error status
