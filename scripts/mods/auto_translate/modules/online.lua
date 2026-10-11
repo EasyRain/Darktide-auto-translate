@@ -536,10 +536,15 @@ function M.text_is_safe(source, translated, lang)
     -- "source 2, text 1", and in a tooltip that means two paragraphs run together. Refusing it parks
     -- the key after the usual three tries and the English original is shown instead, which at least
     -- keeps its layout.
+    -- Line breaks may not be LOST, but an extra one is harmless: a service that wraps a long line itself
+    -- only changes where the text folds, while a missing break runs two paragraphs together (which is what
+    -- the guard was written for - measured: bing turned a tooltip's blank line into a single break).
+    -- Sampled against the live service, one of the RGB tooltips came back with five breaks for four, and
+    -- refusing that turned a cosmetic fold into a parked key.
     local src_breaks = select(2, source:gsub("\n", ""))
     local dst_breaks = select(2, translated:gsub("\n", ""))
-    if src_breaks ~= dst_breaks then
-        return false, string.format("the line breaks differ (source %d, translation %d)",
+    if dst_breaks < src_breaks then
+        return false, string.format("the translation lost line breaks (source %d, translation %d)",
                                     src_breaks, dst_breaks)
     end
 

@@ -21,6 +21,11 @@
 local here = arg[0]:match("^(.*)[/\\][^/\\]*$") or "."
 local modules = here .. "/../scripts/mods/auto_translate/modules"
 local OUT = here .. "/smoke_bing.out.txt"
+for i = 1, #arg do
+    if arg[i] == "--out" and arg[i + 1] then
+        OUT = arg[i + 1]
+    end
+end
 
 local ffi = require("ffi")
 ffi.cdef[[ void Sleep(unsigned long); ]]
