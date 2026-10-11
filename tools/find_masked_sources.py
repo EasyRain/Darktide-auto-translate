@@ -19,6 +19,9 @@ WANT = [
     ("AutoMark", "companion_distance_threshold_tooltip"),
     ("AutoMark", "companion_mark_max_distance_tooltip"),
     ("AutoMark", "companion_range_limitation_tooltip"),
+    ("AutoMark", "companion_cancel_mark_breed_distance_threshold_description"),
+    ("AutoMark", "servo_skull_lose_sight_tolerance_tooltip"),
+    ("AutoMark", "servo_skull_mark_keybind_description"),
 ]
 
 

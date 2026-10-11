@@ -83,51 +83,105 @@ Cancel the ⟦2⟧ mark when the distance between you and your ⟦2⟧ exceeds y
 
 ## AutoMark:companion_mark_max_distance_tooltip
 
-source (186 bytes)
+source (38 bytes)
 
 ```
-Restrict the maximum distance between {#color(255,170,30)}player{#reset()} and a target that can be marked by the Companion Auto-Mark.
-
-Set to {#color(255,170,30)}0{#reset()} to disable.
+Restrict the maximum distance between 
 ```
 
-masked (6 placeholders)
+masked (0 placeholders)
 
 ```
-Restrict the maximum distance between ⟦0⟧player⟦1⟧ and a target that can be marked by the ⟦2⟧ Auto-Mark.⟦4⟧⟦5⟧Set to ⟦0⟧0⟦1⟧ to ⟦3⟧.
+Restrict the maximum distance between 
 ```
 
 | placeholder | stands for |
 |---|---|
-| `⟦0⟧` | {#color(255,170,30)} |
-| `⟦1⟧` | {#reset()} |
-| `⟦2⟧` | コンパニオン |
-| `⟦3⟧` | 無効化 |
-| `⟦4⟧` | (line break) |
-| `⟦5⟧` | (line break) |
 
 ## AutoMark:companion_range_limitation_tooltip
 
-source (194 bytes)
+source (43 bytes)
 
 ```
-Restrict the maximum distance between your {#color(255,170,30)}companion{#reset()} and a target that can be marked by the Companion Auto-Mark.
+Restrict the maximum distance between your 
+```
+
+masked (0 placeholders)
+
+```
+Restrict the maximum distance between your 
+```
+
+| placeholder | stands for |
+|---|---|
+
+## AutoMark:companion_cancel_mark_breed_distance_threshold_description
+
+source (181 bytes)
+
+```
+Set Auto Cancel Cyber-Mastiff Mark Distance Threshold for this enemy.
 
 Set to {#color(255,170,30)}0{#reset()} to disable.
+Does not affect {#color(255,170,30)}manual{#reset()} marks.
 ```
 
-masked (6 placeholders)
+masked (7 placeholders)
 
 ```
-Restrict the maximum distance between your ⟦0⟧⟦2⟧⟦1⟧ and a target that can be marked by the ⟦2⟧ Auto-Mark.⟦4⟧⟦5⟧Set to ⟦0⟧0⟦1⟧ to ⟦3⟧.
+Set Auto Cancel ⟦2⟧ Mark Distance Threshold for this enemy.⟦4⟧⟦5⟧Set to ⟦0⟧0⟦1⟧ to ⟦3⟧.⟦6⟧Does not affect ⟦0⟧manual⟦1⟧ marks.
 ```
 
 | placeholder | stands for |
 |---|---|
 | `⟦0⟧` | {#color(255,170,30)} |
 | `⟦1⟧` | {#reset()} |
-| `⟦2⟧` | コンパニオン |
+| `⟦2⟧` | サイバーマスティフ |
 | `⟦3⟧` | 無効化 |
 | `⟦4⟧` | (line break) |
 | `⟦5⟧` | (line break) |
+| `⟦6⟧` | (line break) |
+
+## AutoMark:servo_skull_lose_sight_tolerance_tooltip
+
+source (123 bytes)
+
+```
+Cancel Servo-Skull marks when your Servo-Skull loses sight of the target for longer than your selected time (in seconds).
+
+
+```
+
+masked (2 placeholders)
+
+```
+Cancel Servo-Skull marks when your Servo-Skull loses sight of the target for longer than your selected time (in seconds).⟦0⟧⟦1⟧
+```
+
+| placeholder | stands for |
+|---|---|
+| `⟦0⟧` | (line break) |
+| `⟦1⟧` | (line break) |
+
+## AutoMark:servo_skull_mark_keybind_description
+
+source (128 bytes)
+
+```
+Dedicated key for Servo-Skull Mark. As Skitarii, you can now use both normal enemy mark and Servo-Skull mark at the same time.
+
+
+```
+
+masked (3 placeholders)
+
+```
+Dedicated key for Servo-Skull Mark. As ⟦0⟧, you can now use both normal enemy mark and Servo-Skull mark at the same time.⟦1⟧⟦2⟧
+```
+
+| placeholder | stands for |
+|---|---|
+| `⟦0⟧` | スキタリ |
+| `⟦1⟧` | (line break) |
+| `⟦2⟧` | (line break) |
 

@@ -2424,6 +2424,15 @@ end
 function accept_translation(mod, req, raw, src)
     local item = req.item
 
+    -- An empty answer is its own refusal, and it has to be checked before the placeholder count.
+    -- Measured: yandex returned "" for one string and the log said "5 placeholder(s) missing", which sent
+    -- a reader hunting for a token problem - the same masked text through the same endpoint came back
+    -- with every placeholder intact. The count is a consequence, not the cause.
+    if raw == nil or raw:match("^%s*$") then
+        util.log(mod, "%s: the reply was empty", tostring(req.provider or "?"))
+        return false, "the service returned an empty answer", false, "empty"
+    end
+
     local restored, missing, missing_indices = glossary.unmask(raw, req.tokens, req.masked)
     req.missing = missing_indices
     if missing and missing > 0 then
@@ -2695,6 +2704,7 @@ M.is_fully_protected_for_tests = is_fully_protected
 -- wording. Anything not recognised is one of those service or network messages.
 local REASON_KEYS = {
     { "empty translation", "hud_reason_empty" },
+    { "returned an empty answer", "hud_reason_empty" },
     { "the model could not represent", "hud_reason_unknown_tokens" },
     { "the translation dropped most of the text", "hud_reason_too_short" },
     { "the line breaks differ", "hud_reason_line_breaks" },
