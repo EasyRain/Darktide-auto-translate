@@ -375,7 +375,7 @@ end
 
 -- Puts the official terms back. Returns text and the number of tokens that went
 -- missing (a translator may drop a placeholder; the caller can then discard it).
-function M.unmask(text, tokens)
+function M.unmask(text, tokens, expected)
     if type(text) ~= "string" then
         return text, 0
     end
@@ -391,10 +391,24 @@ function M.unmask(text, tokens)
         return PLACEHOLDER_OPEN .. "%s*" .. tostring(index) .. "%s*" .. PLACEHOLDER_CLOSE
     end
 
+    -- Occurrences, not existence, when the masked source is at hand: a term that appears twice shares one
+    -- placeholder index, so a service that dropped *one* of the two used to pass the existence test and
+    -- the loss was stored. Measured shape: "Restrict the distance between your {companion} and ... marked
+    -- by the {companion} Auto-Mark".
+    local function occurrences(haystack, pattern)
+        local _, count = haystack:gsub(pattern, "")
+        return count
+    end
+
     local missing = 0
     local missing_indices = {}
     for i = 1, #tokens do
-        if not text:find(placeholder_pattern(i - 1)) then
+        local pattern = placeholder_pattern(i - 1)
+        local wanted = 1
+        if type(expected) == "string" and expected ~= "" then
+            wanted = occurrences(expected, pattern)
+        end
+        if occurrences(text, pattern) < wanted then
             missing = missing + 1
             missing_indices[#missing_indices + 1] = i
         end

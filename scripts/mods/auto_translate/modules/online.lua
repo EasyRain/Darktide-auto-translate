@@ -2420,7 +2420,7 @@ end
 function accept_translation(mod, req, raw, src)
     local item = req.item
 
-    local restored, missing, missing_indices = glossary.unmask(raw, req.tokens)
+    local restored, missing, missing_indices = glossary.unmask(raw, req.tokens, req.masked)
     req.missing = missing_indices
     if missing and missing > 0 then
         -- What the service actually said, so a refusal can be diagnosed from the log instead of
@@ -3092,9 +3092,9 @@ end
 --     *better* than a solo request, never worse, so an unchanged part is refused here
 --     and the item is retried on its own.
 local function batch_part_refusal(item, masked, part, tokens)
-    local restored, missing = glossary.unmask(part, tokens)
+    local restored, missing = glossary.unmask(part, tokens, masked)
     if missing and missing > 0 then
-        return string.format("%d glossary term(s) were dropped", missing)
+        return string.format("%d masked placeholder(s) were dropped", missing)
     end
     if restored == masked then
         return "the batch left it unchanged"
@@ -3630,7 +3630,7 @@ function M.update(mod, dt)
                         -- otherwise the chat shows the placeholders, which look like garbage.
                         local answer = ffi.string(out_buf, n)
                         if req.tokens and #req.tokens > 0 then
-                            local restored, missing = glossary.unmask(answer, req.tokens)
+                            local restored, missing = glossary.unmask(answer, req.tokens, req.masked)
                             answer = restored
                             if missing and missing > 0 then
                                 answer = mod:localize("custom_test_placeholder_lost", answer, missing)

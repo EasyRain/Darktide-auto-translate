@@ -40,6 +40,7 @@ $checks = @(
     @{ name = 'langs';     hint = 'the fixes, in all 12 languages';       cmd = { & $lua tools\check_languages.lua } },
     @{ name = 'layout';    hint = 'what the options screen will show';     cmd = { & $lua tools\check_options_layout.lua } },
     @{ name = 'stores';    hint = 'the played-with stores are clean';      cmd = { & $lua tools\check_stores.lua } },
+    @{ name = 'glossary'; hint = 'masking, unmasking and the occurrence rule'; cmd = { & $lua tools\smoke_glossary.lua } },
     @{ name = 'core';      hint = 'at_cli selftest (native core)';         cmd = { & bin\at_cli.exe selftest } },
     @{ name = 'fixtures';  hint = 'real captured provider responses';      cmd = { cmd /c tests\run_fixtures.bat } }
     @{ name = 'model';    hint = 'the offline engine runs through the module (skips without the model)'; cmd = { & $lua tools\smoke_local_model.lua } }
