@@ -490,18 +490,58 @@ end
 -- they came back refused instead - the markup placeholders were dropped - which cost requests on
 -- the tier that is rate limited for no answer at all. Left in English, like the swatches.
 --
--- Both patterns are anchored and the text between the tags may not contain braces, so a string
--- with two styled runs ("{#color(...)}Fire{#reset()} and {#color(...)}Ice{#reset()}") is real
--- interface text and is still translated; only a single run counts. The "Translate colour names"
--- option takes them on anyway.
-local COLOUR_ENTRY = "^{#color%(%d+,%d+,%d+%)}[^{}]*{#reset%(%)}$"
-local FONT_ENTRY = "^{#font%([^)]+%)}[^{}]*{#reset%(%)}$"
+-- A colour or font tag does not by itself make a string an asset name. Two questions decide it, and the
+-- user asked the second one directly ("will a text that merely mentions colours be skipped too?"):
+--
+--   * the whole-string single-run shapes (the swatch and font-picker entries - 1300 of 1356 keys on a
+--     live install) are skipped only when what they wrap is a *name*: a few words and no sentence
+--     punctuation. "{#color(...)}Rakarth Flesh{#reset()}" is a swatch; a colour-styled sentence is
+--     interface text and is translated;
+--   * a tag anywhere in a longer string is skipped only when nothing but the styled run is there -
+--     a list like "{#color(...)}Fire{#reset()} and {#color(...)}Ice{#reset()}" is translated.
+--
+-- Everything else goes to the service, and if it mangles the markup anyway the refusal budget handles
+-- that one item without touching the run (see fail_item). The "Translate colour names" option takes all
+-- of them on regardless.
+local COLOUR_TAG = "{#color%(%d+,%d+,%d+%)"
+local FONT_TAG = "{#font%([^)]+%)"
+local MARKUP_ANY = "{[#%w][^{}]*}"
+
+-- True when the run at `pattern` wraps a name rather than a sentence.
+local function wraps_a_name(text, pattern)
+    local inside = text:match(pattern)
+    if not inside then
+        return false
+    end
+    inside = inside:gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
+    local words = 0
+    for _ in inside:gmatch("%S+") do
+        words = words + 1
+    end
+    return words > 0 and words <= 4 and inside:find("[%.%?!:]") == nil
+end
 
 local function is_asset_entry(text)
     if type(text) ~= "string" then
         return false
     end
-    return text:match(COLOUR_ENTRY) ~= nil or text:match(FONT_ENTRY) ~= nil
+    if wraps_a_name(text, "^{#color%(%d+,%d+,%d+%)}([^{}]*){#reset%(%)}$") then
+        return true
+    end
+    if wraps_a_name(text, "^{#font%([^)]+%)}([^{}]*){#reset%(%)}$") then
+        return true
+    end
+    if text:find(COLOUR_TAG) == nil and text:find(FONT_TAG) == nil then
+        return false
+    end
+    -- A tag in a longer string: what is left when the tags are taken out decides it. Prose outside the
+    -- run means interface text; nothing outside means the run is the whole string, and then its content
+    -- has to look like a name for it to be an asset.
+    local outside = text:gsub(MARKUP_ANY, ""):gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
+    if outside ~= "" then
+        return false
+    end
+    return wraps_a_name(text, "^{[#%w][^{}]*}(.-){#reset%(%)}$")
 end
 
 -- Exposed so the smoke test can pin the two shapes that are skipped and the two that are not.
@@ -1800,7 +1840,16 @@ function M.start(mod, report, lang)
         if not entry.skipped and #entry.pending > 0 then
             for _, item in ipairs(entry.pending) do
                 if not take_colours and is_asset_entry(item.en) then
-                    -- Swatch and font names: left in English on purpose (see the patterns above).
+                    -- Swatch and font names: left in English on purpose (see the patterns above). A
+                    -- refusal record from an earlier run goes with it: this string is never sent again,
+                    -- so an entry saying "an engine refused it" would sit in the file - and in the
+                    -- stores check - for good.
+                    local data = data_for(entry.name, lang)
+                    if data and type(data.entries) == "table" and
+                        store.parked_for(data, item.key, item.hash) then
+                        data.entries[item.key] = nil
+                        mark_dirty(entry.name, lang)
+                    end
                     colours = colours + 1
                 elseif translatable(item.en, lang) then
                     q_push({

@@ -271,8 +271,20 @@ check("asset: plain interface text is untouched",
     is_asset("Reload Speed"), false)
 check("asset: an unstyled colour name is not an asset entry either",
     is_asset("Rakarth Flesh"), false)
-check("asset: a font tag that is not the whole string is not skipped",
+-- A styled *name* with nothing around it is still skipped (that is the swatch shape).
+check("asset: a colour tag wrapping a single name is skipped",
+    is_asset("{#color(14,127,120)}Cragtown{#reset()}"), true)
+-- What the user asked about: a sentence that merely *carries* colour must be translated, not skipped.
+check("asset: a coloured sentence is translated, not skipped",
+    is_asset("{#color(255,0,0)}Warning: the reactor is failing{#reset()}"), false)
+check("asset: a coloured sentence with no punctuation is still a sentence",
+    is_asset("{#color(255,0,0)}your team is going down fast{#reset()}"), false)
+check("asset: prose outside the styled run is translated too",
+    is_asset("{#color(14,127,120)}Citadel Coelia Greenshade{#reset()} is a colour"), false)
+check("asset: a font tag that is not the whole string, with prose, is translated",
     is_asset("{#font(arial)}Reload Speed{#reset()} now"), false)
+check("asset: a tag with no colour or font function is not a reason to skip",
+    is_asset("{#reset()}Reload Speed"), false)
 -- The trade this rule makes, stated rather than discovered later: a whole string wrapped in one
 -- font run is treated as the font's name even if the text inside it happens to be a label. That
 -- is the same trade the colour rule has always made (a label wrapped in a colour tag is skipped
