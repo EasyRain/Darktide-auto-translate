@@ -1323,6 +1323,9 @@ local FLUSH_EVERY_ITEMS = 20
 -- relax_mask). Two: the first retry relaxes the term a service kept losing, the second covers a
 -- different term going missing in the same string; after that the refusal budget has it.
 local RELAX_TRIES = 2
+
+-- How many providers one item may try before it is parked (see fail_item).
+local PROVIDER_TRIES_PER_ITEM = 3
 local FLUSH_EVERY_SECONDS = 30
 local flushed_done = 0
 local next_flush = 0
@@ -2980,8 +2983,15 @@ function fail_item(mod, req, reason, http_status, transport, code, quiet_provide
         end
     end
 
+    -- A lost placeholder is engine-specific, so another provider is worth one try - but only one, and a
+    -- few in total: measured, one AutoMark string walked bing (1 token lost), yandex (empty answer) and
+    -- two google hosts that time out on that network, so the HUD sat at 33 of 2563 while nothing came
+    -- back. Three providers is enough to find one that keeps the tokens; after that the item is parked
+    -- like any other refusal and the queue moves on.
+    local tier_tries = (item.tier_tries or 0) + 1
+    item.tier_tries = tier_tries
     local next_index = nil
-    if worth_another_provider(transport, code) then
+    if worth_another_provider(transport, code) and tier_tries <= PROVIDER_TRIES_PER_ITEM then
         local index = item.provider_index or 1
         while item.providers[index + 1] do
             index = index + 1

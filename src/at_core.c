@@ -24,7 +24,12 @@
 // the session could never be read. The cap is applied by clamping the caller's buffer, so this
 // constant and BODY_CAP in modules/online.lua have to agree; the memory is that buffer, once.
 #define AT_MAX_BODY (1536 * 1024)
-#define AT_TIMEOUT_MS 20000
+// the four phases share this value, so an unreachable host costs up to four times it. Measured
+// from a real session: google_clients5 (blocked on that network) burned 63 s on one string and
+// the run looked stopped at 33 of 2563. Eight seconds is still generous for a translate request
+// - measured answers arrive in ~1 s (bing) and 3.2 s (yandex, 2989 characters) - and it makes a
+// dead endpoint cost ~24 s instead of ~80.
+#define AT_TIMEOUT_MS 8000
 
 typedef struct Job {
     int id;
