@@ -406,6 +406,15 @@ local MAX_REFUSALS = 3
  -- rule tools/check_stores.lua applies to a written store, applied while the answer is still in
  -- hand: the local model prefixes its own index ("[1] 条纹方向"), and 39 of its 165 answers did
  -- on 2026-10-08, so refusing parks the entry instead of showing a number to a player.
+-- Every {...} tag, in order. Compared as a sequence because a tag that comes back *changed* keeps
+-- the count equal, and a changed tag is exactly the case that matters (check_stores.lua makes
+-- the same comparison on a written file).
+local function tag_sequence(text)
+    local out = {}
+    for tag in text:gmatch("{[^{}]*}") do out[#out + 1] = tag end
+    return table.concat(out, "|")
+end
+
 local function bracket_marks(text)
     local out = {}
     for mark in text:gmatch("%[%d+%]") do out[#out + 1] = mark end
@@ -463,6 +472,24 @@ function M.text_is_safe(source, translated, lang)
         if (dst_counts[spec] or 0) ~= count then
             return false, string.format("format placeholder '%s' is missing or changed", spec)
         end
+    end
+
+    -- The two things check_stores.lua calls a broken entry, checked here so one is never written.
+    -- Measured: an AutoMark tooltip with several colour runs was stored with a leftover "\u27e60\u27e7"
+    -- and a tag list that no longer matched its source, so the game showed the placeholder and the
+    -- stores check only found it afterwards. A report is too late; the guard belongs before the write.
+    -- The characters come from glossary; the literals are the fallback so a test double that
+    -- only implements mask/unmask still exercises this guard instead of crashing on it.
+    local open = glossary.placeholder_open and glossary.placeholder_open() or "⟦"
+    local close = glossary.placeholder_close and glossary.placeholder_close() or "⟧"
+    if translated:find(open, 1, true) or translated:find(close, 1, true) then
+        return false, "a mask placeholder was left in the translation"
+    end
+    local src_tags, dst_tags = tag_sequence(source), tag_sequence(translated)
+    if src_tags ~= dst_tags then
+        return false, string.format("the rich-text tags differ (source %s, translation %s)",
+                                    src_tags ~= "" and src_tags or "none",
+                                    dst_tags ~= "" and dst_tags or "none")
     end
 
     return true
@@ -2650,6 +2677,8 @@ local REASON_KEYS = {
     { "the model could not represent", "hud_reason_unknown_tokens" },
     { "the translation dropped most of the text", "hud_reason_too_short" },
     { "the line breaks differ", "hud_reason_line_breaks" },
+    { "a mask placeholder was left", "hud_reason_placeholders" },
+    { "the rich-text tags differ", "hud_reason_placeholders" },
     { "stray '%'", "hud_reason_placeholders" },
     { "format placeholder", "hud_reason_placeholders" },
     { "glossary term", "hud_reason_glossary" },

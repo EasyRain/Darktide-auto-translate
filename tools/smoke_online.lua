@@ -72,6 +72,9 @@ local fake_glossary = {
         end)
         return restored, missing
     end,
+    -- the characters modules/glossary.lua uses, so the guards can be exercised
+    placeholder_open = function() return "⟦" end,
+    placeholder_close = function() return "⟧" end,
 }
 online.init(nil, nil, fake_glossary, nil, nil)
 
@@ -598,6 +601,20 @@ check("asset: but a two-run list is still translated",
     is_asset("{#color(1,2,3)}Fire{#reset()} and {#color(4,5,6)}Ice{#reset()}"), false)
 check("asset: and a single coloured sentence is still translated",
     is_asset("{#color(255,0,0)}Warning: the reactor is failing{#reset()}"), false)
+
+
+-- The two things check_stores.lua calls a broken entry, as guards. Measured: an AutoMark tooltip
+-- with several colour runs was stored with a leftover placeholder and a changed tag list, and the
+-- game showed it.
+local safe_ph = online.text_is_safe("Run {#color(1,2,3)}fast{#reset()}",
+    "走 {#color(1,2,3)}快{#reset()} ⟦0⟧")
+check("text: a leftover mask placeholder is refused", safe_ph, false)
+local safe_tag = online.text_is_safe("Run {#color(1,2,3)}fast{#reset()}",
+    "走 {#color(9,9,9)}快{#reset()}")
+check("text: a changed rich-text tag is refused", safe_tag, false)
+local safe_tags = online.text_is_safe("Run {#color(1,2,3)}fast{#reset()}",
+    "走 {#color(1,2,3)}快{#reset()}")
+check("text: identical rich-text tags are fine", safe_tags, true)
 
 print(string.format("%d failure(s) in total", failures))
 
