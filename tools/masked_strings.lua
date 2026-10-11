@@ -56,7 +56,7 @@ for _, want in ipairs(sources) do
     want.en = store_en(want.mod, want.key) or want.en
 end
 
-local out = io.open(here .. "/masked-strings.md", "w")
+local out = io.open(here .. "/masked-strings.md", "wb")
 out:write("# The exact masked text sent for the refused keys\n\n")
 out:write("Paste a masked line into a service and count the `" .. OPEN .. "n" .. CLOSE .. "` tokens that survive.\n")
 out:write("Each one stands for text the mod puts back afterwards; a missing token is a refusal.\n\n")
