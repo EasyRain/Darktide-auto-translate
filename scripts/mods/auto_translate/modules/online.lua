@@ -2799,14 +2799,24 @@ function fail_item(mod, req, reason, http_status, transport, code, quiet_provide
         note_provider_success(req.provider)
     end
 
-    -- advance to the next provider that this session has not given up on
+    -- advance to the next provider that this session has not given up on.
+    --
+    -- Only a transport failure is worth another provider: the connection failed, and another host may
+    -- well answer. A refusal is different - the answer *arrived* and our own guards rejected it (the
+    -- service dropped masked glossary terms, mangled the [n] markers, lost most of the text). Asking
+    -- five providers the same question about the same string cannot change that; it only spends a
+    -- request (and possibly a timeout) per provider while the run produces nothing. Reported from a
+    -- real session: a batch whose reply dropped 22 terms made the run look stopped at 13 of 2320,
+    -- because the item walked the whole tier and the free-service check could never get a turn.
     local next_index = nil
-    local index = item.provider_index or 1
-    while item.providers[index + 1] do
-        index = index + 1
-        if not disabled_providers[item.providers[index]] then
-            next_index = index
-            break
+    if transport then
+        local index = item.provider_index or 1
+        while item.providers[index + 1] do
+            index = index + 1
+            if not disabled_providers[item.providers[index]] then
+                next_index = index
+                break
+            end
         end
     end
 
