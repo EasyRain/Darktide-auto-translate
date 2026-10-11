@@ -1,5 +1,0 @@
-strings seen: 0  |  skipped as asset: 0  |  sent: 0  |  of the sent, still carry a tag: 0
-
-== files with something to say (tagged_but_sent desc) ==
-
-== still sent and tagged (first 60) ==
