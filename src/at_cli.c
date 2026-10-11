@@ -262,7 +262,21 @@ static int cmd_selftest(void)
                 !at_online_body("google_gtx", "en", "ja", "Hi", path, (int)sizeof(path)));
     expect_true("deepl auth header",
                 at_online_headers("deepl", "KEY:fx", path, (int)sizeof(path)) &&
-                    strcmp(path, "Authorization: DeepL-Auth-Key KEY:fx\r\n") == 0);
+                    strstr(path, "User-Agent: ") == path &&
+                    strstr(path, "Authorization: DeepL-Auth-Key KEY:fx\r\n") != NULL);
+    expect_true("deepl is told we are Chrome",
+                at_online_headers("deepl", "KEY:fx", path, (int)sizeof(path)) &&
+                    strstr(path, "Chrome/") != NULL && strstr(path, "Edg/") == NULL);
+    expect_true("bing is told we are Edge",
+                at_online_headers("bing", NULL, path, (int)sizeof(path)) &&
+                    strstr(path, "Edg/") != NULL);
+    expect_true("the google hosts are told we are Chrome, not Edge",
+                at_online_headers("google_gtx", NULL, path, (int)sizeof(path)) &&
+                    strstr(path, "Chrome/") != NULL && strstr(path, "Edg/") == NULL &&
+                    at_online_headers("google_clients5", NULL, path, (int)sizeof(path)) &&
+                    strstr(path, "Edg/") == NULL);
+    expect_true("a header block that cannot hold the key is refused",
+                !at_online_headers("deepl", "KEY:fx", path, 40));
     expect_true("deepl without a key is refused",
                 !at_online_headers("deepl", "", path, (int)sizeof(path)));
     expect_true("deepl content type",
@@ -418,6 +432,29 @@ static int cmd_selftest(void)
         expect_true("a page without the block is refused",
                     at_online_bootstrap_parse("<html>nothing here</html>") == 0);
         expect_true("and a refused page leaves no session behind", at_online_bootstrap_ready() == 0);
+        // A page that cannot be parsed is also the signal to try the other host: a redirect stub
+        // lands here too, because the core does not follow redirects. The two hosts are the farm
+        // host (answers from inside and outside China without redirecting) and the market host.
+        {
+            char host_first[128];
+            char host_mid[128];
+            char host_back[128];
+            int ok_first = at_online_host("bing", "", host_first, (int)sizeof(host_first));
+
+            expect_true("bing is asked through a known host",
+                        ok_first == 1 &&
+                            (strcmp(host_first, "www4.bing.com") == 0 ||
+                             strcmp(host_first, "cn.bing.com") == 0));
+            expect_true("a refused page moves to the other host",
+                        at_online_bootstrap_parse("<html>nothing here</html>") == 0 &&
+                            at_online_host("bing", "", host_mid, (int)sizeof(host_mid)) == 1 &&
+                            strcmp(host_mid, host_first) != 0);
+            expect_true("and the next refusal comes back, so the cycle is not one way",
+                        at_online_bootstrap_parse("<html>nothing here</html>") == 0 &&
+                            at_online_host("bing", "", host_back, (int)sizeof(host_back)) == 1 &&
+                            strcmp(host_back, host_first) == 0 &&
+                            strcmp(host_back, host_mid) != 0);
+        }
         expect_true("so a good page is parsed again", at_online_bootstrap_parse(page) == 1);
 
         expect_true("bing spells the languages its own way",

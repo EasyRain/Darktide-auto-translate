@@ -404,7 +404,7 @@ static void do_http(const Job* job, int* out_status, int* out_http_code, char** 
     HINTERNET request = NULL;
     wchar_t whost[256];
     wchar_t wpath[2048];
-    wchar_t headers[1024];
+    wchar_t headers[2048];
     char hbuf[256];
     INTERNET_PORT port = INTERNET_DEFAULT_HTTPS_PORT;
     DWORD flags = WINHTTP_FLAG_SECURE;
@@ -519,24 +519,24 @@ static void do_http(const Job* job, int* out_status, int* out_http_code, char** 
         goto done;
     }
 
-    // Accept, plus whatever the caller needs (DeepL wants an Authorization line),
-    // plus a Content-Type when there is a body.
+    // Accept, plus whatever the caller needs (DeepL wants an Authorization line, every provider
+    // wants its own User-Agent), plus a Content-Type when there is a body.
     {
-        wchar_t wextra[768];
+        wchar_t wextra[1024];
         wchar_t wtype[128];
 
         headers[0] = 0;
-        wcscat_s(headers, 1024, L"Accept: application/json\r\n");
+        wcscat_s(headers, 2048, L"Accept: application/json\r\n");
 
         if (job->headers && job->headers[0] &&
-            MultiByteToWideChar(CP_UTF8, 0, job->headers, -1, wextra, 768) > 0) {
-            wcscat_s(headers, 1024, wextra);
+            MultiByteToWideChar(CP_UTF8, 0, job->headers, -1, wextra, 1024) > 0) {
+            wcscat_s(headers, 2048, wextra);
         }
         if (job->post && job->content_type && job->content_type[0] &&
             MultiByteToWideChar(CP_UTF8, 0, job->content_type, -1, wtype, 128) > 0) {
-            wcscat_s(headers, 1024, L"Content-Type: ");
-            wcscat_s(headers, 1024, wtype);
-            wcscat_s(headers, 1024, L"\r\n");
+            wcscat_s(headers, 2048, L"Content-Type: ");
+            wcscat_s(headers, 2048, wtype);
+            wcscat_s(headers, 2048, L"\r\n");
         }
     }
 
@@ -807,6 +807,14 @@ static int enqueue_job(int post, const char* host_utf8, const char* path_utf8,
 int at_http_get(const char* host_utf8, const char* path_utf8)
 {
     return enqueue_job(0, host_utf8, path_utf8, NULL, NULL, NULL);
+}
+
+// GET with extra headers ("Name: value\r\n"). The translators want a browser User-Agent, and which
+// browser is not the same for all of them (see user_agent_for in at_online.c), so the caller supplies
+// the block instead of the core guessing. at_http_get stays for callers that need none.
+int at_http_get_ex(const char* host_utf8, const char* path_utf8, const char* headers)
+{
+    return enqueue_job(0, host_utf8, path_utf8, NULL, headers, NULL);
 }
 
 // POST with a body. `headers` is an extra header block ("Name: value\r\n") used

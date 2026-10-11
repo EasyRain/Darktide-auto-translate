@@ -287,10 +287,27 @@ int at_online_uses_post(const char* provider)
 // second, all accepted, with the same token still valid after 110 seconds - so the values are
 // kept here and the Lua layer only asks for a refresh when a reply says the session expired.
 //
-// Which host matters: www.bing.com answered HTTP 200 with a 0-byte body for the very same
-// request, from a China IP and from a hosting IP alike, while cn.bing.com answered with a
-// translation. A hosting IP (a VPN exit) gets a 401 from cn.bing.com, which is why this flow
-// is only worth testing from the network a player actually has.
+// Which host to ask. Measured 2026-10-10 from two networks (China direct, Singapore through a
+// proxy): cn.bing.com answers 301 to www.bing.com when the client is outside China, www.bing.com
+// answers 302 to cn.bing.com when it is inside, and this farm host answered from both without a
+// redirect. The core does not follow redirects (WinHTTP's default), so pinning either of the two
+// market hosts breaks the other half of the world; pinning the farm host does not. cn.bing.com is
+// kept as a fallback: a page whose parse fails advances the index, so a network that filters this
+// host still gets a session on the next attempt.
+//
+// An earlier note here claimed www.bing.com returned a 0-byte 200. That was a probe that posted
+// /ttranslatev3 back to the host it started from instead of the host that served the page, so the
+// cookies and IG did not match. Sent to the host that answered, all three hosts return the same
+// translation. The User-Agent, on the other hand, is real: without one every host answered 401, and
+// with a browser one every host answered 200 (see the header the core sends in at_core.c).
+static const char* const BING_HOSTS[] = { "www4.bing.com", "cn.bing.com" };
+static int g_bing_host = 0;
+
+static void bing_host_advance(void)
+{
+    g_bing_host = (g_bing_host + 1) % (int)(sizeof(BING_HOSTS) / sizeof(BING_HOSTS[0]));
+}
+
 static char g_bing_key[64];
 static char g_bing_token[192];
 static char g_bing_ig[64];
@@ -361,6 +378,7 @@ int at_online_bootstrap_parse(const char* page_utf8)
 
     if (!page_utf8 || !*page_utf8) {
         set_error("bing's translator page was empty");
+        bing_host_advance();
         return 0;
     }
 
@@ -368,13 +386,17 @@ int at_online_bootstrap_parse(const char* page_utf8)
 
     abuse = strstr(page_utf8, "params_AbusePreventionHelper");
     if (!abuse) {
+        // A redirect stub lands here too (the core does not follow redirects), which is exactly
+        // when the other host is the right one to try.
         set_error("bing's page carried no session block (params_AbusePreventionHelper)");
+        bing_host_advance();
         return 0;
     }
     open = strchr(abuse, '[');
     comma = open ? strchr(open, ',') : NULL;
     if (!comma || !copy_span(open + 1, comma, g_bing_key, (int)sizeof(g_bing_key))) {
         set_error("bing's session key could not be read");
+        bing_host_advance();
         return 0;
     }
     first_quote = strchr(comma + 1, '"');
@@ -383,6 +405,7 @@ int at_online_bootstrap_parse(const char* page_utf8)
         !copy_span(first_quote + 1, second_quote, g_bing_token, (int)sizeof(g_bing_token))) {
         set_error("bing's session token could not be read");
         at_online_bootstrap_clear();
+        bing_host_advance();
         return 0;
     }
     ig = strstr(abuse, "IG:\"");
@@ -393,6 +416,7 @@ int at_online_bootstrap_parse(const char* page_utf8)
     if (!ig_end || !copy_span(ig + 4, ig_end, g_bing_ig, (int)sizeof(g_bing_ig))) {
         set_error("bing's session id (IG) could not be read");
         at_online_bootstrap_clear();
+        bing_host_advance();
         return 0;
     }
     return 1;
@@ -429,9 +453,8 @@ int at_online_host(const char* provider, const char* api_key, char* out, int cap
     } else if (_stricmp(provider, "mymemory") == 0) {
         host = "api.mymemory.translated.net";
     } else if (_stricmp(provider, "bing") == 0) {
-        // cn.bing.com, not www.bing.com: the same request answered a 0-byte 200 on the
-        // international host and a translation here (both measured, same machine).
-        host = "cn.bing.com";
+        // www4.bing.com by default; see BING_HOSTS above for why, and for the fallback.
+        host = BING_HOSTS[g_bing_host];
     } else if (_stricmp(provider, "google_api") == 0) {
         host = "translation.googleapis.com";
     } else {
@@ -975,6 +998,26 @@ int at_online_supports_multi_text(const char* provider)
     return provider && _stricmp(provider, "deepl") == 0;
 }
 
+// Which browser each service is told we are. Not decoration: Bing's keyless translator answers HTTP
+// 401 to a request whose User-Agent looks like a script and 200 to a browser's (measured 2026-10-10 on
+// all three of its hosts, from China and from outside it). Beyond that, each of these is the vendor
+// feeding its own browser's traffic best - Edge for Microsoft, Chrome for Google - which costs nothing
+// to send and may matter to a service that sorts requests by client.
+static const char* UA_EDGE =
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0";
+static const char* UA_CHROME =
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/131.0.0.0 Safari/537.36";
+
+const char* at_online_user_agent(const char* provider)
+{
+    if (provider && _stricmp(provider, "bing") == 0) {
+        return UA_EDGE;
+    }
+    return UA_CHROME;
+}
+
 int at_online_headers(const char* provider, const char* api_key, char* out, int cap)
 {
     if (!provider || !out || cap <= 0) {
@@ -983,12 +1026,19 @@ int at_online_headers(const char* provider, const char* api_key, char* out, int 
     }
     out[0] = 0;
 
+    if (_snprintf_s(out, (size_t)cap, _TRUNCATE, "User-Agent: %s\r\n", at_online_user_agent(provider)) < 0) {
+        set_error("the user agent is too long for a header");
+        return 0;
+    }
+
     if (_stricmp(provider, "deepl") == 0) {
         if (!api_key || !*api_key) {
             set_error("this provider needs an API key");
             return 0;
         }
-        if (_snprintf_s(out, (size_t)cap, _TRUNCATE, "Authorization: DeepL-Auth-Key %s\r\n", api_key) < 0) {
+        if (strlen(out) + strlen(api_key) + 40 > (size_t)cap ||
+            _snprintf_s(out + strlen(out), (size_t)cap - strlen(out), _TRUNCATE,
+                        "Authorization: DeepL-Auth-Key %s\r\n", api_key) < 0) {
             set_error("API key is too long for a header");
             return 0;
         }

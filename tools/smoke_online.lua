@@ -1389,8 +1389,19 @@ do
         end,
         at_online_host = function(provider, api_key, out, cap)
             if provider ~= "bing" then return 0 end
-            ffi.copy(out, "https://cn.bing.com")
+            ffi.copy(out, "www4.bing.com")
             return 1
+        end,
+        -- The per-provider header block the core sends (a browser User-Agent, plus the key for
+        -- DeepL). The session test below asserts that the page fetch carries it.
+        at_online_headers = function(provider, api_key, out, cap)
+            ffi.copy(out, provider == "bing" and "User-Agent: Edge-Smoke\r\n"
+                                               or "User-Agent: Chrome-Smoke\r\n")
+            return 1
+        end,
+        at_http_get_ex = function(host, path, headers)
+            ready = true
+            return 9
         end,
         at_online_bootstrap_path = function(provider, out, cap)
             if provider ~= "bing" then return 0 end
@@ -1490,10 +1501,19 @@ do
     do
         local gets = {}
         local real_get = fake_http_core.at_http_get
+        local real_get_ex = fake_http_core.at_http_get_ex
         local real_poll = fake_http_core.at_http_poll
         fake_http_core.at_http_get = function(host, path)
             -- The core hands these over as char buffers, not Lua strings.
             gets[#gets + 1] = { host = ffi.string(host), path = ffi.string(path) }
+            ready = true
+            return 9
+        end
+        -- The session fetch goes through at_http_get_ex now: it is the one that can carry the
+        -- per-provider headers, so this records those too.
+        fake_http_core.at_http_get_ex = function(host, path, headers)
+            gets[#gets + 1] = { host = ffi.string(host), path = ffi.string(path),
+                                headers = headers and ffi.string(headers) or nil }
             ready = true
             return 9
         end
@@ -1510,6 +1530,11 @@ do
             online.start_bootstrap_for_tests(probe_mod, "bing"), true)
         check("session: and the fetch goes to the translator page",
             gets[1] and gets[1].path == "/translator", true)
+        -- The page carries the same per-provider header block as the translation request, so every
+        -- request this mod sends to a service looks like the same browser.
+        check("session: and it carries the provider's user agent",
+            gets[1] ~= nil and gets[1].headers ~= nil and
+                string.find(gets[1].headers, "User-Agent:", 1, true) ~= nil, true)
         check("session: nothing is translated before the session is ready",
             online.session_ready_for_tests("bing"), false)
 
@@ -1564,6 +1589,7 @@ do
             online.session_ready_for_tests("bing"), false)
 
         fake_http_core.at_http_get = real_get
+        fake_http_core.at_http_get_ex = real_get_ex
         -- Both halves go back: the probe cases further down use the reply-shaped poll this
         -- block replaced, and leaving the session one in place made three of them fail.
         fake_http_core.at_http_poll = real_poll

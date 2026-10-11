@@ -44,6 +44,7 @@ int at_available(void);
 const char* at_error(void);
 const char* at_version(void);
 int at_http_get(const char*, const char*);
+int at_http_get_ex(const char*, const char*, const char*);
 int at_http_post(const char*, const char*, const char*, const char*, const char*);
 int at_http_poll(int*, int*, int*, char*, int, int*, unsigned long*);
 int at_http_pending(void);
@@ -1059,6 +1060,7 @@ local function start_bootstrap(mod, provider)
     local ffi_lib = Mods.lua.ffi
     local host_buf = ffi_lib.new("char[?]", BOOTSTRAP_CAP)
     local path_buf = ffi_lib.new("char[?]", BOOTSTRAP_CAP)
+    local headers_buf = ffi_lib.new("char[?]", 512)
 
     if core.at_online_host(provider, nil, host_buf, BOOTSTRAP_CAP) == 0
         or core.at_online_bootstrap_path(provider, path_buf, BOOTSTRAP_CAP) == 0 then
@@ -1068,7 +1070,16 @@ local function start_bootstrap(mod, provider)
         return false
     end
 
-    local job = core.at_http_get(host_buf, path_buf)
+    -- The page gets the provider's User-Agent too (Edge for bing), so that every request this mod
+    -- sends to a service looks like the same browser.
+    if core.at_online_headers(provider, nil, headers_buf, 512) == 0 then
+        local why = cstr(core.at_online_error()) or "could not build the session headers"
+        util.warn(mod, "%s: %s", tostring(provider), tostring(why))
+        note_provider_transport_failure(mod, provider, why)
+        return false
+    end
+
+    local job = core.at_http_get_ex(host_buf, path_buf, headers_buf)
     if job <= 0 then
         local why = cstr(core.at_error()) or "the session request was rejected"
         util.warn(mod, "%s: %s", tostring(provider), tostring(why))
@@ -1951,7 +1962,17 @@ local function dispatch(mod)
         job = core.at_http_post(host_buf, path_buf, core.at_online_content_type(provider),
                                 headers_buf, body_buf)
     else
-        job = core.at_http_get(host_buf, path_buf)
+        -- The GET providers (the two Google hosts) get the same per-provider header block, which for
+        -- them is just the User-Agent: Chrome, the browser their own service sees most of.
+        if core.at_online_headers(provider, api_key, headers_buf, 1024) == 0 then
+            M.state.last_error = cstr(core.at_online_error())
+            M.state.failed = M.state.failed + 1
+            util.warn(mod, "could not build the request headers for %s: %s", provider,
+                tostring(M.state.last_error))
+            put_batch_tail_back()
+            return false
+        end
+        job = core.at_http_get_ex(host_buf, path_buf, headers_buf)
     end
 
     if job <= 0 then
@@ -3200,7 +3221,11 @@ function M.probe(mod, lang)
             job = core.at_http_post(host_buf, path_buf, core.at_online_content_type(provider),
                                     headers_buf, body_buf)
         else
-            job = core.at_http_get(host_buf, path_buf)
+            if core.at_online_headers(provider, api_key, headers_buf, 1024) == 0 then
+                util.popup(mod, "custom_test_failed", tostring(cstr(core.at_online_error())))
+                return false
+            end
+            job = core.at_http_get_ex(host_buf, path_buf, headers_buf)
         end
         describe = provider
         util.info(mod, "testing the online engine: %s, sample '%s'", tostring(provider), sample)

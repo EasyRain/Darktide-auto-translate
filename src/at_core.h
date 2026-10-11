@@ -41,6 +41,11 @@ AT_API int at_core_max_body(void);
 // means "success" is how callers end up treating every 200 as a failure.
 AT_API int  at_http_get(const char* host_utf8, const char* path_utf8);
 
+// GET with an extra header block ("Name: value\r\n"), for the requests that want a browser
+// User-Agent (every translation service; see user_agent_for in at_online.c). at_http_get stays for
+// the callers that need none.
+AT_API int  at_http_get_ex(const char* host_utf8, const char* path_utf8, const char* headers);
+
 // POST with a body, for APIs that take their query in the request body (DeepL).
 // `headers` is an extra header block ("Name: value\r\n") used for API keys;
 // `content_type` may be NULL. Returns a request id like at_http_get.
