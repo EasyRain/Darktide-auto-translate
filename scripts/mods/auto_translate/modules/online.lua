@@ -2286,7 +2286,18 @@ local function dispatch(mod)
             joined[i] = string.format("[%d] %s", i, to_wire(masked, item_tokens))
         end
 
-        local text = table.concat(joined, " ")
+        -- The marker is a batch device, and only a batch gets one. A single item used to be sent as
+        -- "[1] text" as well, and the model - correctly - copied the marker back; the answer then went
+        -- through the single-answer path, where nothing strips it, so the bracket-mark guard refused it
+        -- ("the [n] markers differ (source '', translation '[1]')"), three refusals tripped the engine
+        -- breaker and a whole offline run looked broken after two keys. The online batch has always
+        -- joined only when there is more than one item (see join_batch_impl); this mirrors it.
+        local text
+        if #batch > 1 then
+            text = table.concat(joined, " ")
+        else
+            text = to_wire(parts[1], tokens[1])
+        end
         local accepted = core.at_submit(text, M.state.lang)
         if accepted == 0 then
             -- The core is still busy with the previous string; try again next frame.
