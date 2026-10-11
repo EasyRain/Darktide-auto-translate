@@ -2420,7 +2420,10 @@ function accept_translation(mod, req, raw, src)
     if missing and missing > 0 then
         -- The code is kept for the log and the refusal budget in fail_item(): a lost
         -- placeholder is the one refusal a *different* engine may well handle.
-        return false, string.format("%d glossary term(s) were dropped by the service", missing), false, "tokens"
+        -- "placeholder", not "glossary term": the count covers every masked token, and on a string
+        -- like "{#color(..)}Choose a {hotkey}...{#reset()}" most of them are markup. The old
+        -- wording sent a reader looking for a mismatched term that was never there.
+        return false, string.format("%d masked placeholder(s) were dropped by the service", missing), false, "tokens"
     end
 
     -- The service handed the text back unchanged. That is usually a correct answer,
@@ -2685,6 +2688,7 @@ local REASON_KEYS = {
     { "the rich-text tags differ", "hud_reason_placeholders" },
     { "stray '%'", "hud_reason_placeholders" },
     { "format placeholder", "hud_reason_placeholders" },
+    { "masked placeholder", "hud_reason_placeholders" },
     { "glossary term", "hud_reason_glossary" },
     { "the batch left it unchanged", "hud_reason_unchanged" },
     { "offline model", "hud_reason_model" },
