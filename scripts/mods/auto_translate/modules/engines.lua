@@ -177,8 +177,19 @@ end
 --                      errno 1022 without its signed token flow, from a China IP and a hosting
 --                      IP alike. Neither is worth a provider that would refuse every string
 --                      containing a known term.
+--
+--     yandex           translate.yandex.net — the Android app's endpoint, added 2026-10-10 after
+--                      measuring the field: it answered 11 of our 12 targets (everything except
+--                      Traditional Chinese, which it rejects in every spelling - zh-TW, zh_tw,
+--                      zh-Hant, zt: HTTP 400), twelve requests in a row were all accepted, 3 KB of
+--                      text came back in 3.2 s, and it works from a China IP and from a Singapore
+--                      exit alike, without a proxy. That is why it sits second: the point of a
+--                      keyless provider here is a channel that is not already throttled. It is the
+--                      same kind of endpoint as the others (unofficial, no SLA), and the run's
+--                      provider ranking handles it going away. A target it cannot do (zh-tw) is
+--                      dropped by at_online_lang_code_for, so providers_for() simply omits it.
 -- ---------------------------------------------------------------------------
-M.FREE_PROVIDERS = { "bing", "google_clients5", "google_gtx", "mymemory" }
+M.FREE_PROVIDERS = { "bing", "yandex", "google_clients5", "google_gtx", "mymemory" }
 
 -- Official APIs. DeepL is the default because it is reachable directly on most
 -- networks (verified without a proxy); translation.googleapis.com is not.
@@ -207,7 +218,15 @@ local LEGACY_PROVIDERS = {
 -- 伤害 / 装弹速度), so the entry was stale and cost the player a provider. The mechanism stays:
 -- a provider that really cannot produce a language belongs here, and it is enforced in one
 -- place (providers_for).
-local PROVIDER_GAPS = {}
+local PROVIDER_GAPS = {
+    -- Yandex's keyless endpoint has no Traditional Chinese at all: measured 2026-10-10 it answers
+    -- HTTP 400 for zh-TW, zh-tw, zh_tw, zh-Hant and zt alike, and only zh works. The core refuses
+    -- that pair as well (LANG_MAP has no yandex code for zh-tw), so this is the second line of
+    -- defence: the provider never enters the list for the one target it cannot do, and the other
+    -- eleven keep it. The value only ever surfaces if *every* provider has a gap for a language,
+    -- which is not the case here (bing, the Google hosts and MyMemory all do Traditional Chinese).
+    yandex = { ["zh-tw"] = "Simplified Chinese" },
+}
 
 -- Language a provider cannot produce, or nil when it is fine.
 function M.provider_gap(provider, lang)

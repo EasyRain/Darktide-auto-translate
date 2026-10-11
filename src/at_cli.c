@@ -403,6 +403,58 @@ static int cmd_selftest(void)
                                 "\"responseStatus\":200}",
                                 out, (int)sizeof(out)) > 0);
 
+    printf("\n== yandex: the keyless Android endpoint, one text per request ==\n");
+    {
+        char host[256];
+        char path[512];
+        char body[512];
+        char out[256];
+        char code[16];
+        const char* id;
+
+        expect_true("yandex is a known provider", at_online_provider_known("yandex") == 1);
+        expect_true("yandex needs no API key", at_online_needs_key("yandex") == 0);
+        expect_true("yandex uses POST", at_online_uses_post("yandex") == 1);
+        expect_true("yandex is asked at its own host",
+                    at_online_host("yandex", "", host, (int)sizeof(host)) == 1 &&
+                        strcmp(host, "translate.yandex.net") == 0);
+        expect_true("the path carries the client id and the direction",
+                    at_online_path("yandex", "", "en", "uk", "Reload Speed", path, (int)sizeof(path)) == 1 &&
+                        strstr(path, "/api/v1/tr.json/translate?srv=android&id=") == path &&
+                        strstr(path, "&lang=en-uk") != NULL);
+        id = strstr(path, "id=");
+        expect_true("the client id is 32 hex digits followed by -0-0",
+                    id != NULL && strspn(id + 3, "0123456789abcdef") == 32 &&
+                        strncmp(id + 35, "-0-0&lang=en-uk", 15) == 0);
+        expect_true("the body is only the text",
+                    at_online_body("yandex", "en", "uk", "a&b", body, (int)sizeof(body)) == 1 &&
+                        strcmp(body, "text=a%26b") == 0);
+        expect_true("the reply envelope parses",
+                    at_online_parse("yandex",
+                                    "{\"code\":200,\"lang\":\"en-uk\",\"nmt_code\":200,"
+                                    "\"text\":[\"\\u041f\\u0440\\u0438\\u0432\\u0456\\u0442\"]}",
+                                    out, (int)sizeof(out)) > 0 &&
+                        strcmp(out, "\xD0\x9F\xD1\x80\xD0\xB8\xD0\xB2\xD1\x96\xD1\x82") == 0);
+        expect_true("a code that is not 200 is a refusal, not a translation",
+                    at_online_parse("yandex", "{\"code\":401,\"message\":\"Unauthorized\"}",
+                                    out, (int)sizeof(out)) < 0);
+        expect_true("an empty text array is a refusal too",
+                    at_online_parse("yandex", "{\"code\":200,\"text\":[]}", out,
+                                    (int)sizeof(out)) < 0);
+        // The endpoint rejects every spelling of Traditional Chinese (measured), so the provider has
+        // to drop out for that target and stay available for the other eleven.
+        expect_true("Traditional Chinese is not offered at all",
+                    at_online_lang_code_for("yandex", "zh-tw", code, (int)sizeof(code)) == 0);
+        expect_true("Simplified Chinese is",
+                    at_online_lang_code_for("yandex", "zh-cn", code, (int)sizeof(code)) == 1 &&
+                        strcmp(code, "zh") == 0);
+        expect_true("and so are Ukrainian and Brazilian Portuguese",
+                    at_online_lang_code_for("yandex", "uk", code, (int)sizeof(code)) == 1 &&
+                        strcmp(code, "uk") == 0 &&
+                        at_online_lang_code_for("yandex", "pt-br", code, (int)sizeof(code)) == 1 &&
+                        strcmp(code, "pt") == 0);
+    }
+
     printf("\n== bing: a session token first, then the request ==\n");
     {
         // The keyless Microsoft endpoint hands out a key, a token and an IG on one page load and

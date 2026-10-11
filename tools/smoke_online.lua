@@ -687,6 +687,15 @@ end
 local engines = engines_chunk()
 engines.init({ MOD_DIR = ".", file_exists = function() return false end }, {})
 
+-- The keyless providers, in the order a run tries them. yandex joined 2026-10-10 and sits second: it
+-- answered eleven of the twelve targets, took twelve requests in a row without throttling and works
+-- from China and from outside it, which is what the list is for. The twelfth (Traditional Chinese) it
+-- refuses in every spelling, and at_online_lang_code_for drops it there - that side is pinned in
+-- at_cli.c, where the real language table lives.
+check("free providers: bing first, then yandex, mymemory last",
+    engines.FREE_PROVIDERS[1] == "bing" and engines.FREE_PROVIDERS[2] == "yandex" and
+        engines.FREE_PROVIDERS[5] == "mymemory" and #engines.FREE_PROVIDERS == 5, true)
+
 -- Which models are "on disk", so the rule can be exercised on its own. The 600M tier
 -- is gone: the smallest local model is the 1.3B, and it is what a player with no API
 -- key gets.
@@ -733,26 +742,41 @@ check("resolve(nil key, auto, no models) does the same", resolve_with(nil, "auto
 check("resolve(key, explicit free) obeys the choice",
     resolve_with("sk-test", "online_free"), "online_free")
 
--- The free tier itself: the four keyless endpoints, in the order a run tries them, and no
+-- The free tier itself: the five keyless endpoints, in the order a run tries them, and no
 -- stale language gap left over (MyMemory was listed as unable to do zh-cn; measured, it
 -- answers in Simplified, so the entry only cost the player a provider).
 check("the free engine is implemented", engines.is_implemented("online_free"), true)
-check("four free providers", #engines.providers_for("online_free", "zh-cn"), 4)
+check("five free providers", #engines.providers_for("online_free", "zh-cn"), 5)
 -- Bing is first because it is the one that answers on the networks the others are blocked on
 -- (measured in the game log: with the Google hosts first, a China session spent 2 min 19 s
 -- timing out - 3 x 20 s per host - before reaching this one). The game log's own numbers are the
 -- reason the order is not "best quality first".
 check("bing is tried first (the one that answers where the others are blocked)",
     engines.providers_for("online_free", "zh-cn")[1], "bing")
+-- yandex is second: the only keyless channel measured to take a burst without throttling, from
+-- China and from outside it, on eleven of the twelve targets.
+check("then yandex (the channel that was not already throttled)",
+    engines.providers_for("online_free", "zh-cn")[2], "yandex")
 check("then Google's dictionary host",
-    engines.providers_for("online_free", "zh-cn")[2], "google_clients5")
+    engines.providers_for("online_free", "zh-cn")[3], "google_clients5")
 check("my memory is last (a translation memory, measured junk for some labels)",
-    engines.providers_for("online_free", "zh-cn")[4], "mymemory")
+    engines.providers_for("online_free", "zh-cn")[5], "mymemory")
 check("no provider is left out for a game language", (function()
-    -- Including uk: bing and MyMemory answer it, so the tier is complete for all twelve.
-    for _, lang in ipairs({ "zh-cn", "zh-tw", "ja", "ko", "ru", "de", "fr", "es", "it", "pl", "pt-br", "uk" }) do
-        if #engines.providers_for("online_free", lang) ~= 4 then
+    -- Eleven languages see all five. Traditional Chinese sees four: yandex has no code for it (the
+    -- endpoint refuses every spelling of it with HTTP 400), which is declared in PROVIDER_GAPS and
+    -- enforced in providers_for, and the core's language table refuses the pair as well.
+    for _, lang in ipairs({ "zh-cn", "ja", "ko", "ru", "de", "fr", "es", "it", "pl", "pt-br", "uk" }) do
+        if #engines.providers_for("online_free", lang) ~= 5 then
             return lang
+        end
+    end
+    local traditional = engines.providers_for("online_free", "zh-tw")
+    if #traditional ~= 4 then
+        return "zh-tw count"
+    end
+    for _, name in ipairs(traditional) do
+        if name == "yandex" then
+            return "yandex is still offered for zh-tw"
         end
     end
     return "all 12"

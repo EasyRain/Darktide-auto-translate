@@ -36,22 +36,27 @@ typedef struct {
     const char* google;
     const char* deepl;
     const char* bing;
+    const char* yandex;
 } LangMap;
 
+// The yandex column is empty for Traditional Chinese on purpose: measured 2026-10-10, that endpoint
+// rejects every spelling of it (zh-TW, zh-tw, zh_tw, zh-Hant, zt: HTTP 400) and answers only zh. A
+// missing code makes at_online_lang_code_for fail, which is exactly how providers_for() drops a
+// provider for one language and keeps it for the rest.
 static const LangMap LANG_MAP[] = {
-    { "en",    "en",    "EN",      "en" },
-    { "zh-cn", "zh-CN", "ZH-HANS", "zh-Hans" },
-    { "zh-tw", "zh-TW", "ZH-HANT", "zh-Hant" },
-    { "ja",    "ja",    "JA",      "ja" },
-    { "ko",    "ko",    "KO",      "ko" },
-    { "ru",    "ru",    "RU",      "ru" },
-    { "de",    "de",    "DE",      "de" },
-    { "fr",    "fr",    "FR",      "fr" },
-    { "es",    "es",    "ES",      "es" },
-    { "it",    "it",    "IT",      "it" },
-    { "pl",    "pl",    "PL",      "pl" },
-    { "pt-br", "pt-BR", "PT-BR",   "pt" },
-    { "uk",    "uk",    "UK",      "uk" },
+    { "en",    "en",    "EN",      "en",      "en" },
+    { "zh-cn", "zh-CN", "ZH-HANS", "zh-Hans", "zh" },
+    { "zh-tw", "zh-TW", "ZH-HANT", "zh-Hant", NULL },
+    { "ja",    "ja",    "JA",      "ja",      "ja" },
+    { "ko",    "ko",    "KO",      "ko",      "ko" },
+    { "ru",    "ru",    "RU",      "ru",      "ru" },
+    { "de",    "de",    "DE",      "de",      "de" },
+    { "fr",    "fr",    "FR",      "fr",      "fr" },
+    { "es",    "es",    "ES",      "es",      "es" },
+    { "it",    "it",    "IT",      "it",      "it" },
+    { "pl",    "pl",    "PL",      "pl",      "pl" },
+    { "pt-br", "pt-BR", "PT-BR",   "pt",      "pt" },
+    { "uk",    "uk",    "UK",      "uk",      "uk" },
 };
 
 int at_online_lang_code_for(const char* provider, const char* internal_lang, char* out, int cap)
@@ -59,17 +64,27 @@ int at_online_lang_code_for(const char* provider, const char* internal_lang, cha
     size_t i;
     int deepl;
     int bing;
+    int yandex;
 
     if (!internal_lang || !out || cap <= 0) {
         return 0;
     }
     deepl = provider && _stricmp(provider, "deepl") == 0;
     bing = provider && _stricmp(provider, "bing") == 0;
+    yandex = provider && _stricmp(provider, "yandex") == 0;
 
     for (i = 0; i < sizeof(LANG_MAP) / sizeof(LANG_MAP[0]); i++) {
         if (_stricmp(LANG_MAP[i].internal, internal_lang) == 0) {
-            const char* code = bing ? LANG_MAP[i].bing
-                                    : (deepl ? LANG_MAP[i].deepl : LANG_MAP[i].google);
+            const char* code = yandex ? LANG_MAP[i].yandex
+                                      : (bing ? LANG_MAP[i].bing
+                                              : (deepl ? LANG_MAP[i].deepl : LANG_MAP[i].google));
+            if (!code) {
+                // This provider does not offer this language at all; the caller treats it as a
+                // provider that cannot be used for it.
+                _snprintf_s(g_error, sizeof(g_error), _TRUNCATE, "'%s' does not offer '%s'",
+                            provider ? provider : "(null)", internal_lang);
+                return 0;
+            }
             strncpy_s(out, (size_t)cap, code, _TRUNCATE);
             return 1;
         }
@@ -261,6 +276,7 @@ int at_online_provider_known(const char* provider)
            _stricmp(provider, "google_clients5") == 0 ||
            _stricmp(provider, "google_gtx") == 0 ||
            _stricmp(provider, "bing") == 0 ||
+           _stricmp(provider, "yandex") == 0 ||
            _stricmp(provider, "mymemory") == 0;
 }
 
@@ -271,7 +287,8 @@ int at_online_needs_key(const char* provider)
 
 int at_online_uses_post(const char* provider)
 {
-    return provider && (_stricmp(provider, "deepl") == 0 || _stricmp(provider, "bing") == 0);
+    return provider && (_stricmp(provider, "deepl") == 0 || _stricmp(provider, "bing") == 0 ||
+                        _stricmp(provider, "yandex") == 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -306,6 +323,23 @@ static int g_bing_host = 0;
 static void bing_host_advance(void)
 {
     g_bing_host = (g_bing_host + 1) % (int)(sizeof(BING_HOSTS) / sizeof(BING_HOSTS[0]));
+}
+
+// Yandex's keyless endpoint is the Android app's, and it wants a client id in the query. Nothing
+// authenticates it - measured 2026-10-10, a fresh id per call answered fine on zh-cn and uk alike - but
+// a stable one looks like an app install rather than a script, so it is generated once per run.
+static const char* yandex_client_id(void)
+{
+    static char id[40];
+    int i;
+
+    if (id[0] == 0) {
+        for (i = 0; i < 32; i++) {
+            id[i] = "0123456789abcdef"[rand() % 16];
+        }
+        id[32] = 0;
+    }
+    return id;
 }
 
 static char g_bing_key[64];
@@ -455,6 +489,8 @@ int at_online_host(const char* provider, const char* api_key, char* out, int cap
     } else if (_stricmp(provider, "bing") == 0) {
         // www4.bing.com by default; see BING_HOSTS above for why, and for the fallback.
         host = BING_HOSTS[g_bing_host];
+    } else if (_stricmp(provider, "yandex") == 0) {
+        host = "translate.yandex.net";
     } else if (_stricmp(provider, "google_api") == 0) {
         host = "translation.googleapis.com";
     } else {
@@ -534,6 +570,13 @@ int at_online_path(const char* provider, const char* api_key, const char* source
         written = _snprintf_s(out, (size_t)cap, _TRUNCATE,
                               "/ttranslatev3?isVertical=1&&IG=%s&IID=translator.5024.1",
                               g_bing_ig);
+    } else if (_stricmp(provider, "yandex") == 0) {
+        // Yandex's keyless endpoint is the one its Android app uses: the client id goes in the query
+        // (any hex id is accepted; a stable one looks like an app install), the direction is
+        // "<source>-<target>", and the text travels in the body.
+        written = _snprintf_s(out, (size_t)cap, _TRUNCATE,
+                              "/api/v1/tr.json/translate?srv=android&id=%s-0-0&lang=%s-%s",
+                              yandex_client_id(), src, dst);
     } else if (_stricmp(provider, "google_api") == 0) {
         if (!api_key || !*api_key) {
             free(encoded);
@@ -742,6 +785,47 @@ static int parse_mymemory(const char* body, char* out, int cap)
 
 // google_api:
 //   {"data":{"translations":[{"translatedText":"..."}]}}
+// {"code":200,"lang":"en-uk","nmt_code":200,"text":["\u041f\u043e\u043a\u0430\u0437\u0430\u0442\u0438 ..."]}
+//
+// The endpoint puts its own status in the body, so a code that is not 200 is the service refusing the
+// request and must not be read as a translation. `text` is an array because the request may carry
+// several strings (this build sends one - see at_online_supports_multi_text).
+static int parse_yandex(const char* body, char* out, int cap)
+{
+    JVal* root = json_parse(body);
+    JVal* texts;
+    const char* first;
+    int code;
+    int n;
+
+    if (!root) {
+        set_error("response was not valid JSON");
+        return -1;
+    }
+    code = json_int(json_get(root, "code"), 200);
+    if (code != 200) {
+        _snprintf_s(g_error, sizeof(g_error), _TRUNCATE,
+                    "service refused the request (code %d)", code);
+        json_free(root);
+        return -1;
+    }
+    texts = json_get(root, "text");
+    first = texts ? json_str(json_at(texts, 0)) : NULL;
+    if (!first || !*first) {
+        json_free(root);
+        set_error("the service returned no translation for this text");
+        return -1;
+    }
+    n = entity_decode(first, out, cap);
+    if (n <= 0) {
+        json_free(root);
+        set_error("translated text does not fit the output buffer");
+        return -1;
+    }
+    json_free(root);
+    return n;
+}
+
 static int parse_google_api(const char* body, char* out, int cap)
 {
     JVal* root = json_parse(body);
@@ -862,7 +946,8 @@ int at_online_body(const char* provider, const char* source_lang, const char* ta
         set_error("missing argument");
         return 0;
     }
-    if (_stricmp(provider, "deepl") != 0 && _stricmp(provider, "bing") != 0) {
+    if (_stricmp(provider, "deepl") != 0 && _stricmp(provider, "bing") != 0 &&
+        _stricmp(provider, "yandex") != 0) {
         set_errorf("provider '%s' does not use a request body%s", provider, "");
         return 0;
     }
@@ -898,6 +983,11 @@ int at_online_body(const char* provider, const char* source_lang, const char* ta
         written = _snprintf_s(out, (size_t)cap, _TRUNCATE,
                               "text=%s&fromLang=%s&to=%s&token=%s&key=%s",
                               encoded, src, dst, g_bing_token, g_bing_key);
+    } else if (_stricmp(provider, "yandex") == 0) {
+        // Yandex takes the direction in the query and only the text in the body. The parameter can be
+        // repeated to send several strings at once (the reply is an array), but this build sends one
+        // at a time until that is measured - see at_online_supports_multi_text.
+        written = _snprintf_s(out, (size_t)cap, _TRUNCATE, "text=%s", encoded);
     } else {
         written = _snprintf_s(out, (size_t)cap, _TRUNCATE,
                               "text=%s&source_lang=%s&target_lang=%s", encoded, src, dst);
@@ -1048,7 +1138,8 @@ int at_online_headers(const char* provider, const char* api_key, char* out, int 
 
 const char* at_online_content_type(const char* provider)
 {
-    if (provider && (_stricmp(provider, "deepl") == 0 || _stricmp(provider, "bing") == 0)) {
+    if (provider && (_stricmp(provider, "deepl") == 0 || _stricmp(provider, "bing") == 0 ||
+                     _stricmp(provider, "yandex") == 0)) {
         return "application/x-www-form-urlencoded";
     }
     return NULL;
@@ -1219,6 +1310,9 @@ int at_online_parse(const char* provider, const char* body_utf8, char* out, int 
     }
     if (_stricmp(provider, "mymemory") == 0) {
         return parse_mymemory(body_utf8, out, cap);
+    }
+    if (_stricmp(provider, "yandex") == 0) {
+        return parse_yandex(body_utf8, out, cap);
     }
     if (_stricmp(provider, "bing") == 0) {
         return parse_bing(body_utf8, out, cap);
