@@ -1408,6 +1408,8 @@ local TIER_PROBE_BUDGET = 20        -- the whole check, so a dead network cannot
 local TIER_PROBE_SETTING = "check_free_services"
 local tier_probe = nil              -- { list, index, sent_at, answered, failed } while checking
 local tier_probe_done = false       -- one check per session
+local min_interval                  -- forward declaration: the check paces itself with it, and the
+                                    -- real definition sits further down with the other pace helpers
 
 local function tier_probe_enabled(mod)
     if type(mod) ~= "table" or type(mod.get) ~= "function" then
@@ -1441,7 +1443,8 @@ local function begin_tier_probe(mod, lang)
         answered = {},
         failed = {},
     }
-    util.log(mod, "checking %d free service(s) before the run", #list)
+    util.log(mod, "checking %d free service(s) alongside the run; the first one that answers is used from then on",
+        #list)
     return true
 end
 
@@ -1526,7 +1529,7 @@ local function tier_probe_step(mod)
         return false
     end
     if elapsed > tier_probe.deadline then
-        util.info(mod, "the free service check ran out of time; the rest are tried during the run")
+        util.info(mod, "the free service check ran out of time; whatever is left is tried as the run goes")
         tier_probe_finish(mod)
         return false
     end
@@ -1580,8 +1583,9 @@ local function base_interval(engine)
 end
 
 -- The pace actually used: the engine's own interval times whatever backoff the rate limiter asked
--- for (1 while the service is answering normally).
-local function min_interval(engine)
+-- for (1 while the service is answering normally). Assigned rather than declared here because the
+-- startup check, which paces itself with it, is defined above.
+min_interval = function(engine)
     return base_interval(engine) * backoff
 end
 
@@ -3171,7 +3175,7 @@ function M.update(mod, dt)
     -- the run for exactly as long as that wait lasts. Reported from a real session: switching the
     -- target language left the run waiting instead of translating.
     if tier_probe and elapsed > tier_probe.deadline then
-        util.info(mod, "the free service check ran out of time; the rest are tried during the run")
+        util.info(mod, "the free service check ran out of time; whatever is left is tried as the run goes")
         tier_probe_finish(mod)
     end
 
@@ -3412,17 +3416,7 @@ function M.update(mod, dt)
         return
     end
 
-    -- 2.5 the startup check of the keyless tier: the queue waits while it runs, so that the wait
-    -- buys a proven endpoint (see tier_probe). It sits *before* the pacing and cooldown gates on
-    -- purpose: those can wait minutes (a rate-limit cooldown is 300 s), and a check that is only
-    -- driven on a free frame would hold the run for all of it. Measured in a real session: switching
-    -- the target language left the run waiting instead of translating, because the check's own
-    -- deadline sat behind a cooldown gate that returned first.
-    if tier_probe_step(mod) then
-        return
-    end
-
-    -- 3. pacing and cooldown
+    -- 2. pacing and cooldown
     if elapsed < next_slot then
         return
     end
@@ -3431,14 +3425,26 @@ function M.update(mod, dt)
     end
     cooldown_until = 0
 
-    -- 4. nothing left to do
+    -- 3. nothing left to do
     if q_count() <= 0 then
         finish(mod, "finished")
         return
     end
 
-    -- 5. start the next request
+    -- 4. start the next request
     dispatch(mod)
+
+    -- 5. the startup check of the keyless tier, in the idle time *after* the run's own work.
+    --
+    -- The first strings go out with the order we already have, and whichever endpoint answers while
+    -- the check proceeds becomes the one the later strings use (provider_answered writes it, and the
+    -- ranking is resolved per item). The check therefore never holds the queue: an earlier version
+    -- waited for it, up to twenty seconds before anything was sent - which is the wait a player
+    -- reported, and which the run does not need to pay, because a translation that is already going
+    -- out is the best possible probe of the endpoint that is serving it.
+    if tier_probe and inflight == nil and (elapsed < next_slot or q_count() == 0) then
+        tier_probe_step(mod)
+    end
 end
 
 -- The "Test the online engine" button.

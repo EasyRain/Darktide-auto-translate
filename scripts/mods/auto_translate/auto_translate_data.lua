@@ -231,8 +231,8 @@ return {
                         -- from real translations - so the first strings of a session paid for whichever
                         -- endpoint this network cannot reach (a game log measured 2 min 19 s of
                         -- timeouts). With this on, one short string is asked of every free endpoint
-                        -- before the run starts, and the run begins with the one that answered. The
-                        -- queue waits for it, up to twenty seconds in total.
+                        -- while the run is going (in its idle time, never in front of it), and the
+                        -- first one that answers is used for the strings after that.
                         setting_id = "check_free_services",
                         type = "checkbox",
                         default_value = true,
