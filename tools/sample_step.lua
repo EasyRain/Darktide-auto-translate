@@ -16,7 +16,15 @@ local repo = here .. "/.."
 
 local ffi = require("ffi")
 Mods = { lua = { ffi = setmetatable({}, { __index = function(_, key)
-    if key == "load" then return function() error("no native core") end end
+    -- A missing library still fails (the glossary's fake-ffi case), but a real one resolves, which is what
+    -- load_core needs when this harness is run from the game's binaries directory.
+    if key == "load" then
+        return function(path)
+            local ok, lib = pcall(ffi.load, path)
+            if ok then return lib end
+            error("no native core")
+        end
+    end
     return ffi[key]
 end }) } }
 package.path = repo .. "/scripts/mods/auto_translate/modules/?.lua;" .. package.path
@@ -73,8 +81,8 @@ local function mask_sample(index, lang)
 end
 
 local mode, index, lang, path = arg[1], tonumber(arg[2]), arg[3], arg[4]
-assert(mode == "wire" or mode == "verdict" or mode == "retry",
-    "usage: wire|verdict|retry <index> <lang> <file> [out]")
+assert(mode == "wire" or mode == "verdict" or mode == "retry" or mode == "local",
+    "usage: wire|verdict|retry|local <index> <lang> <file> [out]")
 local item, masked, tokens = mask_sample(index, lang)
 if not item then
     print("FAIL no such sample: " .. tostring(index))
@@ -100,6 +108,55 @@ if mode == "wire" then
     handle:write(text)
     handle:close()
     print("wire " .. item.shape .. " " .. #tokens .. " token(s)")
+    os.exit(0)
+end
+
+if mode == "local" then
+    -- The offline model, through the core the game uses: the DLL is loaded from the game's folder so that
+    -- the model directory next to it resolves, and the text goes out in the same wire form the online
+    -- paths use (the whole point of testing this engine with the new placeholder).
+    -- load_core() is what declares the core's FFI surface and finds the DLL, so it has to run before any
+    -- at_* call (the first version of this called at_model_status directly and died in __index).
+    -- online.lua takes its dependencies through init(); without this call its `util` upvalue is nil and
+    -- load_core dies on the first thing it wants to log.
+    local stub = { info = function() end, warn = function() end, error = function() end,
+        get = function() return nil end, log = function() end, popup = function() end }
+    online.init(stub, nil, glossary, nil, nil, nil)
+    local core, why = online.load_core(stub)
+    if not core then
+        print("FAIL local: " .. tostring(why))
+        os.exit(1)
+    end
+    local READY = 2
+    if core.at_model_status() ~= READY then
+        core.at_load_model_async()
+        local deadline = os.clock() + 180
+        while core.at_model_status() ~= READY and os.clock() < deadline do end
+    end
+    if core.at_model_status() ~= READY then
+        print("FAIL local: the model is not ready (status " .. tostring(core.at_model_status()) .. ")")
+        os.exit(1)
+    end
+    local text = glossary.to_wire(masked, tokens)
+    if core.at_submit(text, lang) <= 0 then
+        print("FAIL local: the core refused the text: " .. tostring(core.at_model_error()))
+        os.exit(0)
+    end
+    local buf = ffi.new("char[?]", 65536)
+    local deadline = os.clock() + 180
+    local n = 0
+    while os.clock() < deadline do
+        n = core.at_poll(buf, 65536)
+        if n ~= 0 then break end
+    end
+    if n <= 0 then
+        print("FAIL local: no answer (last n=" .. tostring(n) .. ")")
+        os.exit(0)
+    end
+    local handle = assert(io.open(path, "wb"))
+    handle:write(ffi.string(buf, n))
+    handle:close()
+    print("local " .. item.shape .. " " .. n .. " byte(s)")
     os.exit(0)
 end
 
