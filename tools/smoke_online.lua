@@ -1675,6 +1675,46 @@ do
     tier.reset()
 end
 
+-- ---------------------------------------------------------------------------
+-- one English string, several keys (the reuse map behind scanner.lua's pass)
+--
+-- A mod with per-screen settings repeats a label under ten keys, and each repeat would otherwise cost
+-- an item against the service's rate limit. What matters is that the key includes the mod and the
+-- language: nothing may be reused across mods (their terms differ) or across languages.
+-- ---------------------------------------------------------------------------
+do
+    local shared = online.shared_text_for_tests
+
+    shared.clear()
+    shared.remember("true_level", "zh-cn", "Havoc Assignment Icon", "\231\131\173\138\171\228\187\187\229\138\161\229\155\190\230\160\135", "deepl")
+    check("reuse: the text is remembered",
+        shared.get("true_level", "zh-cn", "Havoc Assignment Icon") ~= nil, true)
+    check("reuse: and comes back with its bookkeeping",
+        shared.get("true_level", "zh-cn", "Havoc Assignment Icon").src, "deepl")
+    check("reuse: another mod never sees it",
+        shared.get("BetterBots", "zh-cn", "Havoc Assignment Icon"), nil)
+    check("reuse: nor does another language",
+        shared.get("true_level", "uk", "Havoc Assignment Icon"), nil)
+    check("reuse: nor a different string",
+        shared.get("true_level", "zh-cn", "Havoc Assignment Icon "), nil)
+
+    -- The provider echoing the source back is not a translation to share (that is the "unchanged" case,
+    -- which the run marks as such).
+    shared.remember("true_level", "zh-cn", "Brunt", "Brunt", "bing")
+    check("reuse: an unchanged answer is not shared",
+        shared.get("true_level", "zh-cn", "Brunt"), nil)
+
+    -- First writer wins, so a hand-written translation stored earlier is not displaced by a later
+    -- machine answer for the same string.
+    shared.remember("true_level", "zh-cn", "Cragtown", "\230\137\139\229\134\153\233\149\135", nil)
+    shared.remember("true_level", "zh-cn", "Cragtown", "\230\156\186\231\191\187\232\175\145", "deepl")
+    check("reuse: an earlier hand-written answer is kept",
+        shared.get("true_level", "zh-cn", "Cragtown").text, "\230\137\139\229\134\153\233\149\135")
+    check("reuse: and stays hand-written",
+        shared.get("true_level", "zh-cn", "Cragtown").src, nil)
+    shared.clear()
+end
+
     -- -----------------------------------------------------------------------
     -- The learned free-tier order
     -- -----------------------------------------------------------------------

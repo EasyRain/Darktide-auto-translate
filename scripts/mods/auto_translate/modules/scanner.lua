@@ -44,7 +44,8 @@ end
 -- fully read and validated: only their existing translations are protected, while
 -- missing or out of date keys stay pending so an engine can fill them in.
 function M.scan_mod(name, lang, opts)
-    local entry = { name = name, total = 0, already = 0, ready = {}, pending = {}, stale = 0, parked = 0 }
+    local entry = { name = name, total = 0, already = 0, ready = {}, pending = {}, stale = 0, parked = 0,
+                    reused = 0 }
 
     local mod_file = find_mod_file(name)
     if not mod_file then
@@ -99,6 +100,36 @@ function M.scan_mod(name, lang, opts)
         end
     end
 
+    -- Reuse what another key already has, when the English is identical. A mod with per-screen
+    -- settings repeats one label under ten keys (measured on the installed set: true_level has 41
+    -- keys and five distinct strings), and sending those to a service costs an item each against its
+    -- rate limit for no gain - the provider cannot tell the keys apart either. The comparison is the
+    -- full English string, not the hash, so a collision cannot leak a wrong translation, and it never
+    -- crosses mods (their terms differ) or languages. A hand-written entry is the best source there
+    -- is, so it is reused like any other.
+    local shared = {}
+    for _, item in ipairs(entry.ready) do
+        if shared[item.en] == nil then
+            shared[item.en] = item
+        end
+    end
+    if next(shared) ~= nil then
+        local kept = {}
+        for _, item in ipairs(entry.pending) do
+            local source = shared[item.en]
+            if source then
+                entry.ready[#entry.ready + 1] = {
+                    key = item.key, en = item.en, hash = item.hash,
+                    text = source.text, src = source.src, reused = true,
+                }
+                entry.reused = entry.reused + 1
+            else
+                kept[#kept + 1] = item
+            end
+        end
+        entry.pending = kept
+    end
+
     table.sort(entry.pending, function(a, b)
         return a.key < b.key
     end)
@@ -121,7 +152,7 @@ function M.scan(mod, lang, opts)
     local report = {
         lang = lang,
         mods = {},
-        stats = { mods_total = 0, keys_total = 0, already = 0, ready = 0, pending = 0, stale = 0, skipped = 0, redo = 0, parked = 0 },
+        stats = { mods_total = 0, keys_total = 0, already = 0, ready = 0, pending = 0, stale = 0, skipped = 0, redo = 0, parked = 0, reused = 0 },
     }
 
     local dmf = get_mod("DMF")
@@ -172,11 +203,19 @@ function M.scan(mod, lang, opts)
             st.stale = st.stale + entry.stale
             st.parked = st.parked + (entry.parked or 0)
             st.redo = st.redo + (entry.redo or 0)
+            st.reused = st.reused + (entry.reused or 0)
             if entry.skipped then
                 st.skipped = st.skipped + 1
                 util.log(mod, "skipped %s: %s", name, entry.skipped)
             end
         end
+    end
+
+    -- Say the saving out loud: these keys were answered from another key's translation instead of
+    -- spending an item against the service's rate limit (see the reuse rule in scan_mod).
+    if report.stats.reused > 0 then
+        util.log(mod, "%d key(s) share their text with another key; their translations are reused, not sent",
+            report.stats.reused)
     end
 
     return report

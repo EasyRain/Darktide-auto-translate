@@ -1856,6 +1856,12 @@ local function finish(mod, reason)
         util.info(mod, "%d key(s) came back unchanged (font names, key labels, numbers) and are marked src = 'unchanged'",
             M.state.unchanged)
     end
+    if (M.state.reused or 0) > 0 then
+        -- Visibility for the saving: these are keys whose English another key already had, so they
+        -- were answered from that translation instead of spending an item against the service's limit.
+        util.info(mod, "%d key(s) shared their text with another key and were answered from it, not sent",
+            M.state.reused)
+    end
     if (M.state.parked or 0) > 0 then
         util.info(mod, "%d key(s) were parked: the engine refused them %d times, and their source text is stored in the translation files with a 'refused' marker - another engine picks them up again",
             M.state.parked, MAX_REFUSALS)
@@ -1875,10 +1881,53 @@ end
 -- ---------------------------------------------------------------------------
 -- Requests
 -- ---------------------------------------------------------------------------
+-- ---------------------------------------------------------------------------
+-- One English string, several keys.
+--
+-- A mod with per-screen settings repeats the same label under ten keys (measured on the installed
+-- set: true_level has 41 keys and five distinct strings, so 88% of its work is the same sentence
+-- again). Sending those to a service costs an item each against its rate limit, and the provider
+-- cannot tell the keys apart any better than we can, so a translation we already have is reused
+-- instead. The key is the full English string, not the 32-bit hash, so a collision cannot leak a
+-- wrong translation, and it includes the mod and the language: nothing is shared across mods (their
+-- terms and context differ) and nothing across languages.
+--
+-- scanner.lua does the same thing at scan time for entries the file already has; this map is for the
+-- ones that arrive during the run, which is what makes the *first* run of such a mod cheap.
+-- ---------------------------------------------------------------------------
+local shared_text = {}
+
+local function shared_key(mod_id, lang, en)
+    return tostring(mod_id) .. "\n" .. tostring(lang) .. "\n" .. tostring(en)
+end
+
+local function remember_shared_text(mod_id, lang, en, text, src)
+    if type(text) ~= "string" or text == "" or text == en then
+        return
+    end
+    local key = shared_key(mod_id, lang, en)
+    if shared_text[key] == nil then
+        shared_text[key] = { text = text, src = src }
+    end
+end
+
+local function shared_text_for(mod_id, lang, en)
+    return shared_text[shared_key(mod_id, lang, en)]
+end
+
+-- The reuse map (one English string, several keys): the smoke pins the rules it enforces. Declared
+-- here, after both functions, because a name assigned before its `local` is defined would be nil.
+M.shared_text_for_tests = {
+    remember = remember_shared_text,
+    get = shared_text_for,
+    clear = function() shared_text = {} end,
+}
+
 local function store_translation(mod, item, text, src)
     local data = data_for(item.mod_id, M.state.lang)
     store.set_entry(data, item.key, item.en, item.hash, text, src)
     mark_dirty(item.mod_id, M.state.lang)
+    remember_shared_text(item.mod_id, M.state.lang, item.en, text, src)
 
     -- Make it visible right away instead of waiting for the run to finish: the
     -- first pass over ~2500 keys takes tens of minutes.
@@ -1908,6 +1957,16 @@ local function dispatch(mod)
     local item = q_pop()
     if not item then
         return false
+    end
+
+    -- The same English under another key: a translation for it is already in hand (from this run, or
+    -- from the file), so it costs no request at all. See the reuse rule above store_translation.
+    local shared = shared_text_for(item.mod_id, M.state.lang, item.en)
+    if shared then
+        store_translation(mod, item, shared.text, shared.src)
+        M.state.done = M.state.done + 1
+        M.state.reused = (M.state.reused or 0) + 1
+        return true
     end
 
     -- A request from a run we already threw away can still be finishing, and its
