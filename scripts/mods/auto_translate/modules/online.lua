@@ -1460,6 +1460,9 @@ local function tier_probe_record(mod, name, ok, why)
     end
     tier_probe.provider = nil
     tier_probe.sent_at = 0
+    -- The check is not a run, so it does not go through the run's pacing; it paces itself instead.
+    -- Five requests back to back is exactly what the check exists to avoid provoking.
+    tier_probe.next_at = elapsed + min_interval(M.state.engine or "online_free")
 end
 
 local function tier_probe_finish(mod)
@@ -1527,9 +1530,19 @@ local function tier_probe_step(mod)
         tier_probe_finish(mod)
         return false
     end
+    if tier_probe.next_at and elapsed < tier_probe.next_at then
+        return true             -- its own gap between two endpoints; the deadline above still bounds it
+    end
     if inflight then
         if inflight.kind == "bootstrap" then
-            -- bing's page; its own reply branch records the outcome and clears inflight
+            -- bing's page. Its own reply branch records the outcome and clears inflight; the clock
+            -- here is what stops a page that never arrives from holding the run (a late reply is then
+            -- dropped as stale, because inflight is gone).
+            if tier_probe.sent_at > 0 and elapsed - tier_probe.sent_at > TIER_PROBE_TIMEOUT then
+                local provider = inflight.provider
+                inflight = nil
+                tier_probe_record(mod, provider, false, "no answer in time")
+            end
             return true
         end
         if tier_probe.sent_at > 0 and elapsed - tier_probe.sent_at > TIER_PROBE_TIMEOUT then
@@ -3152,6 +3165,16 @@ function M.update(mod, dt)
     local ffi = Mods.lua.ffi
     elapsed = elapsed + (dt or 0)
 
+    -- The startup check of the keyless tier must never outlive its budget, whatever else this frame
+    -- decides to skip. It holds the queue, so a check that is not driven - because a pacing wait or a
+    -- rate-limit cooldown (up to 300 s) returned first, or because the run was stopped - would hold
+    -- the run for exactly as long as that wait lasts. Reported from a real session: switching the
+    -- target language left the run waiting instead of translating.
+    if tier_probe and elapsed > tier_probe.deadline then
+        util.info(mod, "the free service check ran out of time; the rest are tried during the run")
+        tier_probe_finish(mod)
+    end
+
     -- 1. collect a finished response
     --
     -- This runs whether or not a translation run is in progress, because the test button's
@@ -3389,7 +3412,17 @@ function M.update(mod, dt)
         return
     end
 
-    -- 2. pacing and cooldown
+    -- 2.5 the startup check of the keyless tier: the queue waits while it runs, so that the wait
+    -- buys a proven endpoint (see tier_probe). It sits *before* the pacing and cooldown gates on
+    -- purpose: those can wait minutes (a rate-limit cooldown is 300 s), and a check that is only
+    -- driven on a free frame would hold the run for all of it. Measured in a real session: switching
+    -- the target language left the run waiting instead of translating, because the check's own
+    -- deadline sat behind a cooldown gate that returned first.
+    if tier_probe_step(mod) then
+        return
+    end
+
+    -- 3. pacing and cooldown
     if elapsed < next_slot then
         return
     end
@@ -3398,19 +3431,13 @@ function M.update(mod, dt)
     end
     cooldown_until = 0
 
-    -- 2.5 the startup check of the keyless tier: the queue waits while it runs, so that the wait buys
-    -- a proven endpoint (see tier_probe)
-    if tier_probe_step(mod) then
-        return
-    end
-
-    -- 3. nothing left to do
+    -- 4. nothing left to do
     if q_count() <= 0 then
         finish(mod, "finished")
         return
     end
 
-    -- 4. start the next request
+    -- 5. start the next request
     dispatch(mod)
 end
 
