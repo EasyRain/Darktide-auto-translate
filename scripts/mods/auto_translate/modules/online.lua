@@ -2752,7 +2752,12 @@ local function handle_response(mod, req, body)
         return false, why, false
     end
 
-    return accept_translation(mod, req, ffi.string(out_buf, n), req.provider)
+    -- The main single-answer path, and the one most items take: the reply carries the wire form
+    -- (circled digits, see glossary.to_wire) and has to come back to the internal form before any
+    -- guard looks at it. Without this the guards saw glyphs where the tags and the line breaks were
+    -- supposed to be and refused every styled or multi-line string.
+    return accept_translation(mod, req, from_wire(ffi.string(out_buf, n), req.tokens),
+        req.provider)
 end
 
 -- Records one refusal of an item by the engine in use and returns the running total.

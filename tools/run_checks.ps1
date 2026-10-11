@@ -37,6 +37,7 @@ $checks = @(
     @{ name = 'injector';  hint = 'merging into other mods, and back out'; cmd = { & $lua tools\smoke_injector.lua } },
     @{ name = 'options';   hint = 'option texts, translated and restored'; cmd = { & $lua tools\smoke_options_refresh.lua } },
     @{ name = 'glossary';  hint = 'the generated term table, end to end';  cmd = { & $lua tools\check_glossary.lua } },
+    @{ name = 'wire';       hint = 'every reply path decodes the wire form';      cmd = { python tools\check_wire_boundaries.py } },
     @{ name = 'langs';     hint = 'the fixes, in all 12 languages';       cmd = { & $lua tools\check_languages.lua } },
     @{ name = 'layout';    hint = 'what the options screen will show';     cmd = { & $lua tools\check_options_layout.lua } },
     @{ name = 'stores';    hint = 'the played-with stores are clean';      cmd = { & $lua tools\check_stores.lua } },
