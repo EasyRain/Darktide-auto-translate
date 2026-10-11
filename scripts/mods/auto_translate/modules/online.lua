@@ -3702,7 +3702,7 @@ function M.update(mod, dt)
                         -- The reply is whatever the endpoint did with the *masked* text, so the
                         -- glossary terms have to be put back before the player reads it:
                         -- otherwise the chat shows the placeholders, which look like garbage.
-                        local answer = ffi.string(out_buf, n)
+                        local answer = from_wire(ffi.string(out_buf, n), req.tokens)
                         if req.tokens and #req.tokens > 0 then
                             local restored, missing = glossary.unmask(answer, req.tokens, req.masked)
                             answer = restored
@@ -3864,6 +3864,8 @@ function M.probe(mod, lang)
     if is_fully_protected(sample, masked, tokens) then
         masked, tokens = sample, {}
     end
+    -- The same wire form a real request uses, so the test shows what a run would actually send.
+    masked = to_wire(masked, tokens)
     local probe_item = { mod_id = "test", key = "test", en = sample, hash = "" }
     local job, describe, response_path
 

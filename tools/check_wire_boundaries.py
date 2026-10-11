@@ -24,6 +24,46 @@ ONLINE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..",
 NOT_A_REPLY = ("pre_masked", "assemble_lines", "req.parts", "state.masked")
 
 
+# Functions whose send call carries plain sample text rather than masked text, so no wire form is due.
+ENCODE_ALLOW = {"tier_probe_send"}
+SEND_CALLS = ("at_submit(", "at_online_body(", "at_online_body_multi(", "at_http_post(", "at_http_get(")
+
+
+def function_of(lines, index):
+    """The name of the function containing `index`, or None at the top level."""
+    for j in range(index, -1, -1):
+        line = lines[j].strip()
+        for prefix in ("local function ", "function ", "M."):
+            if prefix == "M." and not line.startswith("function M."):
+                continue
+            if line.startswith(prefix) or (prefix == "M." and line.startswith("function M.")):
+                name = line.split("(")[0].split()[-1]
+                return name
+    return None
+
+
+def check_encode(text, report):
+    """A function that masks text and also sends a request must convert to the wire form."""
+    lines = text.split("\n")
+    starts = [i for i, l in enumerate(lines)
+              if l.strip().startswith("function ") or l.strip().startswith("local function ")]
+    problems = []
+    for k, start in enumerate(starts):
+        end = starts[k + 1] if k + 1 < len(starts) else len(lines)
+        body = "\n".join(lines[start:end])
+        name = function_of(lines, start)
+        if name in ENCODE_ALLOW:
+            continue
+        if "glossary.mask(" not in body:
+            continue
+        if not any(call in body for call in SEND_CALLS):
+            continue
+        report["encode_checked"] += 1
+        if "to_wire(" not in body:
+            problems.append("  %s: masks text and sends a request without to_wire()" % name)
+    return problems
+
+
 def main():
     text = io.open(ONLINE, encoding="utf-8").read()
     lines = text.split("\n")
@@ -50,7 +90,10 @@ def main():
         if "from_wire(" not in flat:
             problems.append("  L%d: %s" % (i + 1, flat[:120]))
 
-    print("wire boundaries: %d reply call(s) to accept_translation checked" % checked)
+    report = {"encode_checked": 0}
+    problems += check_encode(text, report)
+    print("wire boundaries: %d reply call(s) checked, %d send site(s) checked"
+        % (checked, report["encode_checked"]))
     if problems:
         print("  these hand a raw reply to the guards without decoding it:")
         for p in problems:
