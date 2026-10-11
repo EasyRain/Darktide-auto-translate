@@ -635,6 +635,16 @@ check("text: identical rich-text tags are fine", safe_tags, true)
 
 
 
+
+-- Another provider is worth a try in exactly two cases: the connection failed (another host may
+-- answer) or a placeholder did not come back (engine-specific - bing dropped the "tab" token from
+-- a five-placeholder tooltip on every try). A content refusal would meet the same answer everywhere.
+local worth = online.worth_another_provider_for_tests
+check("advance: a transport failure tries the next provider", worth(true, nil), true)
+check("advance: a lost placeholder tries the next provider", worth(false, "tokens"), true)
+check("advance: a content refusal does not", worth(false, "unsafe"), false)
+check("advance: nor do lost line breaks", worth(false, "lines"), false)
+
 print(string.format("%d failure(s) in total", failures))
 
 -- ---------------------------------------------------------------------------

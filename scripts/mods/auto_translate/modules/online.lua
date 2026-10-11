@@ -2733,6 +2733,16 @@ end
 -- `code` says *why* it failed, because one reason is worth a different second attempt:
 -- "tokens" means the glossary placeholders went missing, and the same sentence without
 -- masking may well come back translated.
+-- True when a failure is worth another provider (see fail_item): a transport failure, where another
+-- host may answer, or a lost placeholder, which is engine-specific - measured, bing dropped the "tab"
+-- token from a five-placeholder tooltip on all three tries. A content refusal would meet the same
+-- answer everywhere.
+local function worth_another_provider(transport, code)
+    return transport or code == "tokens"
+end
+
+M.worth_another_provider_for_tests = worth_another_provider
+
 function fail_item(mod, req, reason, http_status, transport, code, quiet_provider)
     local item = req.item
 
@@ -2928,8 +2938,21 @@ function fail_item(mod, req, reason, http_status, transport, code, quiet_provide
     -- request (and possibly a timeout) per provider while the run produces nothing. Reported from a
     -- real session: a batch whose reply dropped 22 terms made the run look stopped at 13 of 2320,
     -- because the item walked the whole tier and the free-service check could never get a turn.
+    -- Advance to the next provider in two cases, and only these two.
+    --
+    -- A transport failure: the connection failed, and another host may well answer.
+    --
+    -- A lost placeholder: the service answered but did not copy a token back. Measured from the reply
+    -- this code now logs - bing answered a five-placeholder Alfs tooltip with one index missing from
+    -- "...3...4...5...", and dropped the "tab" token from keybind_reset_tab_tooltip on all three tries.
+    -- That is engine-specific by nature, which is why the token refusal carries its own code, and
+    -- another engine may well keep it.
+    --
+    -- Anything else - our own guards refusing the text, a shortened answer, changed markup, lost line
+    -- breaks - would meet the same answer everywhere, and retrying it on four more hosts only spends
+    -- the requests this tier is rate limited on.
     local next_index = nil
-    if transport then
+    if worth_another_provider(transport, code) then
         local index = item.provider_index or 1
         while item.providers[index + 1] do
             index = index + 1
@@ -2950,7 +2973,7 @@ function fail_item(mod, req, reason, http_status, transport, code, quiet_provide
 
     M.state.last_error = reason
 
-    if transport then
+    if worth_another_provider(transport, code) then
         -- The item ran out of providers: for the keyless tier that means the whole tier is
         -- unreachable right now, so wait it out rather than counting an engine failure that
         -- would pause the engine and end the run.
