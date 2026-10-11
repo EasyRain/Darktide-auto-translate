@@ -1319,6 +1319,10 @@ local cooldown_until = 0
 -- run that stopped - a dead endpoint, a stopped game, a crash - lost everything it had already done.
 -- Reported from a real session: "it stopped at 13 and not a single translation was written".
 local FLUSH_EVERY_ITEMS = 20
+-- How many times an item may be retried with its dropped terms sent as plain text (plan A, see
+-- relax_mask). Two: the first retry relaxes the term a service kept losing, the second covers a
+-- different term going missing in the same string; after that the refusal budget has it.
+local RELAX_TRIES = 2
 local FLUSH_EVERY_SECONDS = 30
 local flushed_done = 0
 local next_flush = 0
@@ -2416,7 +2420,8 @@ end
 function accept_translation(mod, req, raw, src)
     local item = req.item
 
-    local restored, missing = glossary.unmask(raw, req.tokens)
+    local restored, missing, missing_indices = glossary.unmask(raw, req.tokens)
+    req.missing = missing_indices
     if missing and missing > 0 then
         -- What the service actually said, so a refusal can be diagnosed from the log instead of
         -- guessed at: the placeholder that came back mangled is the whole answer, and it is only
@@ -2951,6 +2956,29 @@ function fail_item(mod, req, reason, http_status, transport, code, quiet_provide
     -- Anything else - our own guards refusing the text, a shortened answer, changed markup, lost line
     -- breaks - would meet the same answer everywhere, and retrying it on four more hosts only spends
     -- the requests this tier is rate limited on.
+    -- Plan A for a dropped placeholder: ask again with just those terms sent as plain text (see
+    -- relax_mask). That is aimed at the measured shape - both bing and Google japanese dropped the
+    -- "tab" token from "...the 'reset {tab} to default {settings}' keybind...", reading it as "reset
+    -- (the settings) to default" - and it costs one extra request instead of a parked key.
+    if code == "tokens" and type(req.missing) == "table" and #req.missing > 0 then
+        local relax = item.relax or {}
+        local added = 0
+        for _, index in ipairs(req.missing) do
+            if not relax[index] then
+                relax[index] = true
+                added = added + 1
+            end
+        end
+        item.relax = relax
+        item.relax_tries = (item.relax_tries or 0) + 1
+        if added > 0 and item.relax_tries <= RELAX_TRIES then
+            util.info(mod, "%s:%s: retrying with %d term(s) as plain text (try %d of %d)",
+                item.mod_id, item.key, added, item.relax_tries, RELAX_TRIES)
+            q_unshift(item)
+            return
+        end
+    end
+
     local next_index = nil
     if worth_another_provider(transport, code) then
         local index = item.provider_index or 1
@@ -3290,11 +3318,54 @@ local function mask_breaks(text, tokens)
     return text, out
 end
 
+-- Send the named terms as plain text instead of placeholders, and compact the token list so the
+-- remaining placeholders still match it.
+--
+-- Plan A for a service that drops a placeholder: measured, both bing and Google (japanese) dropped the
+-- "tab" token from "Choose a {hotkey} to use as the 'reset {tab} to default {settings}' keybind",
+-- reading the sentence as "reset (the settings) to default". A word cannot be dropped the way a
+-- bracketed token can, so the retry sends that one word as words; the answer is kept, and the term
+-- arrives as the service renders it rather than as our glossary spells it.
+local function relax_mask(text, tokens, relax)
+    if type(relax) ~= "table" or type(tokens) ~= "table" then
+        return text, tokens
+    end
+    local kept, map, relaxed = {}, {}, 0
+    for i = 1, #tokens do
+        if relax[i] then
+            local pattern = PLACE_OPEN .. "%s*" .. tostring(i - 1) .. "%s*" .. PLACE_CLOSE
+            text = text:gsub(pattern, function()
+                return tokens[i].term
+            end, 1)
+            relaxed = relaxed + 1
+        else
+            kept[#kept + 1] = tokens[i]
+            map[i - 1] = #kept - 1
+        end
+    end
+    if relaxed == 0 then
+        return text, tokens
+    end
+    -- Renumber. A placeholder whose token is gone keeps its old index, and the leftover guard then
+    -- refuses the answer - which is the honest outcome for a token we could not place.
+    text = text:gsub(PLACE_OPEN .. "%s*(%d+)%s*" .. PLACE_CLOSE, function(index)
+        local new = map[tonumber(index)]
+        if new == nil then
+            return nil
+        end
+        return PLACE_OPEN .. new .. PLACE_CLOSE
+    end)
+    return text, kept
+end
+
+M.relax_mask_for_tests = relax_mask
+
 local function join_batch_impl(items, provider)
     local parts, tokens, lines = {}, {}, {}
     for i, one in ipairs(items) do
         local masked, item_tokens = glossary.mask(one.en, M.state.lang, not MARKUP_SAFE[provider])
         masked, item_tokens = mask_breaks(masked, item_tokens)
+        masked, item_tokens = relax_mask(masked, item_tokens, one.relax)
         parts[i], tokens[i] = masked, item_tokens
         lines[i] = string.format("[%d] %s", i, masked)
     end

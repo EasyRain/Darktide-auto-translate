@@ -645,6 +645,21 @@ check("advance: a lost placeholder tries the next provider", worth(false, "token
 check("advance: a content refusal does not", worth(false, "unsafe"), false)
 check("advance: nor do lost line breaks", worth(false, "lines"), false)
 
+
+-- Plan A: a term a service keeps dropping is sent as plain text on the retry, and the remaining
+-- placeholders are renumbered so they still match the token list (online.lua's relax_mask).
+local relax_text, relax_tokens = online.relax_mask_for_tests(
+    "A " .. "\226\159\1660\226\159\167" .. " B " .. "\226\159\1661\226\159\167" .. " C",
+    { { term = "alpha" }, { term = "beta" } }, { [1] = true })
+check("relax: the relaxed term is plain text", relax_text:find("alpha", 1, true) ~= nil, true)
+local _, relax_left = relax_text:gsub("\226\159\166%d+\226\159\167", "")
+check("relax: exactly one placeholder is left", relax_left, 1)
+check("relax: the other placeholder is renumbered to 0",
+    relax_text:find("\226\159\1660\226\159\167", 1, true) ~= nil, true)
+check("relax: and the token list is compacted", #relax_tokens, 1)
+local same_text, same_tokens = online.relax_mask_for_tests("x", { { term = "y" } }, nil)
+check("relax: nothing relaxed changes nothing", same_text == "x" and #same_tokens == 1, true)
+
 print(string.format("%d failure(s) in total", failures))
 
 -- ---------------------------------------------------------------------------

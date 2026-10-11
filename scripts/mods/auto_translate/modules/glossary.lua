@@ -392,9 +392,11 @@ function M.unmask(text, tokens)
     end
 
     local missing = 0
+    local missing_indices = {}
     for i = 1, #tokens do
         if not text:find(placeholder_pattern(i - 1)) then
             missing = missing + 1
+            missing_indices[#missing_indices + 1] = i
         end
     end
 
@@ -415,7 +417,9 @@ function M.unmask(text, tokens)
         end
     end
 
-    return result, missing
+    -- The third value names the tokens, so a caller can retry with just those sent as plain text
+    -- (see relax_mask in online.lua).
+    return result, missing, missing_indices
 end
 
 return M
