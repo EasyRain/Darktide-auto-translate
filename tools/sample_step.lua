@@ -53,6 +53,11 @@ glossary.init({
 assert(glossary.load())
 local online = assert(loadfile(repo .. "/scripts/mods/auto_translate/modules/online.lua"))()
 
+local function cstr_or(ptr)
+    local ok, value = pcall(function() return ffi.string(ptr) end)
+    return ok and value or "?"
+end
+
 local OPEN, CLOSE = "\226\159\166", "\226\159\167"     -- byte-wise: Lua 5.1 has no \u escapes
 
 -- the online path's line-break pass (see mask_breaks in online.lua): each break becomes its own token
@@ -81,8 +86,9 @@ local function mask_sample(index, lang)
 end
 
 local mode, index, lang, path = arg[1], tonumber(arg[2]), arg[3], arg[4]
-assert(mode == "wire" or mode == "verdict" or mode == "retry" or mode == "local",
-    "usage: wire|verdict|retry|local <index> <lang> <file> [out]")
+assert(mode == "wire" or mode == "verdict" or mode == "retry" or mode == "local"
+    or mode == "api",
+    "usage: wire|verdict|retry|local|api <index> <lang> <file> [key] [provider]")
 local item, masked, tokens = mask_sample(index, lang)
 if not item then
     print("FAIL no such sample: " .. tostring(index))
@@ -108,6 +114,79 @@ if mode == "wire" then
     handle:write(text)
     handle:close()
     print("wire " .. item.shape .. " " .. #tokens .. " token(s)")
+    os.exit(0)
+end
+
+if mode == "api" then
+    -- An API provider (DeepL by default). The key travels on the command line for this test and is never
+    -- written into the repository: a run gets it from the mod's own setting.
+    local key = arg[5]
+    local provider = arg[6] or "deepl"
+    assert(key and key ~= "", "api needs a key")
+    local stub = { info = function() end, warn = function() end, error = function() end,
+        get = function() return nil end, log = function() end, popup = function() end }
+    online.init(stub, nil, glossary, nil, nil, nil)
+    local core, why = online.load_core(stub)
+    if not core then
+        print("FAIL api: " .. tostring(why))
+        os.exit(1)
+    end
+
+    local text = glossary.to_wire(masked, tokens)
+    local host_buf = ffi.new("char[?]", 512)
+    local path_buf = ffi.new("char[?]", 8192)
+    local body_buf = ffi.new("char[?]", 65536)
+    local headers = ffi.new("char[?]", 2048)
+    if core.at_online_host(provider, key, host_buf, 512) == 0
+        or core.at_online_path(provider, key, "en", lang, text, path_buf, 8192) == 0 then
+        print("FAIL api: " .. tostring(cstr_or(core.at_online_error())))
+        os.exit(0)
+    end
+    if core.at_online_body(provider, "en", lang, text, body_buf, 65536) == 0 then
+        print("FAIL api: body: " .. tostring(cstr_or(core.at_online_error())))
+        os.exit(0)
+    end
+    if core.at_online_headers(provider, key, headers, 2048) == 0 then
+        print("FAIL api: headers: " .. tostring(cstr_or(core.at_online_error())))
+        os.exit(0)
+    end
+    local job = core.at_http_post(host_buf, path_buf, core.at_online_content_type(provider),
+        headers, body_buf)
+    if job <= 0 then
+        print("FAIL api: post: " .. tostring(cstr_or(core.at_error())))
+        os.exit(0)
+    end
+
+    local id_buf = ffi.new("int[1]")
+    local result_buf = ffi.new("int[1]")
+    local code_buf = ffi.new("int[1]")
+    local out_buf = ffi.new("char[?]", 65536)
+    local len_buf = ffi.new("int[1]")
+    local win_buf = ffi.new("unsigned int[1]")   -- the cdef wants unsigned int*, not char*
+    local deadline = os.clock() + 60
+    local rc = 0
+    while os.clock() < deadline do
+        rc = core.at_http_poll(id_buf, result_buf, code_buf, out_buf, 65536, len_buf, win_buf)
+        if rc ~= 0 then break end
+    end
+    if rc == 0 then
+        print("FAIL api: no answer within 60s")
+        os.exit(0)
+    end
+    if result_buf[0] ~= 0 then
+        print("FAIL api: HTTP " .. tostring(code_buf[0]))
+        os.exit(0)
+    end
+    local parsed = ffi.new("char[?]", 65536)
+    local n = core.at_online_parse(provider, out_buf, parsed, 65536)
+    if n <= 0 then
+        print("FAIL api: unreadable reply: " .. tostring(cstr_or(core.at_online_error())))
+        os.exit(0)
+    end
+    local handle = assert(io.open(path, "wb"))
+    handle:write(ffi.string(parsed, n))
+    handle:close()
+    print("api " .. provider .. " " .. item.shape .. " " .. n .. " byte(s)")
     os.exit(0)
 end
 
