@@ -2008,10 +2008,14 @@ function M.start(mod, report, lang)
     local queued, skipped, colours, local_skips = 0, 0, 0, 0
     -- What the on-device model cannot hold. Measured on a real run: switching to the local engine refused 6
 -- of 48 keys because the placeholders did not come back, each costing ~14 s of inference and three
--- refusals - and a refused key ends up in English anyway. Rich-text markup and line breaks are the two
--- shapes it loses, so they are left in English without a request at all.
+-- refusals - and a refused key ends up in English anyway.
+--
+-- Rich-text markup only. A multi-line string is NOT in this class: dispatch_lines() splits it and asks for
+-- one line at a time, so the breaks are real newlines the split owns and there is no break placeholder for
+-- the model to lose. (An earlier version of this skipped multi-line text too, which threw away a path that
+-- works.)
 local function local_engine_cannot_hold(text)
-    return type(text) == "string" and (text:find("{#", 1, true) ~= nil or text:find("\n", 1, true) ~= nil)
+    return type(text) == "string" and text:find("{#", 1, true) ~= nil
 end
 
 local take_colours = mod:get("translate_colours") == true
@@ -2084,8 +2088,8 @@ local take_colours = mod:get("translate_colours") == true
     end
     if local_skips > 0 then
         notes[#notes + 1] = string.format(
-            "%d key(s) with rich-text markup or line breaks left in English: the on-device model does not "
-            .. "keep their placeholders", local_skips)
+            "%d key(s) with rich-text markup left in English: the on-device model does not keep their "
+            .. "placeholders", local_skips)
     end
     util.info(mod, "online translation queued: %d key(s) into '%s' via %s [%s]%s",
         queued, tostring(lang), engine,
