@@ -2466,9 +2466,23 @@ function fail_item(mod, req, reason, http_status, transport, code, quiet_provide
             rate_limit_notified = true
             util.popup(mod, "rate_limited_notice", pause)
         end
-        util.warn(mod,
-            "service is rate limiting (HTTP 429); pausing %d s, then one request every %.2f s (backoff x%d)",
-            pause, min_interval(M.state.engine), backoff)
+        -- One warning per streak, and every further 429 of the same streak at info level: a
+        -- rate-limited run answers 429 again and again, and a wall of warnings is what a player
+        -- reports as "an error again" (Nexus, 2026-10-07). The line names the service, says that the
+        -- run continues, and - on the keyless tier, which is the one that gets throttled - says what
+        -- actually fixes it.
+        local advice = M.state.engine == "online_free"
+            and "; a key (options) or the offline model avoids this"
+            or ""
+        local line = "service is rate limiting (HTTP 429, %s); pausing %d s, then one request "
+            .. "every %.2f s (backoff x%d), and it continues on its own%s"
+        if rate_limit_streak <= 1 or hard then
+            util.warn(mod, line, tostring(req.provider), pause, min_interval(M.state.engine), backoff,
+                advice)
+        else
+            util.info(mod, line, tostring(req.provider), pause, min_interval(M.state.engine), backoff,
+                advice)
+        end
         q_unshift(item) -- retried once the pause expires
         M.state.provider = nil
         return
