@@ -1216,6 +1216,14 @@ local elapsed = 0
 local next_slot = 0
 local cooldown_until = 0
 
+-- Keep what has been translated on disk while the run goes. The only flush used to be in finish(), so a
+-- run that stopped - a dead endpoint, a stopped game, a crash - lost everything it had already done.
+-- Reported from a real session: "it stopped at 13 and not a single translation was written".
+local FLUSH_EVERY_ITEMS = 20
+local FLUSH_EVERY_SECONDS = 30
+local flushed_done = 0
+local next_flush = 0
+
 M.state = {
     running = false,
     finished = false,
@@ -1827,11 +1835,14 @@ function M.start(mod, report, lang)
     M.state.unchanged = 0
     M.state.last_error = nil
 
-    -- The keyless tier is what this run will use: find out which endpoint answers before the first
-    -- string pays for the ones that do not (see tier_probe). The queue waits for it to finish.
+    -- The keyless tier is what this run will use: find out which endpoint answers, alongside the run
+    -- rather than in front of it (see tier_probe). The check never holds the queue.
     if M.state.running and engine == "online_free" and not is_local then
         begin_tier_probe(mod, lang)
     end
+    -- The periodic flush counts from this run's own total (see FLUSH_EVERY_ITEMS).
+    flushed_done = 0
+    next_flush = elapsed + FLUSH_EVERY_SECONDS
 
     local notes = {}
     if skipped > 0 then
@@ -3455,6 +3466,18 @@ function M.update(mod, dt)
     -- out is the best possible probe of the endpoint that is serving it.
     if tier_probe and inflight == nil and (elapsed < next_slot or q_count() == 0) then
         tier_probe_step(mod)
+    end
+
+    -- 6. put what is done on disk while the run goes (see FLUSH_EVERY_ITEMS): a run that stops must not
+    -- lose the translations it already has.
+    if dirty_count > 0 and
+        (M.state.done - flushed_done >= FLUSH_EVERY_ITEMS or elapsed >= next_flush) then
+        local written = M.flush(mod)
+        flushed_done = M.state.done
+        next_flush = elapsed + FLUSH_EVERY_SECONDS
+        if written > 0 then
+            util.info(mod, "%d translation file(s) written so far", written)
+        end
     end
 end
 
