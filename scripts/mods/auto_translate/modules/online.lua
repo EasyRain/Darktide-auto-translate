@@ -2583,6 +2583,13 @@ function accept_translation(mod, req, raw, src)
 
     local safe, why = M.text_is_safe(item.en, restored, M.state.lang)
     if not safe then
+        -- Every guard failure logs what it saw. The tags/line-break refusals in the game produced no
+        -- "placeholder missing" line at all, which means the count was zero and the damage happened
+        -- somewhere else - and two rounds of reasoning about that were wrong. The reply and the restored
+        -- text settle it in one run.
+        util.log(mod, "%s:%s refused (%s)\n    reply    %q\n    restored %q\n    source   %q",
+            item.mod_id, item.key, tostring(why), tostring(raw):sub(1, 200),
+            tostring(restored):sub(1, 200), tostring(item.en):sub(1, 200))
         return false, why, false, "unsafe"
     end
 
