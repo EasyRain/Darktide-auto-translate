@@ -2270,10 +2270,11 @@ local function dispatch(mod)
             -- has to copy the markers it is given.
             local masked, item_tokens = glossary.mask(one.en, M.state.lang, true)
             masked, item_tokens = relax_mask(masked, item_tokens, one.relax)
-            masked = to_wire(masked, item_tokens)
+            -- parts stays internal: it is what the per-part occurrence check compares the answer
+            -- against. Only the text the model is handed carries the wire form.
             parts[i] = masked
             tokens[i] = item_tokens
-            joined[i] = string.format("[%d] %s", i, masked)
+            joined[i] = string.format("[%d] %s", i, to_wire(masked, item_tokens))
         end
 
         local text = table.concat(joined, " ")
@@ -2669,6 +2670,9 @@ function dispatch_custom(mod, item)
     -- A custom endpoint is never trusted with rich-text markup (nothing is known about it),
     -- so markup is masked exactly as it is for every provider but DeepL.
     local masked, tokens = glossary.mask(item.en, M.state.lang, true)
+    -- The same wire form every other provider gets: a custom endpoint is no more likely to keep U+27E6
+    -- than bing is.
+    masked = to_wire(masked, tokens)
     local values = custom.values(spec, masked, "en", M.state.lang)
 
     local job
