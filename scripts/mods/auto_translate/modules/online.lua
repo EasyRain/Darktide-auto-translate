@@ -339,6 +339,98 @@ end
 -- returns this character, so the check costs the online path nothing.
 local UNK_MARKER = "\226\129\135"   -- UTF-8 for U+2047, written byte-wise: Lua 5.1
 
+
+-- The placeholder characters, without naming a member the glossary module does not have (it has no
+-- close accessor, and the api check insists every member named here exists).
+local PLACE_OPEN = (type(glossary) == "table" and glossary.placeholder_open
+    and glossary.placeholder_open()) or "⟦"
+local PLACE_CLOSE = "⟧"
+
+-- Hide the line breaks from the service, the way the terms and the markup are hidden.
+--
+-- The online paths send an item's whole text, and a service collapses blank lines: measured, bing
+-- turned "...\n\nSet to 0 to disable." into "...\nSet to 0 to disable." and once dropped both
+-- breaks. The offline path does not need this - it translates the text line by line (dispatch_lines).
+--
+-- With the break masked, glossary.unmask puts it back and counts a placeholder that did not come back
+-- as missing, so a service that loses a break is refused instead of stored collapsed - the same
+-- enforcement the terms and the rich-text tags already have.
+local function mask_breaks(text, tokens)
+    if type(text) ~= "string" or not text:find("\n", 1, true) then
+        return text, tokens
+    end
+    if type(tokens) ~= "table" then
+        tokens = {}
+    end
+    local out = {}
+    for i = 1, #tokens do
+        out[i] = tokens[i]
+    end
+    text = text:gsub("\n", function()
+        out[#out + 1] = { term = "\n", raw = true }
+        return PLACE_OPEN .. (#out - 1) .. PLACE_CLOSE
+    end)
+    return text, out
+end
+
+-- Send the named terms as plain text instead of placeholders, and compact the token list so the
+-- remaining placeholders still match it.
+--
+-- Plan A for a service that drops a placeholder: measured, both bing and Google (japanese) dropped the
+-- "tab" token from "Choose a {hotkey} to use as the 'reset {tab} to default {settings}' keybind",
+-- reading the sentence as "reset (the settings) to default". A word cannot be dropped the way a
+-- bracketed token can, so the retry sends that one word as words; the answer is kept, and the term
+-- arrives as the service renders it rather than as our glossary spells it.
+local function relax_mask(text, tokens, relax)
+    if type(relax) ~= "table" or type(tokens) ~= "table" then
+        return text, tokens
+    end
+    local kept, map, relaxed = {}, {}, 0
+    for i = 1, #tokens do
+        if relax[i] then
+            local pattern = PLACE_OPEN .. "%s*" .. tostring(i - 1) .. "%s*" .. PLACE_CLOSE
+            text = text:gsub(pattern, function()
+                return tokens[i].term
+            end, 1)
+            relaxed = relaxed + 1
+        else
+            kept[#kept + 1] = tokens[i]
+            map[i - 1] = #kept - 1
+        end
+    end
+    if relaxed == 0 then
+        return text, tokens
+    end
+    -- Renumber. A placeholder whose token is gone keeps its old index, and the leftover guard then
+    -- refuses the answer - which is the honest outcome for a token we could not place.
+    text = text:gsub(PLACE_OPEN .. "%s*(%d+)%s*" .. PLACE_CLOSE, function(index)
+        local new = map[tonumber(index)]
+        if new == nil then
+            return nil
+        end
+        return PLACE_OPEN .. new .. PLACE_CLOSE
+    end)
+    return text, kept
+end
+
+M.relax_mask_for_tests = relax_mask
+
+-- The wire form lives in glossary; the wrappers keep this file working when a test double provides only
+-- mask and unmask (the smoke tests do), and when the module is absent entirely.
+local function to_wire(text, tokens)
+    if type(glossary) == "table" and glossary.to_wire then
+        return glossary.to_wire(text, glossary.wire_reserved and glossary.wire_reserved(tokens) or nil)
+    end
+    return text
+end
+
+local function from_wire(text, tokens)
+    if type(glossary) == "table" and glossary.to_internal then
+        return glossary.to_internal(text, glossary.wire_reserved and glossary.wire_reserved(tokens) or nil)
+    end
+    return text
+end
+
 -- Characters, not bytes: Lua's '#' counts bytes, so a 13-character Chinese translation
 -- measures 39 - which made the first version of the guard below let the truncated
 -- description through. This counts UTF-8 lead bytes, which LuaJIT can do without a
@@ -2178,6 +2270,7 @@ local function dispatch(mod)
             -- has to copy the markers it is given.
             local masked, item_tokens = glossary.mask(one.en, M.state.lang, true)
             masked, item_tokens = relax_mask(masked, item_tokens, one.relax)
+            masked = to_wire(masked, item_tokens)
             parts[i] = masked
             tokens[i] = item_tokens
             joined[i] = string.format("[%d] %s", i, masked)
@@ -3312,97 +3405,6 @@ M.native_batch_for_tests = native_batch_for
 --
 -- Extracted (and exposed below) because this is the rule that decides what a batched request
 -- says: the rest of the path is transport, and the smoke test can only check what it can call.
--- The placeholder characters, without naming a member the glossary module does not have (it has no
--- close accessor, and the api check insists every member named here exists).
-local PLACE_OPEN = (type(glossary) == "table" and glossary.placeholder_open
-    and glossary.placeholder_open()) or "⟦"
-local PLACE_CLOSE = "⟧"
-
--- Hide the line breaks from the service, the way the terms and the markup are hidden.
---
--- The online paths send an item's whole text, and a service collapses blank lines: measured, bing
--- turned "...\n\nSet to 0 to disable." into "...\nSet to 0 to disable." and once dropped both
--- breaks. The offline path does not need this - it translates the text line by line (dispatch_lines).
---
--- With the break masked, glossary.unmask puts it back and counts a placeholder that did not come back
--- as missing, so a service that loses a break is refused instead of stored collapsed - the same
--- enforcement the terms and the rich-text tags already have.
-local function mask_breaks(text, tokens)
-    if type(text) ~= "string" or not text:find("\n", 1, true) then
-        return text, tokens
-    end
-    if type(tokens) ~= "table" then
-        tokens = {}
-    end
-    local out = {}
-    for i = 1, #tokens do
-        out[i] = tokens[i]
-    end
-    text = text:gsub("\n", function()
-        out[#out + 1] = { term = "\n", raw = true }
-        return PLACE_OPEN .. (#out - 1) .. PLACE_CLOSE
-    end)
-    return text, out
-end
-
--- Send the named terms as plain text instead of placeholders, and compact the token list so the
--- remaining placeholders still match it.
---
--- Plan A for a service that drops a placeholder: measured, both bing and Google (japanese) dropped the
--- "tab" token from "Choose a {hotkey} to use as the 'reset {tab} to default {settings}' keybind",
--- reading the sentence as "reset (the settings) to default". A word cannot be dropped the way a
--- bracketed token can, so the retry sends that one word as words; the answer is kept, and the term
--- arrives as the service renders it rather than as our glossary spells it.
-local function relax_mask(text, tokens, relax)
-    if type(relax) ~= "table" or type(tokens) ~= "table" then
-        return text, tokens
-    end
-    local kept, map, relaxed = {}, {}, 0
-    for i = 1, #tokens do
-        if relax[i] then
-            local pattern = PLACE_OPEN .. "%s*" .. tostring(i - 1) .. "%s*" .. PLACE_CLOSE
-            text = text:gsub(pattern, function()
-                return tokens[i].term
-            end, 1)
-            relaxed = relaxed + 1
-        else
-            kept[#kept + 1] = tokens[i]
-            map[i - 1] = #kept - 1
-        end
-    end
-    if relaxed == 0 then
-        return text, tokens
-    end
-    -- Renumber. A placeholder whose token is gone keeps its old index, and the leftover guard then
-    -- refuses the answer - which is the honest outcome for a token we could not place.
-    text = text:gsub(PLACE_OPEN .. "%s*(%d+)%s*" .. PLACE_CLOSE, function(index)
-        local new = map[tonumber(index)]
-        if new == nil then
-            return nil
-        end
-        return PLACE_OPEN .. new .. PLACE_CLOSE
-    end)
-    return text, kept
-end
-
-M.relax_mask_for_tests = relax_mask
-
--- The wire form lives in glossary; the wrappers keep this file working when a test double provides only
--- mask and unmask (the smoke tests do), and when the module is absent entirely.
-local function to_wire(text, tokens)
-    if type(glossary) == "table" and glossary.to_wire then
-        return glossary.to_wire(text, glossary.wire_reserved and glossary.wire_reserved(tokens) or nil)
-    end
-    return text
-end
-
-local function from_wire(text, tokens)
-    if type(glossary) == "table" and glossary.to_internal then
-        return glossary.to_internal(text, glossary.wire_reserved and glossary.wire_reserved(tokens) or nil)
-    end
-    return text
-end
-
 local function join_batch_impl(items, provider)
     local parts, tokens, lines = {}, {}, {}
     for i, one in ipairs(items) do
@@ -3432,6 +3434,7 @@ function dispatch_lines(mod, item)
     local state = item.line
     if not state then
         local masked, tokens = glossary.mask(item.en, M.state.lang, true)
+        masked = to_wire(masked, tokens)
         local segments, separators = split_lines(masked)
         state = {
             masked = masked,
@@ -3545,15 +3548,16 @@ function M.update(mod, dt)
                 fail_item(mod, req, reason, 0, false, req.code)
             end
         elseif req.kind == "local_batch" then
-            handle_local_batch(mod, req, ffi.string(out_buf, n))
+            handle_local_batch(mod, req, from_wire(ffi.string(out_buf, n), req.tokens))
         elseif req.kind == "local_line" then
             -- One line of a multi-line string: keep it and go back into the queue for
             -- the next one. The item is only stored once every line is in (dispatch_lines).
-            req.item.line.done[req.index] = ffi.string(out_buf, n)
+            req.item.line.done[req.index] = from_wire(ffi.string(out_buf, n), req.tokens)
             req.item.line.index = req.index + 1
             q_unshift(req.item)
         else
-            local ok, why, transport, code = accept_translation(mod, req, ffi.string(out_buf, n), req.src or M.state.engine)
+            local ok, why, transport, code = accept_translation(mod, req,
+                from_wire(ffi.string(out_buf, n), req.tokens), req.src or M.state.engine)
             if ok then
                 note_success(mod, req)
             else
