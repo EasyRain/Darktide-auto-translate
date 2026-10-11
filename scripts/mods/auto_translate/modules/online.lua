@@ -2406,7 +2406,13 @@ local function dispatch(mod)
             local part, item_tokens = glossary.mask(one.en, M.state.lang, not MARKUP_SAFE[provider])
             batch_parts[i], batch_tokens[i] = part, item_tokens
         end
-        masked = batch_parts[1]
+        -- The wire form here too: this branch (the native multi-part request) used to send the internal
+        -- bracketed placeholders while join_batch sent glyphs, and the services mangle the brackets -
+        -- measured in the game: "the rich-text tags differ (... translation none)" and "the line breaks
+        -- differ (source 4, translation 0)" appearing together, which is exactly what a service does to
+        -- {#color(..)} and to a masked newline when they arrive as U+27E6/U+27E7. batch_parts stays
+        -- internal: it is what the occurrence check compares the answer against.
+        masked = to_wire(batch_parts[1], batch_tokens)
     else
         masked, batch_parts, batch_tokens = join_batch(batch, provider)
     end
@@ -2442,9 +2448,11 @@ local function dispatch(mod)
         if native then
             -- LuaJIT hands a Lua string to a `const char*` element directly; the core then
             -- writes `text=..&text=..&source_lang=..&target_lang=..`.
+            -- Every part goes out in the wire form, sharing one reserved set with the answer's decode
+            -- (glossary.wire_reserved takes the per-part token lists).
             local texts = ffi.new("const char*[?]", #batch_parts)
             for i, part in ipairs(batch_parts) do
-                texts[i - 1] = part
+                texts[i - 1] = to_wire(part, batch_tokens)
             end
             body_ok = core.at_online_body_multi(provider, "en", M.state.lang, texts, #batch_parts,
                                                body_buf, BODY_CAP) == 1
