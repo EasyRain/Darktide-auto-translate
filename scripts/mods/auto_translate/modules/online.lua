@@ -2418,6 +2418,11 @@ function accept_translation(mod, req, raw, src)
 
     local restored, missing = glossary.unmask(raw, req.tokens)
     if missing and missing > 0 then
+        -- What the service actually said, so a refusal can be diagnosed from the log instead of
+        -- guessed at: the placeholder that came back mangled is the whole answer, and it is only
+        -- visible here (the store keeps the source, not the reply).
+        util.log(mod, "%s: %d placeholder(s) missing; reply was %q", tostring(req.provider or "?"),
+            missing, tostring(raw):sub(1, 160))
         -- The code is kept for the log and the refusal budget in fail_item(): a lost
         -- placeholder is the one refusal a *different* engine may well handle.
         -- "placeholder", not "glossary term": the count covers every masked token, and on a string

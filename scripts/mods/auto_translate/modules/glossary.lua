@@ -383,15 +383,22 @@ function M.unmask(text, tokens)
         return text, 0
     end
 
+    -- A service may keep the placeholder but re-space or re-wrap it ("{ 0 }", "{0 }"), and then a
+    -- literal search misses it while the raw characters still end up in the game. Whitespace inside the
+    -- brackets is therefore tolerated, in both the missing check and the substitution; anything else is
+    -- still a miss, and the caller refuses the answer (online.lua checks for a leftover).
+    local function placeholder_pattern(index)
+        return PLACEHOLDER_OPEN .. "%s*" .. tostring(index) .. "%s*" .. PLACEHOLDER_CLOSE
+    end
+
     local missing = 0
     for i = 1, #tokens do
-        local placeholder = PLACEHOLDER_OPEN .. (i - 1) .. PLACEHOLDER_CLOSE
-        if not text:find(placeholder, 1, true) then
+        if not text:find(placeholder_pattern(i - 1)) then
             missing = missing + 1
         end
     end
 
-    local result = text:gsub(PLACEHOLDER_OPEN .. "(%d+)" .. PLACEHOLDER_CLOSE, function(index)
+    local result = text:gsub(PLACEHOLDER_OPEN .. "%s*(%d+)%s*" .. PLACEHOLDER_CLOSE, function(index)
         local token = tokens[tonumber(index) + 1]
         if token then
             return token.term
