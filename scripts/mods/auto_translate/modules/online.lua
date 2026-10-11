@@ -3225,10 +3225,44 @@ M.native_batch_for_tests = native_batch_for
 --
 -- Extracted (and exposed below) because this is the rule that decides what a batched request
 -- says: the rest of the path is transport, and the smoke test can only check what it can call.
+-- The placeholder characters, without naming a member the glossary module does not have (it has no
+-- close accessor, and the api check insists every member named here exists).
+local PLACE_OPEN = (type(glossary) == "table" and glossary.placeholder_open
+    and glossary.placeholder_open()) or "⟦"
+local PLACE_CLOSE = "⟧"
+
+-- Hide the line breaks from the service, the way the terms and the markup are hidden.
+--
+-- The online paths send an item's whole text, and a service collapses blank lines: measured, bing
+-- turned "...\n\nSet to 0 to disable." into "...\nSet to 0 to disable." and once dropped both
+-- breaks. The offline path does not need this - it translates the text line by line (dispatch_lines).
+--
+-- With the break masked, glossary.unmask puts it back and counts a placeholder that did not come back
+-- as missing, so a service that loses a break is refused instead of stored collapsed - the same
+-- enforcement the terms and the rich-text tags already have.
+local function mask_breaks(text, tokens)
+    if type(text) ~= "string" or not text:find("\n", 1, true) then
+        return text, tokens
+    end
+    if type(tokens) ~= "table" then
+        tokens = {}
+    end
+    local out = {}
+    for i = 1, #tokens do
+        out[i] = tokens[i]
+    end
+    text = text:gsub("\n", function()
+        out[#out + 1] = { term = "\n", raw = true }
+        return PLACE_OPEN .. (#out - 1) .. PLACE_CLOSE
+    end)
+    return text, out
+end
+
 local function join_batch_impl(items, provider)
     local parts, tokens, lines = {}, {}, {}
     for i, one in ipairs(items) do
         local masked, item_tokens = glossary.mask(one.en, M.state.lang, not MARKUP_SAFE[provider])
+        masked, item_tokens = mask_breaks(masked, item_tokens)
         parts[i], tokens[i] = masked, item_tokens
         lines[i] = string.format("[%d] %s", i, masked)
     end

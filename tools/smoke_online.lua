@@ -338,6 +338,23 @@ do
     check("batch request: an unmasked item keeps its text", parts[2], "Ammo")
 
     local single, single_parts = online.join_batch_for_tests({ { en = "Ammo" } }, "google_clients5")
+
+-- A line break is hidden from the service like a term (services collapse blank lines: bing turned
+-- a tooltip's `\n\n` into `\n`, and once removed both breaks). The online text must therefore
+-- contain no raw newline, and the break must sit in the token list as a raw token.
+local two_lines = { { mod_id = "m", key = "k", en = "first line\n\nsecond line", hash = "h" } }
+local joined_text, _, joined_tokens = online.join_batch_for_tests(two_lines, "bing")
+check("breaks: the masked text carries no raw newline",
+    joined_text:find("\n", 1, true) == nil, true)
+local raw_tokens = 0
+for _, token in ipairs(joined_tokens[1] or {}) do
+    if token.raw and token.term == "\n" then raw_tokens = raw_tokens + 1 end
+end
+check("breaks: both breaks are tokens", raw_tokens, 2)
+local plain = { { mod_id = "m", key = "k2", en = "one line only", hash = "h" } }
+local plain_text, _, plain_tokens = online.join_batch_for_tests(plain, "bing")
+check("breaks: a single-line item is untouched", plain_text:find("\n", 1, true) == nil, true)
+check("breaks: and gets no extra tokens", #(plain_tokens[1] or {}), 0)
     check("batch request: one item has no marker", single, "Ammo")
     check("batch request: and one part", #single_parts, 1)
 end
@@ -615,6 +632,8 @@ check("text: a changed rich-text tag is refused", safe_tag, false)
 local safe_tags = online.text_is_safe("Run {#color(1,2,3)}fast{#reset()}",
     "走 {#color(1,2,3)}快{#reset()}")
 check("text: identical rich-text tags are fine", safe_tags, true)
+
+
 
 print(string.format("%d failure(s) in total", failures))
 

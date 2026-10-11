@@ -401,7 +401,9 @@ function M.unmask(text, tokens)
 
     for i = 1, #tokens do
         local token = tokens[i]
-        if token and type(token.term) == "string" and token.term ~= "" then
+        -- `raw` marks a token that is punctuation, not a term: a masked line break must go back
+        -- exactly as it was, without the CJK spacing rules that apply to real terms.
+        if token and type(token.term) == "string" and token.term ~= "" and not token.raw then
             result = tighten_script_boundary(result, token.term)
         end
     end
