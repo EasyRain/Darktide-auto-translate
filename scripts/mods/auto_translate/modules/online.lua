@@ -2005,20 +2005,8 @@ function M.start(mod, report, lang)
         end
     end
 
-    local queued, skipped, colours, local_skips = 0, 0, 0, 0
-    -- What the on-device model cannot hold. Measured on a real run: switching to the local engine refused 6
--- of 48 keys because the placeholders did not come back, each costing ~14 s of inference and three
--- refusals - and a refused key ends up in English anyway.
---
--- Rich-text markup only. A multi-line string is NOT in this class: dispatch_lines() splits it and asks for
--- one line at a time, so the breaks are real newlines the split owns and there is no break placeholder for
--- the model to lose. (An earlier version of this skipped multi-line text too, which threw away a path that
--- works.)
-local function local_engine_cannot_hold(text)
-    return type(text) == "string" and text:find("{#", 1, true) ~= nil
-end
-
-local take_colours = mod:get("translate_colours") == true
+    local queued, skipped, colours = 0, 0, 0
+    local take_colours = mod:get("translate_colours") == true
 
     for _, entry in ipairs(report.mods) do
         if not entry.skipped and #entry.pending > 0 then
@@ -2035,8 +2023,6 @@ local take_colours = mod:get("translate_colours") == true
                         mark_dirty(entry.name, lang)
                     end
                     colours = colours + 1
-                elseif M.state.is_local and not take_colours and local_engine_cannot_hold(item.en) then
-                    local_skips = local_skips + 1
                 elseif translatable(item.en, lang) then
                     q_push({
                         mod_id = entry.name,
@@ -2085,11 +2071,6 @@ local take_colours = mod:get("translate_colours") == true
     end
     if colours > 0 then
         notes[#notes + 1] = string.format("%d styled asset name(s) left in English (colour/font)", colours)
-    end
-    if local_skips > 0 then
-        notes[#notes + 1] = string.format(
-            "%d key(s) with rich-text markup left in English: the on-device model does not keep their "
-            .. "placeholders", local_skips)
     end
     util.info(mod, "online translation queued: %d key(s) into '%s' via %s [%s]%s",
         queued, tostring(lang), engine,
@@ -2824,9 +2805,10 @@ end
 -- produce something better.
 
 -- Whether the engine should try this string again after `refusals` refusals.
--- How many attempts the engine in use gets for one string. The on-device model is slow (~14 s a key) and
--- keeps placeholders poorly, so a second and third attempt cost ~30 s and end in the same place - parked
--- and left in English. One attempt, then the queue moves on.
+-- How many attempts the engine in use gets for one string. The on-device model is deterministic - the same
+-- input gives the same answer - so a retry cannot produce anything different, and at ~14 s a key it is
+-- pure cost. One attempt, then the queue moves on. (The same argument retires the plain-text retry for it,
+-- see fail_item.)
 local function refusal_budget()
     return M.state.is_local and 1 or MAX_REFUSALS
 end
@@ -3143,7 +3125,7 @@ function fail_item(mod, req, reason, http_status, transport, code, quiet_provide
     -- relax_mask). That is aimed at the measured shape - both bing and Google japanese dropped the
     -- "tab" token from "...the 'reset {tab} to default {settings}' keybind...", reading it as "reset
     -- (the settings) to default" - and it costs one extra request instead of a parked key.
-    if code == "tokens" and type(req.missing) == "table" and #req.missing > 0 then
+    if code == "tokens" and not M.state.is_local and type(req.missing) == "table" and #req.missing > 0 then
         local relax = item.relax or {}
         local added = 0
         for _, index in ipairs(req.missing) do
