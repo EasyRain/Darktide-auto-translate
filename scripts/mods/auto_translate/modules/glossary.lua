@@ -25,6 +25,39 @@ end
 local PLACEHOLDER_OPEN = "⟦"
 local PLACEHOLDER_CLOSE = "⟧"
 
+local WIRE_GLYPHS = {}
+do
+    local chunks = {
+        { 0x2460, 20 },     -- (1) .. (20)   circled digits
+        { 0x3251, 15 },     -- (21) .. (35)  circled numbers on black square
+        { 0x32B1, 15 },     -- (36) .. (50)  circled numbers on black square, higher
+    }
+    for _, chunk in ipairs(chunks) do
+        for i = 0, chunk[2] - 1 do
+            -- Lua 5.1 has no \u escapes: build the UTF-8 bytes by hand
+            local code = chunk[1] + i
+            local bytes
+            if code < 0x800 then
+                bytes = string.char(0xC0 + math.floor(code / 0x40), 0x80 + code % 0x40)
+            else
+                bytes = string.char(0xE0 + math.floor(code / 0x1000),
+                                    0x80 + math.floor(code / 0x40) % 0x40,
+                                    0x80 + code % 0x40)
+            end
+            WIRE_GLYPHS[#WIRE_GLYPHS + 1] = bytes
+        end
+    end
+end
+
+local WIRE_SET = {}
+for i = 1, #WIRE_GLYPHS do
+    WIRE_SET[WIRE_GLYPHS[i]] = true
+end
+
+-- The glyphs a request must not use as placeholders, because the text itself contains them: a game
+-- string with a real circled number in it would otherwise be read back as one of ours on the return
+-- trip and substituted with another token's term. Accepts a flat token list or one list per batch part.
+
 -- Terms that are also ordinary English words, and are therefore only masked when the whole string
 -- is that label.
 --
@@ -287,6 +320,23 @@ function M.mask(text, lang, mask_markup)
         end)
     end
 
+    -- A wire glyph that was in the text itself (a real circled number in a game string) is masked like a
+    -- term, so the wire layer cannot confuse it with one of ours. to_wire() then skips it, which is what
+    -- keeps the two apart: the source glyph goes out as itself and comes back as itself.
+    local seen_glyphs = {}
+    for i = 1, #WIRE_GLYPHS do
+        local glyph = WIRE_GLYPHS[i]
+        if result:find(glyph, 1, true) then
+            local index = seen_glyphs[glyph]
+            if not index then
+                tokens[#tokens + 1] = { term = glyph, source = glyph, glyph = true }
+                index = #tokens
+                seen_glyphs[glyph] = index
+            end
+            result = result:gsub(glyph, PLACEHOLDER_OPEN .. (index - 1) .. PLACEHOLDER_CLOSE)
+        end
+    end
+
     return result, tokens
 end
 
@@ -371,6 +421,87 @@ function M.tighten(text, lang)
     end
 
     return text
+end
+
+-- The wire form of a placeholder: a single circled digit instead of a bracketed number.
+--
+-- The bracketed form (U+27E6/U+27E7, "mathematical white square brackets") is what the services mangle:
+-- measured, yandex answered with "mark2mark" where the source had a placeholder, and bing dropped the
+-- opening bracket when the token sat next to a literal digit ("Set to {0}0{1}"). A circled digit is one
+-- glyph, looks like a number (which translators pass through), and has no pair to split.
+--
+-- It is a *wire* form only: internally the placeholders stay "\u27e6n\u27e7", so every guard, store check
+-- and test keeps working on one shape. The two functions below convert at the boundary.
+--
+-- 51 tokens cover any string this mod has ever masked (the largest tooltip carries eight); a string that
+-- needs more keeps the internal form, which is the behaviour everything had before.
+function M.wire_reserved(tokens)
+    local reserved = {}
+    local function reserve(list)
+        if type(list) ~= "table" then
+            return
+        end
+        for i = 1, #list do
+            local term = list[i] and list[i].term
+            if type(term) == "string" and WIRE_SET[term] then
+                reserved[term] = true
+            end
+        end
+    end
+    if type(tokens) == "table" then
+        if type(tokens[1]) == "table" and tokens[1].term ~= nil then
+            reserve(tokens)
+        else
+            for i = 1, #tokens do
+                reserve(tokens[i])
+            end
+        end
+    end
+    return reserved
+end
+
+-- The glyphs left for this request, in order.
+local function wire_pool(reserved)
+    local pool = {}
+    for i = 1, #WIRE_GLYPHS do
+        if not (reserved and reserved[WIRE_GLYPHS[i]]) then
+            pool[#pool + 1] = WIRE_GLYPHS[i]
+        end
+    end
+    return pool
+end
+
+function M.wire_glyph_count()
+    return #WIRE_GLYPHS
+end
+
+-- "\u27e60\u27e7 hello \u27e61\u27e7" -> "① hello ②"
+function M.to_wire(masked, reserved)
+    if type(masked) ~= "string" then
+        return masked
+    end
+    local pool = wire_pool(reserved)
+    for i = 1, #pool do
+        local placeholder = PLACEHOLDER_OPEN .. (i - 1) .. PLACEHOLDER_CLOSE
+        if masked:find(placeholder, 1, true) then
+            masked = masked:gsub(placeholder, pool[i])
+        end
+    end
+    return masked
+end
+
+-- and back again, for an answer that came from a service
+function M.to_internal(wire_text, reserved)
+    if type(wire_text) ~= "string" then
+        return wire_text
+    end
+    local pool = wire_pool(reserved)
+    for i = 1, #pool do
+        if wire_text:find(pool[i], 1, true) then
+            wire_text = wire_text:gsub(pool[i], PLACEHOLDER_OPEN .. (i - 1) .. PLACEHOLDER_CLOSE)
+        end
+    end
+    return wire_text
 end
 
 -- Puts the official terms back. Returns text and the number of tokens that went

@@ -211,6 +211,10 @@ if handle then
 
 -- Which placeholders came back. Printed as ASCII so the GBK console cannot hide the answer, and
 -- per index because "one token missing" and "which token missing" are different questions.
+-- The request now carries the wire form (circled digits, glossary.to_wire), so the answer is put
+-- back into the internal form before anything is counted.
+local glossary = dofile(modules .. "/glossary.lua")
+answer = glossary.to_internal(answer)
 local open_ch, close_ch = "\226\159\166", "\226\159\167"
 local seen, missing_list = {}, {}
 for index in answer:gmatch(open_ch .. "%s*(%d+)%s*" .. close_ch) do

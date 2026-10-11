@@ -2624,7 +2624,8 @@ local function handle_response(mod, req, body)
             note_custom_problem(mod, "custom_unreadable", tostring(parse_error))
             return false, parse_error, false
         end
-        return accept_translation(mod, req, ffi.string(out_buf, n), req.provider)
+        return accept_translation(mod, req, from_wire(ffi.string(out_buf, n), req.tokens),
+            req.provider)
     end
 
     local n = core.at_online_parse(req.provider, body, out_buf, SMALL_CAP)
@@ -3215,7 +3216,7 @@ handle_online_batch = function(mod, req, body)
                 parts = nil
                 break
             end
-            parts[i] = ffi.string(out_buf, n)
+            parts[i] = from_wire(ffi.string(out_buf, n), req.tokens)
         end
     end
 
@@ -3234,7 +3235,7 @@ handle_online_batch = function(mod, req, body)
             return
         end
 
-        parts = split_batch(ffi.string(out_buf, n), #req.items)
+        parts = split_batch(from_wire(ffi.string(out_buf, n), req.tokens), #req.items)
         if not parts then
             util.info(mod, "%s did not keep the batch markers; %d item(s) go through one at a time",
                 tostring(req.provider), #req.items)
@@ -3386,6 +3387,22 @@ end
 
 M.relax_mask_for_tests = relax_mask
 
+-- The wire form lives in glossary; the wrappers keep this file working when a test double provides only
+-- mask and unmask (the smoke tests do), and when the module is absent entirely.
+local function to_wire(text, tokens)
+    if type(glossary) == "table" and glossary.to_wire then
+        return glossary.to_wire(text, glossary.wire_reserved and glossary.wire_reserved(tokens) or nil)
+    end
+    return text
+end
+
+local function from_wire(text, tokens)
+    if type(glossary) == "table" and glossary.to_internal then
+        return glossary.to_internal(text, glossary.wire_reserved and glossary.wire_reserved(tokens) or nil)
+    end
+    return text
+end
+
 local function join_batch_impl(items, provider)
     local parts, tokens, lines = {}, {}, {}
     for i, one in ipairs(items) do
@@ -3396,7 +3413,10 @@ local function join_batch_impl(items, provider)
         lines[i] = string.format("[%d] %s", i, masked)
     end
     local text = #items > 1 and table.concat(lines, " ") or parts[1]
-    return text, parts, tokens
+    -- The wire form (circled digits, see glossary.to_wire) is what a service sees. `parts` stays in
+    -- the internal form: it is what the occurrence check compares the answer against, and every
+    -- guard, store check and test works on that one shape.
+    return to_wire(text, tokens), parts, tokens
 end
 
 join_batch = join_batch_impl

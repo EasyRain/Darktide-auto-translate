@@ -88,5 +88,41 @@ local restored, missing_break = glossary.unmask(breaks, { { term = "x" }, { term
 check("a break token is restored", restored, "xfirst\n\nsecond")
 check("and counts as present", missing_break, 0)
 
+
+-- The wire form: circled digits, so a service sees a number-like glyph instead of a bracket pair it can
+-- split (measured: yandex turned a placeholder into "mark2mark", bing ate an opening bracket next to a
+-- digit). Internal placeholders stay as they are, so every guard keeps working on one shape.
+local wired = glossary.to_wire(OPEN .. "0" .. CLOSE .. " and " .. OPEN .. "1" .. CLOSE)
+check("wire: the first token becomes a circled 1", wired:find("①", 1, true) ~= nil, true)
+check("wire: no internal placeholder is left", wired:find(OPEN, 1, true), nil)
+local back = glossary.to_internal(wired)
+check("wire: and it round trips", back, OPEN .. "0" .. CLOSE .. " and " .. OPEN .. "1" .. CLOSE)
+check("wire: 51 glyphs are available", glossary.wire_glyph_count(), 50)
+local big = glossary.to_wire(OPEN .. "60" .. CLOSE .. " stays")
+check("wire: an index past the glyphs keeps the internal form",
+    big:find(OPEN .. "60" .. CLOSE, 1, true) ~= nil, true)
+
+
+-- A circled number that is part of the text itself must survive: it is masked like a term (so the wire
+-- layer cannot read it as one of ours) and the wire mapping reserves it, so the two never collide. The
+-- exact spacing is not asserted - unmask applies the CJK tightening rules to a restored term, which is
+-- intended - only that the two source glyphs and the term all come back.
+local source_glyph = "Pick ① and ②, not Reload Speed"
+local glyph_masked, glyph_tokens = glossary.mask(source_glyph, "ja", true)
+check("glyph: the source glyph is masked like a term",
+    glyph_masked:find("①", 1, true), nil)
+local glyph_reserved = glossary.wire_reserved(glyph_tokens)
+local glyph_wire = glossary.to_wire(glyph_masked, glyph_reserved)
+check("glyph: nothing internal goes on the wire", glyph_wire:find("⟦", 1, true), nil)
+check("glyph: and the request still carries circled glyphs",
+    glyph_wire:find("③", 1, true) ~= nil or glyph_wire:find("④", 1, true) ~= nil, true)
+local glyph_back = glossary.to_internal(glyph_wire, glyph_reserved)
+check("glyph: the wire form maps back to the masked text", glyph_back, glyph_masked)
+local glyph_restored = glossary.unmask(glyph_back, glyph_tokens, glyph_masked)
+check("glyph: both source glyphs survive the round trip",
+    glyph_restored:find("①", 1, true) ~= nil and glyph_restored:find("②", 1, true) ~= nil, true)
+check("glyph: and so does the glossary term",
+    glyph_restored ~= source_glyph and glyph_restored:find("①", 1, true) ~= nil, true)
+
 print(string.format("%d failure(s) in total", failures))
 os.exit(failures == 0 and 0 or 1)
