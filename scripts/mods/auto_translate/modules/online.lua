@@ -478,10 +478,14 @@ function M.text_is_safe(source, translated, lang)
     -- Measured: an AutoMark tooltip with several colour runs was stored with a leftover "\u27e60\u27e7"
     -- and a tag list that no longer matched its source, so the game showed the placeholder and the
     -- stores check only found it afterwards. A report is too late; the guard belongs before the write.
-    -- The characters come from glossary; the literals are the fallback so a test double that
-    -- only implements mask/unmask still exercises this guard instead of crashing on it.
-    local open = glossary.placeholder_open and glossary.placeholder_open() or "⟦"
-    local close = glossary.placeholder_close and glossary.placeholder_close() or "⟧"
+    -- The characters come from glossary when the module is there - this file is loaded without one by
+    -- the language check - and the literals are the fallback (Lua 5.1 has no \u escapes, so they are
+    -- written out). Only placeholder_open() is called: the api check insists that every member named
+    -- in this file exists on the module, and there is no close accessor.
+    local open, close = "⟦", "⟧"
+    if type(glossary) == "table" and glossary.placeholder_open then
+        open = glossary.placeholder_open()
+    end
     if translated:find(open, 1, true) or translated:find(close, 1, true) then
         return false, "a mask placeholder was left in the translation"
     end
