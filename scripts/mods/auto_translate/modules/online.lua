@@ -546,9 +546,25 @@ local function is_asset_entry(text)
     if text:find(COLOUR_TAG) == nil and text:find(FONT_TAG) == nil then
         return false
     end
-    -- A tag in a longer string: what is left when the tags are taken out decides it. Prose outside the
-    -- run means interface text; nothing outside means the run is the whole string, and then its content
-    -- has to look like a name for it to be an asset.
+    -- How much text is there, really? Characters, not words: a per-character gradient puts one letter
+    -- between every pair of tags, so counting whitespace-separated tokens would call "Alf's DMF
+    -- Extensions" eighteen of them. And only colour and font tags count - "Fire and Ice" has four tags
+    -- if the closing {#reset()} runs are counted, which would put a real two-item list on the wrong side
+    -- of the line.
+    local tags, letters = 0, 0
+    for tag in text:gmatch(MARKUP_ANY) do
+        if tag:find("^%{#color") or tag:find("^%{#font") then
+            tags = tags + 1
+        end
+    end
+    for _ in text:gsub(MARKUP_ANY, ""):gmatch("[%a%d]") do
+        letters = letters + 1
+    end
+    if tags >= 4 and letters > 0 and letters <= 40 then
+        return true
+    end
+    -- Prose outside the styled run means interface text; nothing outside means the run is the whole
+    -- string, and then its content has to look like a name for it to be an asset.
     local outside = text:gsub(MARKUP_ANY, ""):gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
     if outside ~= "" then
         return false

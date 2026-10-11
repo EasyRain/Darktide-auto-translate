@@ -584,6 +584,21 @@ check("text: a lost line break is refused", unsafe_lb, false)
 check("text: and the reason says so",
     reason_lb ~= nil and reason_lb:find("line breaks") ~= nil, true)
 
+-- A marquee title: one colour tag per character, wrapping a mod's name. The screenshot that prompted
+-- this is the game's own heading for Alfs_DMF_Extensions, and asking a service to keep 25 placeholders
+-- in order is how such strings end up refused and parked.
+local marquee = "{#color(200,140,20)} {#color(255,255,0)}A{#color(255,241,13)}l{#color(255,228,26)}f"
+    .. "{#color(255,214,40)}'{#color(255,201,53)}s{#color(255,187,67)} {#color(255,174,80)}D"
+    .. "{#color(255,161,93)}M{#color(255,147,107)}F{#color(255,134,120)} {#color(255,120,134)}E"
+    .. "{#color(255,107,147)}x{#color(255,93,161)}t{#color(255,80,174)}e{#color(255,67,187)}n"
+    .. "{#color(255,53,201)}s{#color(255,40,214)}i{#color(255,26,228)}o{#color(255,13,241)}n"
+    .. "{#color(255,0,255)}s{#reset()}"
+check("asset: a marquee title is skipped", is_asset(marquee), true)
+check("asset: but a two-run list is still translated",
+    is_asset("{#color(1,2,3)}Fire{#reset()} and {#color(4,5,6)}Ice{#reset()}"), false)
+check("asset: and a single coloured sentence is still translated",
+    is_asset("{#color(255,0,0)}Warning: the reactor is failing{#reset()}"), false)
+
 print(string.format("%d failure(s) in total", failures))
 
 -- ---------------------------------------------------------------------------
