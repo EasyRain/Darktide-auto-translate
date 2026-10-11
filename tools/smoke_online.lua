@@ -1619,6 +1619,62 @@ do
         fake_http_core.at_http_poll = real_poll
     end
 
+-- ---------------------------------------------------------------------------
+-- the startup check of the keyless tier (online.tier_probe_step and friends)
+--
+-- What a player can feel: the check runs at most once a session, a failed endpoint is ranked down but
+-- not disabled (a network that is not up yet when the game starts must not cost an endpoint all
+-- session), and an endpoint that answers becomes the one a run starts with.
+-- ---------------------------------------------------------------------------
+do
+    local tier = online.tier_probe_for_tests
+    local settings = {}
+    local check_mod = {
+        get = function(_, key) return settings[key] end,
+        set = function(_, key, value) settings[key] = value end,
+        localize = function(_, key) return key end,
+    }
+    local previous_engine = online.state.engine
+    local previous_providers_for = probe_engines.providers_for
+    -- The check asks the engines module which endpoints this language may use; here it is the smoke
+    -- that decides, so the recording rules are what is under test. The module needs that engines
+    -- object in place, which is what this re-init does.
+    probe_engines.providers_for = function() return { "bing", "mymemory" } end
+    online.init(probe_util, nil, probe_glossary, probe_engines, nil, cu)
+
+    tier.reset()
+    check("tier check: on unless the player turned it off", tier.enabled(check_mod), true)
+    settings.check_free_services = false
+    check("tier check: the setting turns it off", tier.enabled(check_mod), false)
+    check("tier check: and nothing is started", tier.begin(check_mod, "zh-cn"), false)
+    settings.check_free_services = true
+
+    online.state.engine = "online_free"
+    tier.reset()
+    check("tier check: it starts for the keyless tier", tier.begin(check_mod, "zh-cn"), true)
+    check("tier check: the state knows how many are left", tier.state() ~= nil, true)
+
+    tier.record(check_mod, "mymemory", false, "the smoke's reason")
+    local disabled, failures = online.provider_health()
+    check("tier check: a failure counts against the endpoint", failures.mymemory, 1)
+    check("tier check: but does not disable it", disabled.mymemory, nil)
+
+    tier.record(check_mod, "bing", true)
+    check("tier check: an answer is remembered as the first endpoint",
+        settings.free_provider_first, "bing")
+    check("tier check: and clears that endpoint's failures", failures.bing, 0)
+
+    tier.finish(check_mod)
+    check("tier check: it is over", tier.state(), nil)
+    check("tier check: and does not run twice in a session", tier.begin(check_mod, "zh-cn"), false)
+
+    failures.mymemory = nil
+    settings.free_provider_first = nil
+    online.state.engine = previous_engine
+    probe_engines.providers_for = previous_providers_for
+    tier.reset()
+end
+
     -- -----------------------------------------------------------------------
     -- The learned free-tier order
     -- -----------------------------------------------------------------------

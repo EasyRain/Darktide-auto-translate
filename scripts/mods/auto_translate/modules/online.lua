@@ -1387,6 +1387,181 @@ local function providers_for(mod, engine, lang)
     return {}
 end
 
+-- ---------------------------------------------------------------------------
+-- Checking the keyless tier once, when a session's first run starts.
+--
+-- The order the free endpoints are tried in is learnt (FIRST_PROVIDER_SETTING), but that learning only
+-- ever came from real translations, so the first strings of a session paid for whichever endpoint was
+-- blocked or throttled on the player's network. Measured in a game log with a fixed order: 2 min 19 s
+-- of timeouts before the first key came back. One tiny request per endpoint answers the same question
+-- before the queue starts, so the run begins on an endpoint that was just proven.
+--
+-- Only the keyless tier (a key or the offline model has nothing to choose between), once per session,
+-- and the queue waits for it - up to a budget, so a dead network cannot hold the run forever. The
+-- player can turn it off. A failure here ranks an endpoint down for the session but does *not* count
+-- towards the three-strike breaker: a network that is not up yet when the game starts must not cost
+-- the player an endpoint all session.
+-- ---------------------------------------------------------------------------
+local TIER_PROBE_TEXT = "Reload Speed"
+local TIER_PROBE_TIMEOUT = 8        -- one endpoint that has not answered by now is not a first choice
+local TIER_PROBE_BUDGET = 20        -- the whole check, so a dead network cannot hold the run
+local TIER_PROBE_SETTING = "check_free_services"
+local tier_probe = nil              -- { list, index, sent_at, answered, failed } while checking
+local tier_probe_done = false       -- one check per session
+
+local function tier_probe_enabled(mod)
+    if type(mod) ~= "table" or type(mod.get) ~= "function" then
+        return false
+    end
+    local value = mod:get(TIER_PROBE_SETTING)
+    if value == nil then
+        return true                 -- the setting's own default, for a file written before it existed
+    end
+    return value == true
+end
+
+local function begin_tier_probe(mod, lang)
+    if tier_probe_done or tier_probe then
+        return false
+    end
+    tier_probe_done = true
+    if not tier_probe_enabled(mod) then
+        return false
+    end
+    local list = providers_for(mod, "online_free", lang)
+    if #list == 0 then
+        return false
+    end
+    tier_probe = {
+        list = list,
+        index = 0,
+        provider = nil,
+        sent_at = 0,
+        deadline = elapsed + TIER_PROBE_BUDGET,
+        answered = {},
+        failed = {},
+    }
+    util.log(mod, "checking %d free service(s) before the run", #list)
+    return true
+end
+
+local function tier_probe_record(mod, name, ok, why)
+    if not tier_probe then
+        return
+    end
+    if ok then
+        tier_probe.answered[#tier_probe.answered + 1] = name
+        note_provider_success(name)
+        provider_answered(mod, name)
+    else
+        tier_probe.failed[#tier_probe.failed + 1] = name
+        provider_failures[name] = (provider_failures[name] or 0) + 1
+        util.info(mod, "%s did not answer the check (%s)", tostring(name), tostring(why or "no reply"))
+    end
+    tier_probe.provider = nil
+    tier_probe.sent_at = 0
+end
+
+local function tier_probe_finish(mod)
+    if not tier_probe then
+        return
+    end
+    local checked = tier_probe
+    tier_probe = nil
+    if #checked.answered > 0 then
+        util.log(mod, "free services: %s answered%s", table.concat(checked.answered, ", "),
+            #checked.failed > 0 and (", no answer from " .. table.concat(checked.failed, ", ")) or "")
+    else
+        util.warn(mod, "none of the %d free service(s) answered the check; the run will try them in turn",
+            #checked.list)
+    end
+end
+
+-- Sends one check request. Mirrors the dispatch's request building, minus masking: the sample is
+-- plain text, and what is being measured is whether the endpoint answers at all.
+local function tier_probe_send(mod, provider)
+    local ffi = Mods.lua.ffi
+    local api_key = nil
+    if provider_needs_key(provider) then
+        api_key = mod:get("online_api_key")
+        if type(api_key) ~= "string" or api_key == "" then
+            return false
+        end
+    end
+    if core.at_online_host(provider, api_key, host_buf, 512) == 0 or
+        core.at_online_path(provider, api_key, "en", M.state.lang or "en", TIER_PROBE_TEXT,
+            path_buf, PATH_CAP) == 0 or
+        core.at_online_headers(provider, api_key, headers_buf, 1024) == 0 then
+        return false
+    end
+
+    local job
+    if core.at_online_uses_post(provider) == 1 then
+        if core.at_online_body(provider, "en", M.state.lang or "en", TIER_PROBE_TEXT,
+            body_buf, BODY_CAP) == 0 then
+            return false
+        end
+        job = core.at_http_post(host_buf, path_buf, core.at_online_content_type(provider),
+            headers_buf, body_buf)
+    else
+        job = core.at_http_get_ex(host_buf, path_buf, headers_buf)
+    end
+    if job <= 0 then
+        return false
+    end
+
+    inflight = { kind = "tier_probe", provider = provider, job = job }
+    tier_probe.provider = provider
+    tier_probe.sent_at = elapsed
+    util.log(mod, "checking %s", tostring(provider))
+    return true
+end
+
+-- Drives the check from M.update. True means "still checking, hold the queue".
+local function tier_probe_step(mod)
+    if not tier_probe then
+        return false
+    end
+    if elapsed > tier_probe.deadline then
+        util.info(mod, "the free service check ran out of time; the rest are tried during the run")
+        tier_probe_finish(mod)
+        return false
+    end
+    if inflight then
+        if inflight.kind == "bootstrap" then
+            -- bing's page; its own reply branch records the outcome and clears inflight
+            return true
+        end
+        if tier_probe.sent_at > 0 and elapsed - tier_probe.sent_at > TIER_PROBE_TIMEOUT then
+            local provider = inflight.provider
+            inflight = nil          -- whatever arrives later is discarded as stale
+            tier_probe_record(mod, provider, false, "no answer in time")
+        end
+        return true
+    end
+
+    while tier_probe.index < #tier_probe.list do
+        tier_probe.index = tier_probe.index + 1
+        local name = tier_probe.list[tier_probe.index]
+        if not disabled_providers[name] then
+            if not session_ready(name) then
+                if start_bootstrap(mod, name) then
+                    tier_probe.provider = name
+                    tier_probe.sent_at = elapsed
+                    return true
+                end
+                tier_probe_record(mod, name, false, "no session")
+            elseif not tier_probe_send(mod, name) then
+                tier_probe_record(mod, name, false, "the request could not be built")
+            else
+                return true
+            end
+        end
+    end
+    tier_probe_finish(mod)
+    return false
+end
+
 local function base_interval(engine)
     return engine == "online_api" and MIN_INTERVAL_API or MIN_INTERVAL_FREE
 end
@@ -1427,6 +1602,18 @@ M.providers_for_tests = providers_for
 M.provider_answered_for_tests = provider_answered
 -- And the per-attempt choice, which is what makes the failure counting act inside a run.
 M.pick_provider_for_tests = pick_provider
+
+-- The startup check of the keyless tier (see tier_probe): the smoke drives it a step at a time, which
+-- is also how the queue sees it.
+M.tier_probe_for_tests = {
+    begin = begin_tier_probe,
+    step = tier_probe_step,
+    record = tier_probe_record,
+    finish = tier_probe_finish,
+    enabled = tier_probe_enabled,
+    state = function() return tier_probe end,
+    reset = function() tier_probe = nil tier_probe_done = false end,
+}
 
 -- ---------------------------------------------------------------------------
 -- Pipeline control
@@ -1620,6 +1807,12 @@ function M.start(mod, report, lang)
     M.state.unchanged = 0
     M.state.last_error = nil
 
+    -- The keyless tier is what this run will use: find out which endpoint answers before the first
+    -- string pays for the ones that do not (see tier_probe). The queue waits for it to finish.
+    if M.state.running and engine == "online_free" and not is_local then
+        begin_tier_probe(mod, lang)
+    end
+
     local notes = {}
     if skipped > 0 then
         notes[#notes + 1] = string.format("%d had no text to translate", skipped)
@@ -1644,6 +1837,8 @@ function M.stop(mod)
     drain_local(mod)
     q_clear()
     inflight = nil
+    -- A stopped run abandons the startup check too; it does not run again this session.
+    tier_probe = nil
     M.state.running = false
     M.state.finished = false
     M.state.is_local = false
@@ -3016,6 +3211,27 @@ function M.update(mod, dt)
             local result = result_buf[0]   -- 0 = completed, <0 = transport failure
             local http_code = code_buf[0]  -- only meaningful when result == 0
 
+            if req.kind == "tier_probe" then
+                -- The startup check: record the outcome, then the next endpoint goes out. A reply that
+                -- is not a 2xx, or carries no translation, is a failure for the check (ranked down,
+                -- not disabled) - the endpoints that answer here are the ones the run starts on.
+                if result == 0 and http_code >= 200 and http_code < 300 then
+                    local parsed = core.at_online_parse(req.provider, ffi.string(body_buf, len_buf[0]),
+                        out_buf, SMALL_CAP)
+                    if parsed > 0 then
+                        tier_probe_record(mod, req.provider, true)
+                    else
+                        tier_probe_record(mod, req.provider, false,
+                            cstr(core.at_online_error()) or "the reply carried no translation")
+                    end
+                else
+                    tier_probe_record(mod, req.provider, false,
+                        result ~= 0 and ("transport " .. tostring(result))
+                                     or ("HTTP " .. tostring(http_code)))
+                end
+                return
+            end
+
             if req.kind == "probe" then
                 -- The test button: show what came back and stop. Nothing is stored, and the
                 -- reply is shown as it is, so a wrong response path is obvious.
@@ -3122,6 +3338,12 @@ function M.update(mod, dt)
         return
     end
     cooldown_until = 0
+
+    -- 2.5 the startup check of the keyless tier: the queue waits while it runs, so that the wait buys
+    -- a proven endpoint (see tier_probe)
+    if tier_probe_step(mod) then
+        return
+    end
 
     -- 3. nothing left to do
     if q_count() <= 0 then
