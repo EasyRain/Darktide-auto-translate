@@ -567,8 +567,16 @@ int at_online_path(const char* provider, const char* api_key, const char* source
             set_error("bing needs a session token before the first request");
             return 0;
         }
+                              // `tone=Formal` on every request. The web client's tone selector (语气) offers standard /
+        // informal / formal for every target language, and the tone changes the answer: measured on
+        // the masked AutoMark tooltip ("Cancel the {2} mark ... {4}{5}Set to {0}0{1} to {3}.{6}..."),
+        // the reply with no tone dropped the opening bracket of {0} in every round - and {0}0 puts the
+        // token next to a literal digit, which is that string's fragile spot - while tone=Formal kept
+        // every placeholder in five rounds of five. Only that spelling works: tone=standard/Standard
+        // answer empty, lowercase `formal` lost a token once. Varying the IID (5021/5023/5024/5025/
+        // 5028) changes nothing, so the tone is what the web client does differently here.
         written = _snprintf_s(out, (size_t)cap, _TRUNCATE,
-                              "/ttranslatev3?isVertical=1&&IG=%s&IID=translator.5024.1",
+                              "/ttranslatev3?isVertical=1&&IG=%s&IID=translator.5024.1&tone=Formal",
                               g_bing_ig);
     } else if (_stricmp(provider, "yandex") == 0) {
         // Yandex's keyless endpoint is the one its Android app uses: the client id goes in the query

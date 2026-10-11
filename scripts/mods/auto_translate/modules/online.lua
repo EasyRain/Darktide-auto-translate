@@ -846,8 +846,13 @@ local function batchable(item)
         return false                    -- a batch it was in came back unusable
     end
     local text = item.en
+    -- Multi-line text is never batched. On the offline engine that is because dispatch_lines() sends
+    -- it line by line; on the online engines it is sent on its own, because a service that is handed
+    -- several lines joined by [n] markers collapses the blank ones (measured: bing turned a tooltip's
+    -- blank line into a single break). The line-break masking in mask_breaks() protects the breaks
+    -- themselves; this keeps the lines out of a batch.
     return type(text) == "string" and char_count(text) <= LOCAL_BATCH_ITEM_CHARS
-        and not has_line_break(text)    -- multi-line text goes through dispatch_lines()
+        and not has_line_break(text)
 end
 
 local function q_peek()

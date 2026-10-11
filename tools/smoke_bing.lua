@@ -52,7 +52,34 @@ if arg[1] == "--proxy" then
     proxy = arg[2]
 end
 local lang = os.getenv("AT_LANG") or "zh-cn"
-local text = os.getenv("AT_TEXT") or "Show Havoc Assignment"
+-- The text can come from the command line as well as the environment: a Windows environment variable
+-- is not UTF-8 safe, so the placeholder characters arrived as "?" and a probe could not compare
+-- anything (the argv path handles them, like at_cli does).
+local text = nil
+local lang_arg = nil
+for i = 1, #arg do
+    if arg[i] == "--text" and arg[i + 1] then
+        text = arg[i + 1]
+    end
+end
+local text_file = nil
+for i = 1, #arg do
+    if arg[i] == "--lang" and arg[i + 1] then
+        lang_arg = arg[i + 1]
+    end
+    if arg[i] == "--text-file" and arg[i + 1] then
+        text_file = arg[i + 1]
+    end
+end
+if text_file then
+    local handle = io.open(text_file, "rb")
+    if handle then
+        text = handle:read("*a")
+        handle:close()
+    end
+end
+text = text or os.getenv("AT_TEXT") or "Show Havoc Assignment"
+if lang_arg then lang = lang_arg end
 
 local mod = {
     id = "auto_translate",
@@ -144,6 +171,14 @@ local headers = ffi.new("char[?]", 1024)
 
 core.at_online_host("bing", "", host_buf, 256)
 check("the request path builds", core.at_online_path("bing", "", "en", lang, text, path_buf, 4096), 1)
+-- The tone is part of the path now: measured, the Japanese request without one dropped a
+-- placeholder in every round while tone=Formal kept them all, and Chinese kept them either way -
+-- which is why only ja carries it (the web client's 语气 selector is where this came from).
+local ja_path = ffi.string(path_buf)
+check("the ja path carries tone=Formal", ja_path:find("tone=Formal", 1, true) ~= nil, true)
+core.at_online_path("bing", "", "en", "zh-cn", text, path_buf, 4096)
+check("and so does the zh-cn path (the web offers the tone for every language)",
+    ffi.string(path_buf):find("tone=Formal", 1, true) ~= nil, true)
 check("the request body builds", core.at_online_body("bing", "en", lang, text, req_body, 8192), 1)
 check("the request headers build", core.at_online_headers("bing", "", headers, 1024), 1)
 print("  headers: " .. ffi.string(headers):gsub("\r\n", " | "))
@@ -173,6 +208,32 @@ if handle then
     handle:write(answer, "\n")
     handle:close()
     print("  written to " .. OUT)
+
+-- Which placeholders came back. Printed as ASCII so the GBK console cannot hide the answer, and
+-- per index because "one token missing" and "which token missing" are different questions.
+local open_ch, close_ch = "\226\159\166", "\226\159\167"
+local seen, missing_list = {}, {}
+for index in answer:gmatch(open_ch .. "%s*(%d+)%s*" .. close_ch) do
+    seen[index] = (seen[index] or 0) + 1
+end
+local sent = {}
+for index, count in text:gmatch(open_ch .. "%s*(%d+)%s*" .. close_ch) do
+    sent[index] = (sent[index] or 0) + 1
+end
+local names = {}
+for index, count in pairs(sent) do
+    names[#names + 1] = index
+    if (seen[index] or 0) < count then
+        missing_list[#missing_list + 1] = index .. " (" .. (seen[index] or 0) .. "/" .. count .. ")"
+    end
+end
+table.sort(names)
+table.sort(missing_list)
+print("  placeholders sent:    " .. (#names > 0 and table.concat(names, ",") or "none"))
+print("  placeholders back:    " .. (next(seen) and table.concat((function()
+    local list = {} for index in pairs(seen) do list[#list + 1] = index end table.sort(list) return list
+end)(), ",") or "none"))
+print("  MISSING:              " .. (#missing_list > 0 and table.concat(missing_list, ",") or "none"))
 end
 
 print("")
