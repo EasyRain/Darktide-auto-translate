@@ -115,18 +115,16 @@ def main() -> int:
     problems = audit(text)
     # The detailed changelog is a newer convention: it is required for the newest entry only, because the
     # entries before 0.3.8 were written when the file description was the only text.
-    top = newest(entries(text))
-    detail = DETAIL_HEADING.search(text)
-    if top and (not detail or detail.group(1) != top["version"]):
-        problems.append("the newest version %s has no detailed changelog (see DETAIL_HEADING)"
-                        % top["version"])
-    else:
+    # The detailed changelog is optional and only for a release with a lot to say: a small update is the
+    # file description alone (the user's rule). When one is present it is checked like the description.
+    if DETAIL_HEADING.search(text):
         problems += audit_detail(text)
     if problems:
         for problem in problems:
             print("  FAIL %s" % problem)
         return 1
-    for entry in entries(text)[:3]:
+    for entry in sorted(entries(text), key=lambda e: tuple(int(p) for p in e["version"].split(".")),
+                       reverse=True)[:3]:
         print("  %s: %d/%d characters" % (entry["version"], entry["length"], LIMIT))
     print("  ok   every recorded changelog fits and matches its stated length")
     return 0
