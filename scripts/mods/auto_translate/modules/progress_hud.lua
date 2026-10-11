@@ -263,6 +263,13 @@ local function compose(t)
         -- before the running branch: otherwise the line keeps saying "N left" and the player sees
         -- a stall rather than a countdown.
         lines[#lines + 1] = { text = mod:localize("hud_cooldown", status.cooldown), color = TEXT_WARN }
+    elseif status.waiting and status.waiting >= 3 then
+        -- A request in flight for several seconds: the endpoint is slow or about to time out, and a
+        -- countdown is the difference between "working" and "stuck" for the player watching it.
+        lines[#lines + 1] = {
+            text = mod:localize("hud_waiting", tostring(status.provider or "?"), status.waiting),
+            color = TEXT_DIM,
+        }
     elseif status.running then
         local detail = mod:localize("hud_left", status.left or 0)
         if (status.failed or 0) > 0 or (status.refused or 0) > 0 then

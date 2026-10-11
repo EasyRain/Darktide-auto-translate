@@ -1747,6 +1747,10 @@ local function tier_probe_step(mod)
     if tier_probe.next_at and elapsed < tier_probe.next_at then
         return true             -- its own gap between two endpoints; the deadline above still bounds it
     end
+    if inflight and not inflight.since then
+        -- Stamped once, here, rather than at each of the six places a request is started.
+        inflight.since = elapsed
+    end
     if inflight then
         if inflight.kind == "bootstrap" then
             -- bing's page. Its own reply branch records the outcome and clears inflight; the clock
@@ -3975,6 +3979,10 @@ function M.status()
         live = M.state.live or 0,
         unchanged = M.state.unchanged or 0,
         cooldown = math.max(0, math.floor(cooldown_until - elapsed)),
+        -- A request that is simply slow (an endpoint that will time out) is not a cooldown, and the HUD
+        -- used to show "N left" for the whole of it: a player watching a free endpoint time out saw a
+        -- stall. This is the age of the request in flight, so the HUD can count it down too.
+        waiting = inflight and inflight.since and math.max(0, math.floor(elapsed - inflight.since)) or 0,
         last_error = M.state.last_error,
         disabled_providers = table.concat(disabled, ", "),
     }
