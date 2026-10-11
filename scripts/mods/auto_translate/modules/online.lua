@@ -1778,6 +1778,9 @@ function M.start(mod, report, lang)
         providers = usable_providers(providers)
         if #providers == 0 then
             util.warn(mod, "every online provider for '%s' has been unreachable this session", tostring(lang))
+        -- A translated reason for the player: the free tier being dead on this network is something
+        -- to act on, and the warning above is English and log-only now.
+        util.popup(mod, "providers_unreachable_notice")
             return false
         end
     end
@@ -2110,6 +2113,13 @@ local function dispatch(mod)
         M.state.last_error = "no usable provider left"
         util.warn(mod, "no online provider is usable for '%s'; stopping with %d key(s) left",
             tostring(M.state.lang), q_count())
+        -- What a report needs: which endpoint was dropped and why (host, status, timeout). A stopped
+        -- run that says only "every provider was unreachable" cannot be diagnosed from the log, and
+        -- this is the path a player hits when the free tier dies on their network.
+        for name, why in pairs(disabled_providers) do
+            util.info(mod, "dropped %s: %s", tostring(name), tostring(why))
+        end
+        util.popup(mod, "run_stopped_notice", q_count())
         q_unshift(item)
         finish(mod, "stopped: every provider was unreachable")
         return false
@@ -2764,6 +2774,7 @@ function fail_item(mod, req, reason, http_status, transport, code, quiet_provide
         cooldown_until = elapsed + QUOTA_COOLDOWN
         util.warn(mod, "the service refused the key (HTTP 403); pausing translation for %d s",
             QUOTA_COOLDOWN)
+        util.popup(mod, "key_refused_notice", QUOTA_COOLDOWN)
         q_unshift(item)
         M.state.provider = nil
         return

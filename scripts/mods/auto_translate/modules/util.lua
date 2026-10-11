@@ -376,7 +376,13 @@ function M.info(mod, f, ...)
 end
 
 function M.warn(mod, f, ...)
-    mod:warning("%s", "[AT] " .. fmt(f, ...))
+    -- A chat/log line, not a notification. DMF turns mod:warning into an on-screen notice, and these
+    -- are English by design (they carry numbers, host names and reasons), so a warning the player
+    -- cannot read used to pop up in the middle of a run. Reported from a real session: "it reached
+    -- 13/2320 and a prompt appeared, in English, and I do not know what it says". Anything a player
+    -- has to act on goes through M.popup() instead, which is translated into all twelve languages and
+    -- shown once per event.
+    mod:info("%s", "[AT] " .. fmt(f, ...))
 end
 
 function M.log(mod, f, ...)
