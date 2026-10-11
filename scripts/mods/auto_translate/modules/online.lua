@@ -430,6 +430,18 @@ function M.text_is_safe(source, translated, lang)
                                     source_marks, translated_marks)
     end
 
+    -- Line breaks are the same kind of structural detail as the [n] markers, and a service does
+    -- collapse a blank line now and then: measured, two AutoMark tooltips came back from bing with
+    -- "source 2, text 1", and in a tooltip that means two paragraphs run together. Refusing it parks
+    -- the key after the usual three tries and the English original is shown instead, which at least
+    -- keeps its layout.
+    local src_breaks = select(2, source:gsub("\n", ""))
+    local dst_breaks = select(2, translated:gsub("\n", ""))
+    if src_breaks ~= dst_breaks then
+        return false, string.format("the line breaks differ (source %d, translation %d)",
+                                    src_breaks, dst_breaks)
+    end
+
     if too_short(source, translated, lang) then
         -- Characters, not bytes: the message used to print '#' (bytes), so a 17-character
         -- Chinese answer for a 72-character sentence read as "51 characters for 72" and looked
@@ -2621,6 +2633,7 @@ local REASON_KEYS = {
     { "empty translation", "hud_reason_empty" },
     { "the model could not represent", "hud_reason_unknown_tokens" },
     { "the translation dropped most of the text", "hud_reason_too_short" },
+    { "the line breaks differ", "hud_reason_line_breaks" },
     { "stray '%'", "hud_reason_placeholders" },
     { "format placeholder", "hud_reason_placeholders" },
     { "glossary term", "hud_reason_glossary" },

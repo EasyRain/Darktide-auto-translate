@@ -2174,3 +2174,12 @@ end
 
 print(string.format("%d failure(s) in total", failures))
 os.exit(failures == 0 and 0 or 1)
+
+-- Line breaks are structural, like the [n] markers: a service that collapses a blank line changes what
+-- the text looks like (measured: two AutoMark tooltips came back from bing with "source 2, text 1").
+local safe_lb, why_lb = online.text_is_safe("a\nb", "x\ny")
+check("text: matching line breaks are fine", safe_lb, true)
+local unsafe_lb, reason_lb = online.text_is_safe("a\n\nb", "x\ny")
+check("text: a lost line break is refused", unsafe_lb, false)
+check("text: and the reason says so",
+    reason_lb ~= nil and reason_lb:find("line breaks") ~= nil, true)
