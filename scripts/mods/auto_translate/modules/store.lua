@@ -391,6 +391,18 @@ function M.save(mod_id, lang, data)
         end
         util.info(owner_mod, "store.save %s [%s]: %d entr(ies) %s | %s",
             tostring(mod_id), tostring(lang), total, table.concat(parts, " "), trace)
+
+        -- And every entry, by key: the summary above says a file holds three entries written by baidu, which
+        -- leaves open whether the keys the run just translated are among them. This answers that directly.
+        local listed = {}
+        for key, entry in pairs(entries) do
+            local s = (type(entry) == "table" and entry.src) or nil
+            if s == nil or s == "" then s = "hand" end
+            listed[#listed + 1] = string.format("%s(%s)", tostring(key), tostring(s))
+        end
+        table.sort(listed)
+        util.info(owner_mod, "store.save %s [%s] keys: %s", tostring(mod_id), tostring(lang),
+            table.concat(listed, ", "):sub(1, 700))
     end
 
     return util.write_file_atomic(path, M.serialize(mod_id, lang, data))

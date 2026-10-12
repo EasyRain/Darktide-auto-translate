@@ -2352,6 +2352,9 @@ M.shared_text_for_tests = {
 
 local function store_translation(mod, item, text, src)
     local data = data_for(item.mod_id, M.state.lang)
+    -- Named one by one: "3 translated" next to a file whose three entries say baidu cannot be told apart from
+    -- a file that was never touched. This says which key was written with which engine.
+    util.log(mod, "store write %s:%s src=%s", tostring(item.mod_id), tostring(item.key), tostring(src))
     store.set_entry(data, item.key, item.en, item.hash, text, src)
     mark_dirty(item.mod_id, M.state.lang)
     remember_shared_text(item.mod_id, M.state.lang, item.en, text, src)
