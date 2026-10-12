@@ -64,6 +64,7 @@ int at_online_body_multi(const char*, const char*, const char*, const char**, in
 int at_online_supports_multi_text(const char*);
 int at_online_headers(const char*, const char*, char*, int);
 void at_online_set_region(const char*);
+void at_online_set_appid(const char*);
 const char* at_online_content_type(const char*);
 int at_online_parse(const char*, const char*, char*, int);
 int at_online_parse_at(const char*, const char*, int, char*, int);
@@ -1590,7 +1591,7 @@ local function provider_needs_key(name)
     if core then
         return core.at_online_needs_key(name) == 1
     end
-    return name == "deepl" or name == "google_api" or name == "azure"
+    return name == "deepl" or name == "google_api" or name == "azure" or name == "baidu"
 end
 
 -- Which entry of this item's list one attempt should use.
@@ -1786,9 +1787,12 @@ local function tier_probe_send(mod, provider)
             return false
         end
     end
-    -- Azure keeps its resource's region in a header of its own; the core holds it until the next call.
+    -- Two providers need a second value beside the key: Azure the resource's region (a header of its own)
+    -- and Baidu an appid (half of the signature). The core holds each until the next call.
     if provider == "azure" then
         core.at_online_set_region(mod:get("azure_region") or "")
+    elseif provider == "baidu" then
+        core.at_online_set_appid(mod:get("baidu_appid") or "")
     end
     -- Azure keeps its resource's region in a header of its own; the core holds it until the next call.
     if provider == "azure" then

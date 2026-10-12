@@ -61,8 +61,15 @@ AT_API int at_online_supports_multi_text(const char* provider);
 // Authorization line. Returns 1 on success (empty string when none is needed).
 AT_API int at_online_headers(const char* provider, const char* api_key, char* out, int cap);
 
+// MD5 as lowercase hex, for the providers that sign their requests (Baidu). Exported so the selftest can
+// check it against RFC 1321's own test vectors rather than trusting it.
+AT_API void at_online_md5_hex(const void* data, size_t len, char out[33]);
+
 // The region of the caller's Azure Translator resource; empty (or NULL) omits the header.
 AT_API void at_online_set_region(const char* region);
+
+// Baidu signs with an appid beside its key; empty (or NULL) makes the provider refuse to build a request.
+AT_API void at_online_set_appid(const char* appid);
 
 // --- Session bootstrap (Bing) -------------------------------------------------
 // Some keyless endpoints hand out a token on one page load and want it back on every

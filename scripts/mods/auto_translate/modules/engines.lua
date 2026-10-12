@@ -202,6 +202,9 @@ M.API_PROVIDERS = {
     deepl = "deepl",
     google_api = "google_api",
     azure = "azure",
+    -- Baidu signs each request: md5(appid + text + salt + key). The sign lives in the core (Lua has no
+    -- hash and the sign covers the text); everything else about it is a settings entry.
+    baidu = "baidu",
     -- Described rather than coded: modules/services.lua builds their requests in the shape the custom
     -- endpoint already speaks, so they need no native code of their own.
     libretranslate = "libretranslate",

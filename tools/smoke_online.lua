@@ -1328,20 +1328,21 @@ do
     -- point at one of them - DMF throws on a dangling index - and the list has to cover
     -- all ten (the button included), or a field would be permanently invisible.
     local provider = by_id.api_provider
-    local custom_option = provider and provider.options and provider.options[6]   -- Custom is the sixth now
+    local custom_option = provider and provider.options and provider.options[7]   -- Custom is the seventh now
 
     -- Twelve since 0.3.10: the preset dropdown joined them, and it has to be first so that DMF draws it
     -- above the fields it governs.
     -- Thirteen since 0.3.10: the Azure region joined the twelve the custom endpoint already had.
     check("settings: the API service dropdown owns the custom-endpoint widgets",
-        provider ~= nil and provider.sub_widgets ~= nil and #provider.sub_widgets == 15, true)
+        provider ~= nil and provider.sub_widgets ~= nil and #provider.sub_widgets == 16, true)
     check("settings: the services are offered",
-        provider ~= nil and provider.options ~= nil and #provider.options == 6, true)
-    check("settings: and they are DeepL, Google v2, Azure v3, LibreTranslate, ModernMT and Custom",
+        provider ~= nil and provider.options ~= nil and #provider.options == 7, true)
+    check("settings: and they are the seven services, in order",
         provider ~= nil and provider.options ~= nil
             and provider.options[1].value == "deepl" and provider.options[2].value == "google_api"
             and provider.options[3].value == "azure" and provider.options[4].value == "libretranslate"
-            and provider.options[5].value == "modernmt" and provider.options[6].value == "custom", true)
+            and provider.options[5].value == "modernmt" and provider.options[6].value == "baidu"
+            and provider.options[7].value == "custom", true)
     -- The described services build their requests through the custom path, which is where the header
     -- values are substituted - the spec has to exist and name real fields.
     local svc = require("scripts/mods/auto_translate/modules/services")
@@ -1358,6 +1359,7 @@ do
         [5] = "custom_method", [6] = "custom_content_type", [7] = "custom_body", [8] = "custom_langs",
         [9] = "custom_headers", [10] = "custom_path", [11] = "custom_region", [12] = "azure_region",
         [13] = "libretranslate_url", [14] = "libretranslate_key", [15] = "test_custom_api",
+        [16] = "baidu_appid",
     }
     local misplaced = 0
     for index, setting_id in pairs(POSITIONS) do
@@ -1366,7 +1368,7 @@ do
             misplaced = misplaced + 1
         end
     end
-    check("settings: the fifteen sub-widgets are where the indices say", misplaced, 0)
+    check("settings: the sixteen sub-widgets are where the indices say", misplaced, 0)
     check("settings: and the test button is the fifteenth",
         provider.sub_widgets[15] ~= nil and provider.sub_widgets[15].setting_id == "test_custom_api", true)
     check("settings: every service can be tested",

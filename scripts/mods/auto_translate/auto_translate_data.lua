@@ -112,6 +112,7 @@ return {
                             --   12     Azure's region field
                             --   13,14  LibreTranslate's address and optional key
                             --   15     the test button
+                            --   16     Baidu's APP ID (the other half of its signature)
                             -- Honest naming beats counting: a wrong index hides a setting for good, and DMF
                             -- throws outright if one points at nothing.
                             { text = "api_deepl", value = "deepl",
@@ -124,6 +125,8 @@ return {
                               show_widgets = { 13, 14, 15 } },
                             { text = "api_modernmt", value = "modernmt",
                               show_widgets = { 15 } },
+                            { text = "api_baidu", value = "baidu",
+                              show_widgets = { 15, 16 } },
                             { text = "api_custom", value = "custom",
                               show_widgets = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 15 } },
                         },
@@ -263,6 +266,16 @@ return {
                                 type = "button",
                                 button_text = "test_custom_api",
                                 function_name = "test_custom_api",
+                            },
+                            {
+                                -- Last on purpose: appending keeps every index above it meaning what it
+                                -- meant. Three times now a field went in *above* the test button while the
+                                -- show_widgets numbers stayed put, which hides a setting for good - the
+                                -- smoke asserts these positions by name for exactly that reason.
+                                setting_id = "baidu_appid",
+                                type = "text",
+                                default_value = "",
+                                max_length = 32,
                             },
                         },
                     },

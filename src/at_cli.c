@@ -259,6 +259,115 @@ static int cmd_selftest(void)
                 at_online_path("deepl", "k", "en", "ja", "Hello", path, (int)sizeof(path)) &&
                     strcmp(path, "/v2/translate") == 0);
     // ZH-HANS / ZH-HANT are DeepL's explicit Simplified / Traditional codes
+    printf("\n== md5 (RFC 1321 vectors, for the Baidu sign) ==\n");
+    {
+        static const struct { const char* label; const char* data; int len; const char* want; } CASES[] = {
+            { "md5: empty string", "", 0, "d41d8cd98f00b204e9800998ecf8427e" },
+            { "md5: abc", "abc", 3, "900150983cd24fb0d6963f7d28e17f72" },
+            { "md5: message digest", "message digest", 14, "f96b697d7cb7938d525a2f31aaf161d0" },
+            { "md5: the alphabet", "abcdefghijklmnopqrstuvwxyz", 26, "c3fcd3d76192e4007dfb496cca67e13b" },
+            { "md5: 80 digits", "12345678901234567890123456789012345678901234567890123456789012345678901234567890", 80,
+              "57edf4a22be3c955ac49da2e2107b67a" },
+            /* The padding boundaries: 55 fits one block, 56 forces two, 64 is exactly one plus padding. */
+            { "md5: 55 bytes", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", 55, "ef1772b6dff9a122358552954ad0df65" },
+            { "md5: 56 bytes", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", 56, "3b0c8ac703f828b04c6c197006d17218" },
+            { "md5: 64 bytes", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", 64, "014842d480b571495a4a0363793f7367" }
+        };
+        char hex[33];
+        int bad = 0;
+
+        for (int i = 0; i < (int)(sizeof(CASES) / sizeof(CASES[0])); i++) {
+            at_online_md5_hex(CASES[i].data, (size_t)CASES[i].len, hex);
+            if (strcmp(hex, CASES[i].want) != 0) {
+                printf("    %s -> %s (wanted %s)\n", CASES[i].label, hex, CASES[i].want);
+                bad++;
+            }
+        }
+        /* A 1000-byte input exercises the multi-block loop. */
+        {
+            char big[1000];
+            memset(big, 'a', sizeof(big));
+            at_online_md5_hex(big, sizeof(big), hex);
+            if (strcmp(hex, "cabe45dcc9ae5b66ba86600cca6b8ba8") != 0) {
+                printf("    md5: 1000 bytes -> %s\n", hex);
+                bad++;
+            }
+        }
+        expect_true("md5 matches RFC 1321 (8 vectors + a multi-block input)", bad == 0);
+    }
+
+    printf("\n== baidu ==\n");
+    /* The sign is md5(appid + text + salt + key); this is that exact string for these values, so the
+       vector above and the path below are checked against an independent implementation. */
+    {
+        char hex[33];
+        at_online_md5_hex("123456" "Reload Speed" "50000" "SECRET", 29, hex);
+        expect_true("md5: the Baidu sign input",
+            strcmp(hex, "1a46df562a53c68c08ad0fd8bdcc99c7") == 0);
+    }
+    expect_true("baidu host (the vendor demo's)", at_online_host("baidu", "K", out, (int)sizeof(out)) &&
+        strcmp(out, "api.fanyi.baidu.com") == 0);
+    expect_true("baidu needs a key", at_online_needs_key("baidu") == 1);
+    /* The vendor's own demo posts it with every parameter in the query and no body
+       (requests.post(url, params=payload)), so this is a POST whose body is empty. */
+    expect_true("baidu is a POST (the demo's shape)", at_online_uses_post("baidu") == 1);
+    expect_true("baidu's body is empty", at_online_body("baidu", "en", "zh-cn", "Hi", body, (int)sizeof(body)) == 1 &&
+        body[0] == 0);
+    at_online_set_appid("123456");
+    expect_true("baidu path is signed and carries the parameters",
+        at_online_path("baidu", "SECRET", "en", "zh-cn", "Reload Speed", path, (int)sizeof(path)) &&
+            strstr(path, "/api/trans/vip/translate?") != NULL &&
+            strstr(path, "q=Reload%20Speed") != NULL &&
+            strstr(path, "from=en") != NULL &&
+            strstr(path, "to=zh") != NULL &&
+            strstr(path, "appid=123456") != NULL &&
+            strstr(path, "salt=") != NULL &&
+            strstr(path, "sign=") != NULL);
+    {
+        /* The sign is 32 lowercase hex characters, and the salt rides beside it. */
+        const char* sign = strstr(path, "sign=");
+        int hexish = 1;
+        int i;
+        for (i = 0; i < 32 && sign && sign[5 + i]; i++) {
+            char c = sign[5 + i];
+            if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) {
+                hexish = 0;
+            }
+        }
+        expect_true("baidu sign is 32 hex characters", sign != NULL && hexish == 1 && sign[5 + 32] == 0);
+    }
+    /* Its Chinese codes differ from everyone else's: zh / cht / jp / kor / fra / spa. */
+    expect_true("baidu zh-cn -> zh",
+        at_online_lang_code_for("baidu", "zh-cn", out, (int)sizeof(out)) && strcmp(out, "zh") == 0);
+    expect_true("baidu zh-tw -> cht",
+        at_online_lang_code_for("baidu", "zh-tw", out, (int)sizeof(out)) && strcmp(out, "cht") == 0);
+    expect_true("baidu ja -> jp",
+        at_online_lang_code_for("baidu", "ja", out, (int)sizeof(out)) && strcmp(out, "jp") == 0);
+    expect_true("baidu ko -> kor",
+        at_online_lang_code_for("baidu", "ko", out, (int)sizeof(out)) && strcmp(out, "kor") == 0);
+    expect_true("baidu fr -> fra",
+        at_online_lang_code_for("baidu", "fr", out, (int)sizeof(out)) && strcmp(out, "fra") == 0);
+    expect_true("baidu es -> spa",
+        at_online_lang_code_for("baidu", "es", out, (int)sizeof(out)) && strcmp(out, "spa") == 0);
+    expect_true("baidu pt-br -> pt",
+        at_online_lang_code_for("baidu", "pt-br", out, (int)sizeof(out)) && strcmp(out, "pt") == 0);
+    expect_true("baidu uk -> ukr",
+        at_online_lang_code_for("baidu", "uk", out, (int)sizeof(out)) && strcmp(out, "ukr") == 0);
+    /* The reference client's own test fixture, verbatim. */
+    expect_true("baidu reply (the client's fixture)",
+        at_online_parse("baidu", "{\"from\":\"en\",\"to\":\"zh\",\"trans_result\":[{\"src\":\"hello\",\"dst\":\"\xE4\xBD\xA0\xE5\xA5\xBD\"}]}",
+            out, (int)sizeof(out)) > 0 && strcmp(out, "\xE4\xBD\xA0\xE5\xA5\xBD") == 0);
+    /* A refusal arrives with HTTP 200 and a *string* error_code, which is why the body is read. */
+    expect_true("baidu refusal is an error with its code",
+        at_online_parse("baidu", "{\"error_code\":\"54001\",\"error_msg\":\"Invalid Sign\"}",
+            out, (int)sizeof(out)) < 0 && strstr(at_online_error(), "54001") != NULL);
+    expect_true("baidu refusal names the message",
+        at_online_parse("baidu", "{\"error_code\":\"52003\",\"error_msg\":\"UNAUTHORIZED USER\"}",
+            out, (int)sizeof(out)) < 0 && strstr(at_online_error(), "UNAUTHORIZED USER") != NULL);
+    at_online_set_appid("");
+    expect_true("baidu without an appid refuses to build a request",
+        !at_online_path("baidu", "SECRET", "en", "zh-cn", "Hi", path, (int)sizeof(path)));
+
     printf("\n== azure ==\n");
     expect_true("azure host", at_online_host("azure", "K", out, (int)sizeof(out)) &&
         strcmp(out, "api.cognitive.microsofttranslator.com") == 0);

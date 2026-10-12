@@ -8,6 +8,10 @@
 
 static char g_error[512] = { 0 };
 
+// Baidu signs every request with two values: an appid and a key. The key is the shared API key (so it
+// travels the usual road); the appid is this one, and the path builder needs it, so it lives up here.
+static char g_baidu_appid[64] = "";
+
 static void set_error(const char* msg)
 {
     strncpy_s(g_error, sizeof(g_error), msg ? msg : "", _TRUNCATE);
@@ -38,6 +42,7 @@ typedef struct {
     const char* bing;
     const char* yandex;
     const char* azure;
+    const char* baidu;
 } LangMap;
 
 // The yandex column is empty for Traditional Chinese on purpose: measured 2026-10-10, that endpoint
@@ -45,19 +50,19 @@ typedef struct {
 // missing code makes at_online_lang_code_for fail, which is exactly how providers_for() drops a
 // provider for one language and keeps it for the rest.
 static const LangMap LANG_MAP[] = {
-    { "en",    "en",    "EN",      "en",      "en",      "en" },
-    { "zh-cn", "zh-CN", "ZH-HANS", "zh-Hans", "zh",      "zh-Hans" },
-    { "zh-tw", "zh-TW", "ZH-HANT", "zh-Hant", NULL,      "zh-Hant" },
-    { "ja",    "ja",    "JA",      "ja",      "ja",      "ja" },
-    { "ko",    "ko",    "KO",      "ko",      "ko",      "ko" },
-    { "ru",    "ru",    "RU",      "ru",      "ru",      "ru" },
-    { "de",    "de",    "DE",      "de",      "de",      "de" },
-    { "fr",    "fr",    "FR",      "fr",      "fr",      "fr" },
-    { "es",    "es",    "ES",      "es",      "es",      "es" },
-    { "it",    "it",    "IT",      "it",      "it",      "it" },
-    { "pl",    "pl",    "PL",      "pl",      "pl",      "pl" },
-    { "pt-br", "pt-BR", "PT-BR",   "pt",      "pt",      "pt" },
-    { "uk",    "uk",    "UK",      "uk",      "uk",      "uk" },
+    { "en",    "en",    "EN",      "en",      "en",      "en",      "en" },
+    { "zh-cn", "zh-CN", "ZH-HANS", "zh-Hans", "zh",      "zh-Hans", "zh" },
+    { "zh-tw", "zh-TW", "ZH-HANT", "zh-Hant", NULL,      "zh-Hant", "cht" },
+    { "ja",    "ja",    "JA",      "ja",      "ja",      "ja",      "jp" },
+    { "ko",    "ko",    "KO",      "ko",      "ko",      "ko",      "kor" },
+    { "ru",    "ru",    "RU",      "ru",      "ru",      "ru",      "ru" },
+    { "de",    "de",    "DE",      "de",      "de",      "de",      "de" },
+    { "fr",    "fr",    "FR",      "fr",      "fr",      "fr",      "fra" },
+    { "es",    "es",    "ES",      "es",      "es",      "es",      "spa" },
+    { "it",    "it",    "IT",      "it",      "it",      "it",      "it" },
+    { "pl",    "pl",    "PL",      "pl",      "pl",      "pl",      "pl" },
+    { "pt-br", "pt-BR", "PT-BR",   "pt",      "pt",      "pt",      "pt" },
+    { "uk",    "uk",    "UK",      "uk",      "uk",      "uk",      "ukr" },
 };
 
 int at_online_lang_code_for(const char* provider, const char* internal_lang, char* out, int cap)
@@ -67,6 +72,7 @@ int at_online_lang_code_for(const char* provider, const char* internal_lang, cha
     int bing;
     int yandex;
     int azure;
+    int baidu;
 
     if (!internal_lang || !out || cap <= 0) {
         return 0;
@@ -75,13 +81,16 @@ int at_online_lang_code_for(const char* provider, const char* internal_lang, cha
     bing = provider && _stricmp(provider, "bing") == 0;
     yandex = provider && _stricmp(provider, "yandex") == 0;
     azure = provider && _stricmp(provider, "azure") == 0;
+    baidu = provider && _stricmp(provider, "baidu") == 0;
 
     for (i = 0; i < sizeof(LANG_MAP) / sizeof(LANG_MAP[0]); i++) {
         if (_stricmp(LANG_MAP[i].internal, internal_lang) == 0) {
             const char* code = yandex ? LANG_MAP[i].yandex
                                       : (bing ? LANG_MAP[i].bing
                                               : (deepl ? LANG_MAP[i].deepl
-                                                       : (azure ? LANG_MAP[i].azure : LANG_MAP[i].google)));
+                                                       : (azure ? LANG_MAP[i].azure
+                                                                : (baidu ? LANG_MAP[i].baidu
+                                                                         : LANG_MAP[i].google))));
             if (!code) {
                 // This provider does not offer this language at all; the caller treats it as a
                 // provider that cannot be used for it.
@@ -282,20 +291,21 @@ int at_online_provider_known(const char* provider)
            _stricmp(provider, "bing") == 0 ||
            _stricmp(provider, "yandex") == 0 ||
            _stricmp(provider, "azure") == 0 ||
+           _stricmp(provider, "baidu") == 0 ||
            _stricmp(provider, "mymemory") == 0;
 }
 
 int at_online_needs_key(const char* provider)
 {
     return provider && (_stricmp(provider, "google_api") == 0 || _stricmp(provider, "deepl") == 0 ||
-                        _stricmp(provider, "azure") == 0);
+                        _stricmp(provider, "azure") == 0 || _stricmp(provider, "baidu") == 0);
 }
 
 int at_online_uses_post(const char* provider)
 {
     return provider && (_stricmp(provider, "deepl") == 0 || _stricmp(provider, "bing") == 0 ||
                         _stricmp(provider, "yandex") == 0 || _stricmp(provider, "google_api") == 0 ||
-                        _stricmp(provider, "azure") == 0);
+                        _stricmp(provider, "azure") == 0 || _stricmp(provider, "baidu") == 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -491,6 +501,11 @@ int at_online_host(const char* provider, const char* api_key, char* out, int cap
         host = "clients5.google.com";
     } else if (_stricmp(provider, "google_gtx") == 0) {
         host = "translate.googleapis.com";
+    } else if (_stricmp(provider, "baidu") == 0) {
+        // The vendor's own demo uses api.fanyi.baidu.com; fanyi-api.baidu.com answers identically (both
+        // were probed over HTTPS on 2026-10-12 and both returned Baidu's own 52003 for an unsigned
+        // request), so this follows the demo.
+        host = "api.fanyi.baidu.com";
     } else if (_stricmp(provider, "azure") == 0) {
         host = "api.cognitive.microsofttranslator.com";
     } else if (_stricmp(provider, "mymemory") == 0) {
@@ -594,6 +609,39 @@ int at_online_path(const char* provider, const char* api_key, const char* source
         written = _snprintf_s(out, (size_t)cap, _TRUNCATE,
                               "/api/v1/tr.json/translate?srv=android&id=%s-0-0&lang=%s-%s",
                               yandex_client_id(), src, dst);
+    } else if (_stricmp(provider, "baidu") == 0) {
+        // Every parameter rides in the query string and the body is empty, which is what the reference
+        // client sends (requests.post(url, params=payload)); GET is the same parameter set and the
+        // documented alternative, so this build uses the simpler road.
+        //
+        // The sign covers the *raw* text, not the percent-encoded form, and it is md5(appid + q + salt +
+        // key) - so it cannot be a template and is computed here, where the text is known.
+        char sign[33];
+        char sign_input[1024];
+        unsigned int salt = baidu_salt();
+
+        if (!api_key || !*api_key) {
+            free(encoded);
+            set_error("this provider needs an API key");
+            return 0;
+        }
+        if (!g_baidu_appid[0]) {
+            free(encoded);
+            set_error("Baidu needs an APP ID as well as its key");
+            return 0;
+        }
+        _snprintf_s(sign_input, sizeof(sign_input), _TRUNCATE, "%s%s%u%s",
+                    g_baidu_appid, text_utf8 ? text_utf8 : "", salt, api_key);
+        if (strlen(g_baidu_appid) + (text_utf8 ? strlen(text_utf8) : 0) + strlen(api_key) + 16 >=
+            sizeof(sign_input)) {
+            free(encoded);
+            set_error("the text is too long to sign");
+            return 0;
+        }
+        at_online_md5_hex(sign_input, strlen(sign_input), sign);
+        written = _snprintf_s(out, (size_t)cap, _TRUNCATE,
+                              "/api/trans/vip/translate?q=%s&from=%s&to=%s&appid=%s&salt=%u&sign=%s",
+                              encoded, src, dst, g_baidu_appid, salt, sign);
     } else if (_stricmp(provider, "azure") == 0) {
         // from and to live in the query string for api-version=3.0, never in the body; from is optional
         // (omitting it asks for auto-detection) and this build always sends it.
@@ -806,6 +854,180 @@ static int parse_mymemory(const char* body, char* out, int cap)
     return n;
 }
 
+// ----------------------------------------------------------------------
+// MD5, for a provider that signs each request (Baidu: md5(appid + text + salt + key)).
+//
+// Lua has no hash and the sign covers the text, so it cannot be a fixed template - which is why this
+// lives here rather than in modules/services.lua. It is a plain RFC 1321 implementation, and the
+// selftest checks it against the RFC's own vectors through the signed path it exists for.
+// ----------------------------------------------------------------------
+void at_online_md5_hex(const void* data, size_t len, char out[33])
+{
+    static const unsigned int S[64] = {
+        7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22,
+        5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20,
+        4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23,
+        6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21
+    };
+    static const unsigned int K[64] = {
+        0xd76aa478u, 0xe8c7b756u, 0x242070dbu, 0xc1bdceeeu, 0xf57c0fafu, 0x4787c62au, 0xa8304613u, 0xfd469501u,
+        0x698098d8u, 0x8b44f7afu, 0xffff5bb1u, 0x895cd7beu, 0x6b901122u, 0xfd987193u, 0xa679438eu, 0x49b40821u,
+        0xf61e2562u, 0xc040b340u, 0x265e5a51u, 0xe9b6c7aau, 0xd62f105du, 0x02441453u, 0xd8a1e681u, 0xe7d3fbc8u,
+        0x21e1cde6u, 0xc33707d6u, 0xf4d50d87u, 0x455a14edu, 0xa9e3e905u, 0xfcefa3f8u, 0x676f02d9u, 0x8d2a4c8au,
+        0xfffa3942u, 0x8771f681u, 0x6d9d6122u, 0xfde5380cu, 0xa4beea44u, 0x4bdecfa9u, 0xf6bb4b60u, 0xbebfbc70u,
+        0x289b7ec6u, 0xeaa127fau, 0xd4ef3085u, 0x04881d05u, 0xd9d4d039u, 0xe6db99e5u, 0x1fa27cf8u, 0xc4ac5665u,
+        0xf4292244u, 0x432aff97u, 0xab9423a7u, 0xfc93a039u, 0x655b59c3u, 0x8f0ccc92u, 0xffeff47du, 0x85845dd1u,
+        0x6fa87e4fu, 0xfe2ce6e0u, 0xa3014314u, 0x4e0811a1u, 0xf7537e82u, 0xbd3af235u, 0x2ad7d2bbu, 0xeb86d391u
+    };
+    unsigned int h[4] = { 0x67452301u, 0xefcdab89u, 0x98badcfeu, 0x10325476u };
+    unsigned char block[64];
+    unsigned long long bits = (unsigned long long)len * 8ull;
+    size_t offset;
+    int i;
+
+    for (offset = 0; offset + 64 <= len; offset += 64) {
+        memcpy(block, (const unsigned char*)data + offset, 64);
+        goto compress;   /* the loop body below is shared with the tail */
+    compress:
+        {
+            unsigned int m[16];
+            unsigned int a = h[0], b = h[1], c = h[2], d = h[3];
+            for (i = 0; i < 16; i++) {
+                m[i] = (unsigned int)block[i * 4] | ((unsigned int)block[i * 4 + 1] << 8) |
+                       ((unsigned int)block[i * 4 + 2] << 16) | ((unsigned int)block[i * 4 + 3] << 24);
+            }
+            for (i = 0; i < 64; i++) {
+                unsigned int f, g, tmp;
+                if (i < 16) {
+                    f = (b & c) | (~b & d);
+                    g = (unsigned int)i;
+                } else if (i < 32) {
+                    f = (d & b) | (~d & c);
+                    g = (unsigned int)(5 * i + 1) % 16u;
+                } else if (i < 48) {
+                    f = b ^ c ^ d;
+                    g = (unsigned int)(3 * i + 5) % 16u;
+                } else {
+                    f = c ^ (b | ~d);
+                    g = (unsigned int)(7 * i) % 16u;
+                }
+                tmp = d;
+                d = c;
+                c = b;
+                f = a + f + K[i] + m[g];
+                b = b + ((f << S[i]) | (f >> (32 - S[i])));
+                a = tmp;
+            }
+            h[0] += a; h[1] += b; h[2] += c; h[3] += d;
+        }
+    }
+
+    {
+        unsigned char tail[128];
+        size_t rest = len - offset;
+        unsigned int m[16];
+        unsigned int a, b, c, d;
+        size_t total;
+
+        memset(tail, 0, sizeof(tail));
+        if (rest) {
+            memcpy(tail, (const unsigned char*)data + offset, rest);
+        }
+        tail[rest] = 0x80;
+        total = (rest + 1 <= 56) ? 64 : 128;
+        tail[total - 8] = (unsigned char)(bits & 0xff);
+        tail[total - 7] = (unsigned char)((bits >> 8) & 0xff);
+        tail[total - 6] = (unsigned char)((bits >> 16) & 0xff);
+        tail[total - 5] = (unsigned char)((bits >> 24) & 0xff);
+        tail[total - 4] = (unsigned char)((bits >> 32) & 0xff);
+        tail[total - 3] = (unsigned char)((bits >> 40) & 0xff);
+        tail[total - 2] = (unsigned char)((bits >> 48) & 0xff);
+        tail[total - 1] = (unsigned char)((bits >> 56) & 0xff);
+
+        for (offset = 0; offset < total; offset += 64) {
+            a = h[0]; b = h[1]; c = h[2]; d = h[3];
+            for (i = 0; i < 16; i++) {
+                m[i] = (unsigned int)tail[offset + i * 4] | ((unsigned int)tail[offset + i * 4 + 1] << 8) |
+                       ((unsigned int)tail[offset + i * 4 + 2] << 16) | ((unsigned int)tail[offset + i * 4 + 3] << 24);
+            }
+            for (i = 0; i < 64; i++) {
+                unsigned int f, g, tmp;
+                if (i < 16) { f = (b & c) | (~b & d); g = (unsigned int)i; }
+                else if (i < 32) { f = (d & b) | (~d & c); g = (unsigned int)(5 * i + 1) % 16u; }
+                else if (i < 48) { f = b ^ c ^ d; g = (unsigned int)(3 * i + 5) % 16u; }
+                else { f = c ^ (b | ~d); g = (unsigned int)(7 * i) % 16u; }
+                tmp = d; d = c; c = b;
+                f = a + f + K[i] + m[g];
+                b = b + ((f << S[i]) | (f >> (32 - S[i])));
+                a = tmp;
+            }
+            h[0] += a; h[1] += b; h[2] += c; h[3] += d;
+        }
+    }
+
+    for (i = 0; i < 4; i++) {
+        _snprintf_s(out + i * 8, 9, _TRUNCATE, "%02x%02x%02x%02x",
+                    (unsigned)(h[i] & 0xff), (unsigned)((h[i] >> 8) & 0xff),
+                    (unsigned)((h[i] >> 16) & 0xff), (unsigned)((h[i] >> 24) & 0xff));
+    }
+    out[32] = 0;
+}
+
+// baidu: {"from":"en","to":"zh","trans_result":[{"src":"hello","dst":"你好"}]}
+//
+// Two things make this one different from every other provider here: a refusal arrives with HTTP 200 and
+// an error_code in the body (so the body has to be read for a status, like yandex), and error_code is a
+// *string* in the client's own fixture ("54001") while being a number in older replies - so both are read.
+static int parse_baidu(const char* body, char* out, int cap)
+{
+    JVal* root = json_parse(body);
+    JVal* err;
+    JVal* node;
+    const char* text;
+    const char* message;
+    const char* code;
+    int numeric;
+    int n;
+
+    if (!root) {
+        set_error("response was not valid JSON");
+        return -1;
+    }
+
+    err = json_get(root, "error_code");
+    if (err) {
+        code = json_str(err);
+        numeric = json_int(err, 0);
+        message = json_str(json_get(root, "error_msg"));
+        if (code && *code) {
+            _snprintf_s(g_error, sizeof(g_error), _TRUNCATE, "Baidu error %s: %s",
+                        code, message ? message : "no message");
+        } else {
+            _snprintf_s(g_error, sizeof(g_error), _TRUNCATE, "Baidu error %d: %s",
+                        numeric, message ? message : "no message");
+        }
+        json_free(root);
+        return -1;
+    }
+
+    node = json_path(root, "trans_result.0.dst");
+    text = json_str(node);
+    if (!text || !*text) {
+        set_error("response carried no translated text");
+        json_free(root);
+        return -1;
+    }
+    n = (int)strlen(text);
+    if (n >= cap) {
+        set_error("translated text does not fit the output buffer");
+        json_free(root);
+        return -1;
+    }
+    memcpy(out, text, (size_t)n + 1);
+    json_free(root);
+    return n;
+}
+
 // azure: a *bare* array (no wrapper), one object per input, in request order:
 //   [{"translations":[{"text":"...","to":"zh-Hans"}]}]
 //
@@ -914,6 +1136,15 @@ static int json_escape_into(const char* in, char* out, int cap)
 // does not need it, and sending it would be harmless either way).
 static char g_azure_region[64] = "";
 
+void at_online_set_appid(const char* appid)
+{
+    if (!appid) {
+        g_baidu_appid[0] = 0;
+        return;
+    }
+    _snprintf_s(g_baidu_appid, sizeof(g_baidu_appid), _TRUNCATE, "%s", appid);
+}
+
 void at_online_set_region(const char* region)
 {
     if (!region) {
@@ -921,6 +1152,14 @@ void at_online_set_region(const char* region)
         return;
     }
     _snprintf_s(g_azure_region, sizeof(g_azure_region), _TRUNCATE, "%s", region);
+}
+
+// Baidu wants a "salt" in the sign so the same text does not produce the same signature every time.
+// Its value is not a secret and nothing verifies it; the reference client uses random.randint(32768,
+// 65536), so the clock is as good as anything.
+static unsigned int baidu_salt(void)
+{
+    return ((unsigned int)time(NULL) % 32769u) + 32768u;
 }
 
 // google_api: the parameters the path no longer carries.
@@ -1096,7 +1335,7 @@ int at_online_body(const char* provider, const char* source_lang, const char* ta
     }
     if (_stricmp(provider, "deepl") != 0 && _stricmp(provider, "bing") != 0 &&
         _stricmp(provider, "yandex") != 0 && _stricmp(provider, "google_api") != 0 &&
-        _stricmp(provider, "azure") != 0) {
+        _stricmp(provider, "azure") != 0 && _stricmp(provider, "baidu") != 0) {
         set_errorf("provider '%s' does not use a request body%s", provider, "");
         return 0;
     }
@@ -1119,6 +1358,13 @@ int at_online_body(const char* provider, const char* source_lang, const char* ta
         free(encoded);
         set_error("text too long to encode");
         return 0;
+    }
+
+    if (_stricmp(provider, "baidu") == 0) {
+        // The vendor's own demo posts with every parameter in the query string and no body at all
+        // (requests.post(url, params=payload)), so this is that request.
+        out[0] = 0;
+        return 1;
     }
 
     if (_stricmp(provider, "azure") == 0) {
@@ -1363,7 +1609,8 @@ int at_online_headers(const char* provider, const char* api_key, char* out, int 
 const char* at_online_content_type(const char* provider)
 {
     if (provider && (_stricmp(provider, "deepl") == 0 || _stricmp(provider, "bing") == 0 ||
-                     _stricmp(provider, "yandex") == 0 || _stricmp(provider, "google_api") == 0)) {
+                     _stricmp(provider, "yandex") == 0 || _stricmp(provider, "google_api") == 0 ||
+                     _stricmp(provider, "baidu") == 0)) {
         return "application/x-www-form-urlencoded";
     }
     // Azure accepts exactly this, and answers 415000 without it.
@@ -1559,6 +1806,9 @@ int at_online_parse(const char* provider, const char* body_utf8, char* out, int 
     }
     if (_stricmp(provider, "azure") == 0) {
         return parse_azure(body_utf8, out, cap);
+    }
+    if (_stricmp(provider, "baidu") == 0) {
+        return parse_baidu(body_utf8, out, cap);
     }
 
     set_errorf("unknown provider '%s'%s", provider, "");
