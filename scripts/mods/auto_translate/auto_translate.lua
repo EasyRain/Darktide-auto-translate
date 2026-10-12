@@ -17,6 +17,8 @@ local scanner = mod:io_dofile(BASE .. "scanner")
 scanner.init(util, store)
 
 local injector = mod:io_dofile(BASE .. "injector")
+-- The scanner asks it whether a value was written by us or shipped by the mod's author.
+scanner.attach_injector(injector)
 injector.init(util, store)
 
 -- "manual = true" is carried out where a store is read, and a store is read from three places (the
@@ -805,6 +807,16 @@ mod.on_setting_changed = function(setting_id)
         elseif setting_id == "online_api_key" then
             -- a new key deserves a fresh attempt after a failure streak
             engines.reset(mod)
+        end
+
+        -- Changing the engine (or the service it talks to) is the player's way of saying "translate this again
+        -- with the other one", and the report behind this was that it did not work: the file came back with the
+        -- previous engine's text. Handing our injected text back to the source first is what makes the new
+        -- engine translate the English rather than skip keys it believes the mod already ships. Deleting a
+        -- translation file on its own deliberately does not do this - that asks for the file to be rebuilt, not
+        -- for the screen to be cleared.
+        if setting_id == "engine" or setting_id == "api_provider" then
+            injector.forget_injected(mod)
         end
 
         online.flush(mod)

@@ -652,6 +652,60 @@ check("scanner: manual is not", scanner.is_local_source("manual"), false)
 check("scanner: unchanged is not", scanner.is_local_source("unchanged"), false)
 check("scanner: nil is not", scanner.is_local_source(nil), false)
 
+-- ---------------------------------------------------------------------------
+-- The "delete the file, switch engine, reload" path.
+--
+-- Reported by the user: a store translated by Baidu, deleted, the engine switched to DeepL, and the file came
+-- back with Baidu's text. Two causes, both asserted here - our own text in the mod's table was counted as the
+-- mod author's own translation, so the new engine never saw those keys, and merge() would not apply a store
+-- translation over a value that was already filled, even when the value was ours.
+--
+-- And the case the user corrected: a deleted file alone must NOT clear what is on screen. The signal for
+-- "redo this with the other engine" is the engine change, which is what forget_injected() is called on.
+-- ---------------------------------------------------------------------------
+do
+    local inj = assert(loadfile(here .. "/../scripts/mods/auto_translate/modules/injector.lua"))()
+    local files = {
+        SomeMod = { enabled = true, manual = false, entries = {
+            hello = { en = "Reload Speed", hash = "h1", text = "装填速度", src = "baidu" },
+        } },
+    }
+    local fake_store = {
+        load = function(name) return files[name] end,
+        lookup = function(data, key, en, hash)
+            local e = data and data.entries[key]
+            if e and e.hash == hash then return e.text, e.src, false end
+            return nil, "missing"
+        end,
+        set_entry = function() end,
+        save = function() return true end,
+    }
+    -- the real path hashes the source text; the fixture key carries "h1", so hash to that
+    local quiet = { info = function() end, log = function() end, warn = function() end,
+                    hash = function() return "h1" end }
+    inj.init(quiet, fake_store)
+
+    local tbl = { hello = { en = "Reload Speed" } }
+    inj.merge(quiet, "SomeMod", tbl, "zh-cn", false)
+    check("redo: the first engine's text lands in the table", tbl.hello["zh-cn"], "装填速度")
+    check("redo: and is remembered as ours", inj.is_ours("SomeMod", "hello"), true)
+    check("redo: an untouched key is not ours", inj.is_ours("SomeMod", "anything"), false)
+
+    files.SomeMod.entries.hello.text = "重装速度"
+    files.SomeMod.entries.hello.src = "deepl"
+    inj.merge(quiet, "SomeMod", tbl, "zh-cn", false)
+    check("redo: the new engine's text replaces ours", tbl.hello["zh-cn"], "重装速度")
+
+    check("redo: an engine change hands it back", inj.forget_injected(quiet) > 0, true)
+    check("redo: which restores the original text", tbl.hello["zh-cn"], nil)
+    check("redo: and forgets that it was ours", inj.is_ours("SomeMod", "hello"), false)
+
+    inj.merge(quiet, "SomeMod", tbl, "zh-cn", false)
+    files.SomeMod = nil
+    inj.merge(quiet, "SomeMod", tbl, "zh-cn", false)
+    check("redo: a deleted file alone does not clear the screen", tbl.hello["zh-cn"], "重装速度")
+end
+
 -- Line breaks are structural, like the [n] markers: a service that collapses a blank line changes what
 -- the text looks like (measured: two AutoMark tooltips came back from bing with "source 2, text 1").
 local safe_lb, why_lb = online.text_is_safe("a\nb", "x\ny")

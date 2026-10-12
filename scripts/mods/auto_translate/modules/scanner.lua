@@ -4,10 +4,23 @@ local M = {}
 
 local util
 local store
+local injector
 
 function M.init(u, s)
     util = u
     store = s
+end
+
+-- Attached after construction: the injector is loaded after this module (see auto_translate.lua), and the only
+-- thing needed here is the answer to "did we write this value?", which is asked per key at scan time.
+function M.attach_injector(i)
+    injector = i
+end
+
+-- Text in a mod's own `value[lang]` slot that this mod put there earlier in the session is not the mod
+-- author's translation, and must not stop a new engine from redoing it. See injector.is_ours.
+local function is_our_text(name, key)
+    return injector ~= nil and injector.is_ours ~= nil and injector.is_ours(name, key)
 end
 
 -- never translate these
@@ -76,10 +89,13 @@ function M.scan_mod(name, lang, opts)
         if type(value) == "table" and type(value["en"]) == "string" and value["en"] ~= "" then
             entry.total = entry.total + 1
             local existing = value[lang]
-            if type(existing) == "string" and existing ~= "" then
+            if type(existing) == "string" and existing ~= "" and not is_our_text(name, key) then
                 -- the mod already ships this language
                 entry.already = entry.already + 1
             else
+                -- ...or the text is the one this mod injected earlier in this session (a translation file the
+                -- player deleted, an engine they switched), in which case it is not a translation at all and
+                -- the loop below decides it again - from the store if it survived, as pending if it did not.
                 local hash = util.hash(value["en"])
                 local text, reason = store.lookup(data, key, value["en"], hash)
                 if text then

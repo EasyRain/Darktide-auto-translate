@@ -47,7 +47,25 @@ function M.set_live(mod_id, key, lang, text)
         return false
     end
     bucket[lang] = text
+    -- Recorded as ours for the same reason merge() records what it writes: see M.is_ours.
+    remember(mod_id, key, lang, text)
     return true
+end
+
+-- True when the text currently sitting in a mod's `value[lang]` was written by this mod *in this session*,
+-- rather than shipped by the mod's own author.
+--
+-- The distinction matters when the player deletes a translation file to have another engine redo it: the
+-- scanner reads the mod's localization table from disk, finds `value[lang]` already filled - with the previous
+-- engine's text, injected earlier in this same session - and counts the key as "the mod already ships this
+-- language", so the new engine never sees it and the old translation is written back into the fresh file. That
+-- is the report that produced this function ("even after switching to DeepL the file still had Baidu's text").
+--
+-- Across a restart the table comes from the mod's own Lua again, so nothing here is needed then; within a
+-- session this is the only record of what was ours.
+function M.is_ours(name, key)
+    local per_mod = written[name]
+    return per_mod ~= nil and per_mod[key] ~= nil
 end
 
 -- Merge our translations into a localization table that DMF is about to register.
@@ -82,12 +100,11 @@ function M.merge(mod, name, loc_table, lang, remember_only)
 
     local data = store.load(name, lang)
     if not data then
-        return 0
-    end
-    -- A `manual = true` file was carried out while it was read; store.load reports that itself, since
-    -- the scanner or the translation queue can be the one that reads the file first.
-    if data.enabled == false then
-        util.log(mod, "translation file for %s is disabled; skipped", name)
+        -- No translation file for this mod and language. Nothing is applied, and nothing is cleared either:
+        -- a deleted file asks for the file to be rebuilt, not for the screen to be emptied. The signal for
+        -- "redo this with the engine I just picked" is the engine change itself - see M.forget_injected, which
+        -- is what the settings handler calls - so a player who deletes a file and leaves the engine alone keeps
+        -- seeing the translation they already had until the new run replaces it.
         return 0
     end
 
@@ -97,7 +114,11 @@ function M.merge(mod, name, loc_table, lang, remember_only)
     for key, value in pairs(loc_table) do
         if type(value) == "table" and type(value["en"]) == "string" and value["en"] ~= "" then
             local existing = value[lang]
-            if not (type(existing) == "string" and existing ~= "") then
+            -- A value that is already filled stays untouched - unless this mod put it there itself. That is
+            -- the "delete the file, switch engine, reload" path: our own text from earlier in the session must
+            -- not stop the store's (new engine's) text from taking its place. See M.is_ours.
+            local ours = M.is_ours(name, key)
+            if not (type(existing) == "string" and existing ~= "") or ours then
                 local hash = util.hash(value["en"])
                 local text, src, needs_backfill = store.lookup(data, key, value["en"], hash)
                 if text then
@@ -141,6 +162,35 @@ function M.flush(mod, lang)
 end
 
 -- Injects everything that is ready for this mod. Returns the number injected.
+-- Undo what this session injected, for every mod. The player's signal for "translate this again, with the
+-- engine I just picked" is changing the engine, and this is what makes that work: with our text out of the
+-- tables the scanner sees the mod's own English again, so the new engine translates the source rather than
+-- skipping keys it believes are already translated. Deleting a translation file on its own deliberately does
+-- not do this - that is a request to rebuild the file, not to clear what is on screen.
+function M.forget_injected(mod)
+    local function lang_of(record)
+        return (record and record.lang) or "zh-cn"
+    end
+    local restored = 0
+    for name, per_mod in pairs(written) do
+        local tbl = M.tables[name]
+        if type(tbl) == "table" then
+            for key, record in pairs(per_mod) do
+                local value = tbl[key]
+                if type(value) == "table" and type(value["en"]) == "string" then
+                    value[lang_of(record)] = nil
+                    restored = restored + 1
+                end
+            end
+        end
+    end
+    written = {}
+    if restored > 0 then
+        util.info(mod, "engine changed; %d injected key(s) were handed back to the original text", restored)
+    end
+    return restored
+end
+
 local function inject_mod(mod, dmf, entry, lang)
     if #entry.ready == 0 then
         return 0
