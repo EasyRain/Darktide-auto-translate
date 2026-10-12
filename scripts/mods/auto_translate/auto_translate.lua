@@ -36,8 +36,12 @@ glossary.init(util)
 
 local custom = mod:io_dofile(BASE .. "custom")
 
+-- The two services that are described rather than coded (LibreTranslate, ModernMT). They are built in the
+-- shape the custom endpoint already speaks, so they travel that path - see modules/services.lua.
+local services = mod:io_dofile(BASE .. "services")
+
 local online = mod:io_dofile(BASE .. "online")
-online.init(util, store, glossary, engines, injector, custom)
+online.init(util, store, glossary, engines, injector, custom, services)
 
 -- The model downloader: owns the file sequence, the progress state and the notices; the
 -- transfer itself is native (src/at_download.c).

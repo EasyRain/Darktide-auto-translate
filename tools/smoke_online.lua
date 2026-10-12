@@ -1328,24 +1328,51 @@ do
     -- point at one of them - DMF throws on a dangling index - and the list has to cover
     -- all ten (the button included), or a field would be permanently invisible.
     local provider = by_id.api_provider
-    local custom_option = provider and provider.options and provider.options[4]   -- Custom is the fourth now
+    local custom_option = provider and provider.options and provider.options[6]   -- Custom is the sixth now
 
     -- Twelve since 0.3.10: the preset dropdown joined them, and it has to be first so that DMF draws it
     -- above the fields it governs.
     -- Thirteen since 0.3.10: the Azure region joined the twelve the custom endpoint already had.
     check("settings: the API service dropdown owns the custom-endpoint widgets",
-        provider ~= nil and provider.sub_widgets ~= nil and #provider.sub_widgets == 13, true)
-    check("settings: the four services are offered",
-        provider ~= nil and provider.options ~= nil and #provider.options == 4, true)
-    check("settings: and they are DeepL, Google v2, Azure v3 and Custom",
+        provider ~= nil and provider.sub_widgets ~= nil and #provider.sub_widgets == 15, true)
+    check("settings: the services are offered",
+        provider ~= nil and provider.options ~= nil and #provider.options == 6, true)
+    check("settings: and they are DeepL, Google v2, Azure v3, LibreTranslate, ModernMT and Custom",
         provider ~= nil and provider.options ~= nil
             and provider.options[1].value == "deepl" and provider.options[2].value == "google_api"
-            and provider.options[3].value == "azure" and provider.options[4].value == "custom", true)
+            and provider.options[3].value == "azure" and provider.options[4].value == "libretranslate"
+            and provider.options[5].value == "modernmt" and provider.options[6].value == "custom", true)
+    -- The described services build their requests through the custom path, which is where the header
+    -- values are substituted - the spec has to exist and name real fields.
+    local svc = require("scripts/mods/auto_translate/modules/services")
+    check("services: both described services are known", svc.has("libretranslate") and svc.has("modernmt"), true)
+    check("services: and nothing else is", not svc.has("deepl") and not svc.has("custom"), true)
     -- Index 13 is the test button (1 is the preset, 2..10 the fields, 11 the custom region, 12 Azure's);
     -- every service can be tested, and only Azure and Custom have a region.
+    -- The positions, named. A show_widgets index is a number into this list, and a wrong one hides a
+    -- setting for good (DMF throws on a dangling index, but it cannot tell that 13 meant "the test
+    -- button" when 13 is now LibreTranslate's address). Twice in one session a field was inserted above
+    -- the button and the indices were not moved with it - so the positions are asserted, not assumed.
+    local POSITIONS = {
+        [1] = "custom_preset", [2] = "custom_url", [3] = "custom_key", [4] = "custom_auth",
+        [5] = "custom_method", [6] = "custom_content_type", [7] = "custom_body", [8] = "custom_langs",
+        [9] = "custom_headers", [10] = "custom_path", [11] = "custom_region", [12] = "azure_region",
+        [13] = "libretranslate_url", [14] = "libretranslate_key", [15] = "test_custom_api",
+    }
+    local misplaced = 0
+    for index, setting_id in pairs(POSITIONS) do
+        local widget = provider.sub_widgets[index]
+        if not widget or widget.setting_id ~= setting_id then
+            misplaced = misplaced + 1
+        end
+    end
+    check("settings: the fifteen sub-widgets are where the indices say", misplaced, 0)
+    check("settings: and the test button is the fifteenth",
+        provider.sub_widgets[15] ~= nil and provider.sub_widgets[15].setting_id == "test_custom_api", true)
     check("settings: every service can be tested",
-        provider.options[1].show_widgets[1] == 13 and provider.options[2].show_widgets[1] == 13
-            and provider.options[3].show_widgets[1] == 12, true)
+        provider.options[1].show_widgets[1] == 15 and provider.options[2].show_widgets[1] == 15
+            and provider.options[3].show_widgets[1] == 12 and provider.options[4].show_widgets[1] == 13
+            and provider.options[5].show_widgets[1] == 15, true)
     check("settings: the first of them is the preset dropdown",
         provider ~= nil and provider.sub_widgets ~= nil and provider.sub_widgets[1] ~= nil
             and provider.sub_widgets[1].setting_id == "custom_preset", true)

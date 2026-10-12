@@ -110,17 +110,22 @@ return {
                             --   2..10  the nine request fields (custom endpoint only)
                             --   11     the custom endpoint's own region field
                             --   12     Azure's region field
-                            --   13     the test button
+                            --   13,14  LibreTranslate's address and optional key
+                            --   15     the test button
                             -- Honest naming beats counting: a wrong index hides a setting for good, and DMF
                             -- throws outright if one points at nothing.
                             { text = "api_deepl", value = "deepl",
-                              show_widgets = { 13 } },
+                              show_widgets = { 15 } },
                             { text = "api_google_v2", value = "google_api",
-                              show_widgets = { 13 } },
+                              show_widgets = { 15 } },
                             { text = "api_azure_v3", value = "azure",
-                              show_widgets = { 12, 13 } },
+                              show_widgets = { 12, 15 } },
+                            { text = "api_libretranslate", value = "libretranslate",
+                              show_widgets = { 13, 14, 15 } },
+                            { text = "api_modernmt", value = "modernmt",
+                              show_widgets = { 15 } },
                             { text = "api_custom", value = "custom",
-                              show_widgets = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 13 } },
+                              show_widgets = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 15 } },
                         },
                         -- The custom endpoint. Every field here exists because no two services
                         -- agree on anything: the URL, how the key is sent, whether the query goes
@@ -235,6 +240,23 @@ return {
                                 type = "text",
                                 default_value = "",
                                 max_length = 64,
+                            },
+                            {
+                                -- A LibreTranslate instance is wherever the player runs it: the hosted one,
+                                -- a community one, or their own - possibly under a subpath. So the address is
+                                -- a setting, unlike the fixed hosts of the other services.
+                                setting_id = "libretranslate_url",
+                                type = "text",
+                                default_value = "https://libretranslate.com",
+                                max_length = 200,
+                            },
+                            {
+                                -- Optional: the hosted instance wants one, a self-hosted one usually does
+                                -- not. It travels in the request body as "api_key".
+                                setting_id = "libretranslate_key",
+                                type = "text",
+                                default_value = "",
+                                max_length = 200,
                             },
                             {
                                 setting_id = "test_custom_api",

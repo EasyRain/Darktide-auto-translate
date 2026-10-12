@@ -16,14 +16,16 @@ local glossary
 local engines
 local injector
 local custom          -- modules/custom.lua: builds requests for a user-described endpoint
+local services        -- modules/services.lua: the two services described in that same shape
 
-function M.init(u, s, g, e, i, c)
+function M.init(u, s, g, e, i, c, v)
     util = u
     store = s
     glossary = g
     engines = e
     injector = i
     custom = c
+    services = v
 end
 
 -- ---------------------------------------------------------------------------
@@ -1574,6 +1576,14 @@ local function provider_needs_key(name)
     if name == "custom" then
         return false
     end
+    -- LibreTranslate may be keyless on purpose (a self-hosted instance); ModernMT always needs one, and
+    -- the core has never heard of either of them.
+    if name == "libretranslate" then
+        return false
+    end
+    if name == "modernmt" then
+        return true
+    end
     -- The core knows which of its providers need a key; ask it once it is loaded, and keep this list as
     -- the fallback for the frames before that. Azure was missing from the hand-written list and would have
     -- gone out without a key, which is a 401 the player cannot do anything about.
@@ -2464,8 +2474,10 @@ local function dispatch(mod)
     -- endpoint is described by settings instead, so its request is built in
     -- modules/custom.lua and handed to the generic HTTP entry points; the rest of the
     -- path (masking, inflight, the accept guards) is exactly the same.
-    if provider == "custom" then
-        return dispatch_custom(mod, item)
+    -- A described service (LibreTranslate, ModernMT) is built exactly like a custom endpoint, so it
+    -- travels that path rather than a second copy of it.
+    if provider == "custom" or (services and services.has(provider)) then
+        return dispatch_custom(mod, item, provider)
     end
 
     local api_key = nil
@@ -2753,7 +2765,7 @@ end
 -- Everything that can go wrong here is a mis-configuration rather than a bad string, so a
 -- missing URL/path/body stops the run with a notice naming the field, instead of failing
 -- item by item with "translation failed".
-function dispatch_custom(mod, item)
+function dispatch_custom(mod, item, provider)
     if not custom then
         M.state.last_error = "the custom API module is not loaded"
         util.warn(mod, "%s", M.state.last_error)
@@ -2761,7 +2773,12 @@ function dispatch_custom(mod, item)
         return false
     end
 
-    local spec = custom.spec(mod)
+    local spec
+    if provider and services and services.has(provider) then
+        spec = services.spec(mod, provider)
+    else
+        spec = custom.spec(mod)
+    end
     local problem = custom.problem(spec)
     if problem then
         M.state.last_error = problem
@@ -2792,7 +2809,9 @@ function dispatch_custom(mod, item)
         job = core.at_http_get(host, path)
     else
         local body = custom.build(spec, values)
-        local headers = custom.build_headers(spec)
+        -- The values matter: build_headers() substitutes {key}/{region} by reading values[name], so a spec
+        -- with any header at all (Azure's region, ModernMT's two) crashed the caller with a nil index.
+        local headers = custom.build_headers(spec, values)
         job = core.at_http_post(host, path, spec.content_type, headers, body)
     end
 
@@ -4014,12 +4033,19 @@ function M.probe(mod, lang)
     local probe_item = { mod_id = "test", key = "test", en = sample, hash = "" }
     local job, describe, response_path
 
-    if provider == "custom" then
+    if provider == "custom" or (services and services.has(provider)) then
         if not custom then
             util.popup(mod, "custom_test_no_module")
             return false
         end
-        local spec = custom.spec(mod)
+        local described = services and services.has(provider)
+        local spec = described and services.spec(mod, provider) or custom.spec(mod)
+        -- LibreTranslate may be keyless on purpose (a self-hosted instance), ModernMT never is, and an
+        -- empty key would go out as an empty header and come back 401.
+        if provider == "modernmt" and (type(spec.key) ~= "string" or spec.key == "") then
+            util.popup(mod, "api_key_missing")
+            return false
+        end
         local problem = custom.problem(spec)
         if problem then
             if problem == "custom_url_invalid" then
@@ -4036,7 +4062,7 @@ function M.probe(mod, lang)
             path = custom.append_query(path, custom.query_for(spec, values))
             job = core.at_http_get(host, path)
         else
-            job = core.at_http_post(host, path, spec.content_type, custom.build_headers(spec),
+            job = core.at_http_post(host, path, spec.content_type, custom.build_headers(spec, values),
                                     custom.build(spec, values))
         end
         describe = custom.describe(spec)
