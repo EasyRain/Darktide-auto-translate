@@ -98,11 +98,21 @@ for _, path in ipairs(files) do
             local mod_id = path:match("([^/\\]+)%.lua$")
             local doomed = {}
             for key, entry in pairs(data.entries) do
-                if type(entry) == "table" and type(entry.en) == "string"
-                    and type(entry.text) == "string" and entry.text ~= entry.en
-                    and online.is_asset_entry_for_tests(entry.en) then
+                if type(entry) ~= "table" or type(entry.en) ~= "string" then
+                    goto continue
+                end
+                if not online.is_asset_entry_for_tests(entry.en) then
+                    goto continue
+                end
+                -- A machine-written entry goes even when the service echoed the text back
+                -- ("tan" and "ui health default" were stored as text == en by deepl): the rule skips
+                -- those strings, so the entry is dead weight and the stores check warns about it.
+                -- A hand-written one is left alone - that is somebody's deliberate decision.
+                local machine = type(entry.src) == "string" and entry.src ~= "" and entry.src ~= "manual"
+                if machine or (type(entry.text) == "string" and entry.text ~= entry.en) then
                     doomed[#doomed + 1] = key
                 end
+                ::continue::
             end
             if #doomed > 0 then
                 print(string.format("  %-46s %3d entr(ies)%s",
