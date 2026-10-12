@@ -309,6 +309,9 @@ local function compose(t)
     return lines
 end
 
+-- The cache is observable through this: a hit returns the *same* table, a miss a new one.
+M.compose_for_tests = compose
+
 local function draw(self, ui_renderer, input_service, dt, t)
     local lines = compose(t)
     if not lines then

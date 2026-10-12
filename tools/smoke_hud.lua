@@ -100,3 +100,36 @@ if failures > 0 then
     os.exit(1)
 end
 print("smoke_hud: all checks passed")
+
+
+-- ---- the status-line cache (0.3.9): the HUD draws every frame, so compose() memoises its lines on the
+-- numbers that change. A hit has to return the very same table - that is the observable difference.
+local stub_status = {
+    lang = "zh-cn", loading = false, running = true, finished = false, queued = 40,
+    done = 12, left = 28, failed = 0, refused = 0, cooldown = 0, waiting = 0,
+    provider = "bing", last_error = nil,
+}
+local stub_mod = {
+    get = function(_, key) return key == "progress_hud" and true or nil end,
+    localize = function(_, key, ...) return key end,
+}
+local stub_online = { status = function() return stub_status end }
+hud.init(stub_mod, stub_util, stub_online, nil)
+
+local first = hud.compose_for_tests(100)
+check_true("the HUD builds its lines", type(first) == "table" and #first > 0)
+check_true("an unchanged frame reuses the same table", hud.compose_for_tests(100.016) == first)
+
+stub_status.done = 13
+local second = hud.compose_for_tests(101)
+check_true("a changed number builds new lines", second ~= first)
+check_true("...and the new lines are the current ones", second ~= nil and #second > 0)
+
+stub_status.done = 13
+check_true("and then it caches again", hud.compose_for_tests(101.5) == second)
+
+-- the visibility window is a side effect and must happen on a cache hit too
+stub_status.running = true
+hud.visible_until = 0
+hud.compose_for_tests(200)
+check_true("a cache hit still keeps the window open", (hud.visible_until or 0) > 200)
