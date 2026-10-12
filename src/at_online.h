@@ -61,6 +61,9 @@ AT_API int at_online_supports_multi_text(const char* provider);
 // Authorization line. Returns 1 on success (empty string when none is needed).
 AT_API int at_online_headers(const char* provider, const char* api_key, char* out, int cap);
 
+// The region of the caller's Azure Translator resource; empty (or NULL) omits the header.
+AT_API void at_online_set_region(const char* region);
+
 // --- Session bootstrap (Bing) -------------------------------------------------
 // Some keyless endpoints hand out a token on one page load and want it back on every
 // request. The flow: 1 when this provider needs one, 2 where to GET it, 3 parse the page

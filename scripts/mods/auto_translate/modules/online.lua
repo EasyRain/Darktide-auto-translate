@@ -61,6 +61,7 @@ int at_online_body(const char*, const char*, const char*, const char*, char*, in
 int at_online_body_multi(const char*, const char*, const char*, const char**, int, char*, int);
 int at_online_supports_multi_text(const char*);
 int at_online_headers(const char*, const char*, char*, int);
+void at_online_set_region(const char*);
 const char* at_online_content_type(const char*);
 int at_online_parse(const char*, const char*, char*, int);
 int at_online_parse_at(const char*, const char*, int, char*, int);
@@ -1765,6 +1766,10 @@ local function tier_probe_send(mod, provider)
         if type(api_key) ~= "string" or api_key == "" then
             return false
         end
+    end
+    -- Azure keeps its resource's region in a header of its own; the core holds it until the next call.
+    if provider == "azure" then
+        core.at_online_set_region(mod:get("azure_region") or "")
     end
     if core.at_online_host(provider, api_key, host_buf, 512) == 0 or
         core.at_online_path(provider, api_key, "en", M.state.lang or "en", TIER_PROBE_TEXT,

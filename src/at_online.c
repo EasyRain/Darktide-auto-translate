@@ -37,6 +37,7 @@ typedef struct {
     const char* deepl;
     const char* bing;
     const char* yandex;
+    const char* azure;
 } LangMap;
 
 // The yandex column is empty for Traditional Chinese on purpose: measured 2026-10-10, that endpoint
@@ -44,19 +45,19 @@ typedef struct {
 // missing code makes at_online_lang_code_for fail, which is exactly how providers_for() drops a
 // provider for one language and keeps it for the rest.
 static const LangMap LANG_MAP[] = {
-    { "en",    "en",    "EN",      "en",      "en" },
-    { "zh-cn", "zh-CN", "ZH-HANS", "zh-Hans", "zh" },
-    { "zh-tw", "zh-TW", "ZH-HANT", "zh-Hant", NULL },
-    { "ja",    "ja",    "JA",      "ja",      "ja" },
-    { "ko",    "ko",    "KO",      "ko",      "ko" },
-    { "ru",    "ru",    "RU",      "ru",      "ru" },
-    { "de",    "de",    "DE",      "de",      "de" },
-    { "fr",    "fr",    "FR",      "fr",      "fr" },
-    { "es",    "es",    "ES",      "es",      "es" },
-    { "it",    "it",    "IT",      "it",      "it" },
-    { "pl",    "pl",    "PL",      "pl",      "pl" },
-    { "pt-br", "pt-BR", "PT-BR",   "pt",      "pt" },
-    { "uk",    "uk",    "UK",      "uk",      "uk" },
+    { "en",    "en",    "EN",      "en",      "en",      "en" },
+    { "zh-cn", "zh-CN", "ZH-HANS", "zh-Hans", "zh",      "zh-Hans" },
+    { "zh-tw", "zh-TW", "ZH-HANT", "zh-Hant", NULL,      "zh-Hant" },
+    { "ja",    "ja",    "JA",      "ja",      "ja",      "ja" },
+    { "ko",    "ko",    "KO",      "ko",      "ko",      "ko" },
+    { "ru",    "ru",    "RU",      "ru",      "ru",      "ru" },
+    { "de",    "de",    "DE",      "de",      "de",      "de" },
+    { "fr",    "fr",    "FR",      "fr",      "fr",      "fr" },
+    { "es",    "es",    "ES",      "es",      "es",      "es" },
+    { "it",    "it",    "IT",      "it",      "it",      "it" },
+    { "pl",    "pl",    "PL",      "pl",      "pl",      "pl" },
+    { "pt-br", "pt-BR", "PT-BR",   "pt",      "pt",      "pt" },
+    { "uk",    "uk",    "UK",      "uk",      "uk",      "uk" },
 };
 
 int at_online_lang_code_for(const char* provider, const char* internal_lang, char* out, int cap)
@@ -65,6 +66,7 @@ int at_online_lang_code_for(const char* provider, const char* internal_lang, cha
     int deepl;
     int bing;
     int yandex;
+    int azure;
 
     if (!internal_lang || !out || cap <= 0) {
         return 0;
@@ -72,12 +74,14 @@ int at_online_lang_code_for(const char* provider, const char* internal_lang, cha
     deepl = provider && _stricmp(provider, "deepl") == 0;
     bing = provider && _stricmp(provider, "bing") == 0;
     yandex = provider && _stricmp(provider, "yandex") == 0;
+    azure = provider && _stricmp(provider, "azure") == 0;
 
     for (i = 0; i < sizeof(LANG_MAP) / sizeof(LANG_MAP[0]); i++) {
         if (_stricmp(LANG_MAP[i].internal, internal_lang) == 0) {
             const char* code = yandex ? LANG_MAP[i].yandex
                                       : (bing ? LANG_MAP[i].bing
-                                              : (deepl ? LANG_MAP[i].deepl : LANG_MAP[i].google));
+                                              : (deepl ? LANG_MAP[i].deepl
+                                                       : (azure ? LANG_MAP[i].azure : LANG_MAP[i].google)));
             if (!code) {
                 // This provider does not offer this language at all; the caller treats it as a
                 // provider that cannot be used for it.
@@ -277,18 +281,21 @@ int at_online_provider_known(const char* provider)
            _stricmp(provider, "google_gtx") == 0 ||
            _stricmp(provider, "bing") == 0 ||
            _stricmp(provider, "yandex") == 0 ||
+           _stricmp(provider, "azure") == 0 ||
            _stricmp(provider, "mymemory") == 0;
 }
 
 int at_online_needs_key(const char* provider)
 {
-    return provider && (_stricmp(provider, "google_api") == 0 || _stricmp(provider, "deepl") == 0);
+    return provider && (_stricmp(provider, "google_api") == 0 || _stricmp(provider, "deepl") == 0 ||
+                        _stricmp(provider, "azure") == 0);
 }
 
 int at_online_uses_post(const char* provider)
 {
     return provider && (_stricmp(provider, "deepl") == 0 || _stricmp(provider, "bing") == 0 ||
-                        _stricmp(provider, "yandex") == 0 || _stricmp(provider, "google_api") == 0);
+                        _stricmp(provider, "yandex") == 0 || _stricmp(provider, "google_api") == 0 ||
+                        _stricmp(provider, "azure") == 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -484,6 +491,8 @@ int at_online_host(const char* provider, const char* api_key, char* out, int cap
         host = "clients5.google.com";
     } else if (_stricmp(provider, "google_gtx") == 0) {
         host = "translate.googleapis.com";
+    } else if (_stricmp(provider, "azure") == 0) {
+        host = "api.cognitive.microsofttranslator.com";
     } else if (_stricmp(provider, "mymemory") == 0) {
         host = "api.mymemory.translated.net";
     } else if (_stricmp(provider, "bing") == 0) {
@@ -585,6 +594,11 @@ int at_online_path(const char* provider, const char* api_key, const char* source
         written = _snprintf_s(out, (size_t)cap, _TRUNCATE,
                               "/api/v1/tr.json/translate?srv=android&id=%s-0-0&lang=%s-%s",
                               yandex_client_id(), src, dst);
+    } else if (_stricmp(provider, "azure") == 0) {
+        // from and to live in the query string for api-version=3.0, never in the body; from is optional
+        // (omitting it asks for auto-detection) and this build always sends it.
+        written = _snprintf_s(out, (size_t)cap, _TRUNCATE,
+                              "/translate?api-version=3.0&from=%s&to=%s", src, dst);
     } else if (_stricmp(provider, "google_api") == 0) {
         // Only the key is in the query string; q/source/target/format go in the body, which is how the
         // official client sends them and what lets a multi-text request repeat q= without a second shape.
@@ -792,6 +806,54 @@ static int parse_mymemory(const char* body, char* out, int cap)
     return n;
 }
 
+// azure: a *bare* array (no wrapper), one object per input, in request order:
+//   [{"translations":[{"text":"...","to":"zh-Hans"}]}]
+//
+// A JSON object instead of an array means the service refused: {"error":{"code":401000,"message":"..."}}.
+// The code is stable and machine-readable, which is why it leads the message the player is shown.
+static int parse_azure(const char* body, char* out, int cap)
+{
+    JVal* root = json_parse(body);
+    JVal* err;
+    JVal* node;
+    const char* text;
+    const char* message;
+    int code;
+    int n;
+
+    if (!root) {
+        set_error("response was not valid JSON");
+        return -1;
+    }
+
+    err = json_get(root, "error");
+    if (err) {
+        code = json_int(json_get(err, "code"), 0);
+        message = json_str(json_get(err, "message"));
+        _snprintf_s(g_error, sizeof(g_error), _TRUNCATE, "Azure error %d: %s",
+                    code, message ? message : "no message");
+        json_free(root);
+        return -1;
+    }
+
+    node = json_path(root, "0.translations.0.text");
+    text = json_str(node);
+    if (!text || !*text) {
+        set_error("response carried no translated text");
+        json_free(root);
+        return -1;
+    }
+    n = (int)strlen(text);
+    if (n >= cap) {
+        set_error("translated text does not fit the output buffer");
+        json_free(root);
+        return -1;
+    }
+    memcpy(out, text, (size_t)n + 1);
+    json_free(root);
+    return n;
+}
+
 // google_api:
 //   {"data":{"translations":[{"translatedText":"..."}]}}
 // {"code":200,"lang":"en-uk","nmt_code":200,"text":["\u041f\u043e\u043a\u0430\u0437\u0430\u0442\u0438 ..."]}
@@ -799,6 +861,68 @@ static int parse_mymemory(const char* body, char* out, int cap)
 // The endpoint puts its own status in the body, so a code that is not 200 is the service refusing the
 // request and must not be read as a translation. `text` is an array because the request may carry
 // several strings (this build sends one - see at_online_supports_multi_text).
+// Azure dresses the same text as JSON, so the body needs escaping rather than form encoding.
+//
+// Control characters use JSON's short escapes where it has them and \u00XX otherwise; UTF-8 passes through
+// untouched, which is what the API wants (Content-Type says charset=UTF-8).
+static int json_escape_into(const char* in, char* out, int cap)
+{
+    const unsigned char* p = (const unsigned char*)in;
+    int used = 0;
+
+    if (!in || !out || cap <= 0) {
+        return 0;
+    }
+    for (; *p; p++) {
+        const char* esc = NULL;
+        char buf[8];
+        switch (*p) {
+        case '"':  esc = "\\\""; break;
+        case '\\': esc = "\\\\"; break;
+        case '\n': esc = "\\n"; break;
+        case '\r': esc = "\\r"; break;
+        case '\t': esc = "\\t"; break;
+        case '\b': esc = "\\b"; break;
+        case '\f': esc = "\\f"; break;
+        default:
+            if (*p < 0x20) {
+                _snprintf_s(buf, sizeof(buf), _TRUNCATE, "\\u%04x", (unsigned)*p);
+                esc = buf;
+            }
+            break;
+        }
+        if (esc) {
+            size_t n = strlen(esc);
+            if (used + (int)n + 1 > cap) {
+                return 0;
+            }
+            memcpy(out + used, esc, n);
+            used += (int)n;
+        } else {
+            if (used + 2 > cap) {
+                return 0;
+            }
+            out[used++] = (char)*p;
+        }
+    }
+    out[used] = 0;
+    return 1;
+}
+
+// The region of the caller's Translator resource. It is part of the request, so it is set once next to the
+// key rather than threaded through every builder; an empty one simply omits the header (a global resource
+// does not need it, and sending it would be harmless either way).
+static char g_azure_region[64] = "";
+
+void at_online_set_region(const char* region)
+{
+    if (!region) {
+        g_azure_region[0] = 0;
+        return;
+    }
+    _snprintf_s(g_azure_region, sizeof(g_azure_region), _TRUNCATE, "%s", region);
+}
+
 // google_api: the parameters the path no longer carries.
 //
 // q is the text, already percent-encoded by the caller; format=text keeps the reply plain rather than
@@ -971,7 +1095,8 @@ int at_online_body(const char* provider, const char* source_lang, const char* ta
         return 0;
     }
     if (_stricmp(provider, "deepl") != 0 && _stricmp(provider, "bing") != 0 &&
-        _stricmp(provider, "yandex") != 0 && _stricmp(provider, "google_api") != 0) {
+        _stricmp(provider, "yandex") != 0 && _stricmp(provider, "google_api") != 0 &&
+        _stricmp(provider, "azure") != 0) {
         set_errorf("provider '%s' does not use a request body%s", provider, "");
         return 0;
     }
@@ -994,6 +1119,22 @@ int at_online_body(const char* provider, const char* source_lang, const char* ta
         free(encoded);
         set_error("text too long to encode");
         return 0;
+    }
+
+    if (_stricmp(provider, "azure") == 0) {
+        // A JSON array even for one string; the reference is explicit that the body is an array.
+        char escaped[8192];
+        free(encoded);
+        if (!json_escape_into(text_utf8, escaped, (int)sizeof(escaped))) {
+            set_error("the text is too long to escape");
+            return 0;
+        }
+        written = _snprintf_s(out, (size_t)cap, _TRUNCATE, "[{\"Text\":\"%s\"}]", escaped);
+        if (written < 0) {
+            _snprintf_s(g_error, sizeof(g_error), _TRUNCATE, "request body too long (buffer: %d bytes)", cap);
+            return 0;
+        }
+        return 1;
     }
 
     if (_stricmp(provider, "bing") == 0) {
@@ -1049,12 +1190,14 @@ int at_online_body_multi(const char* provider, const char* source_lang, const ch
     char dst[16];
     int i;
     int used;
+    int written;
 
     if (!provider || !texts || !out || cap <= 0) {
         set_error("missing argument");
         return 0;
     }
-    if (_stricmp(provider, "deepl") != 0 && _stricmp(provider, "google_api") != 0) {
+    if (_stricmp(provider, "deepl") != 0 && _stricmp(provider, "google_api") != 0 &&
+        _stricmp(provider, "azure") != 0) {
         set_errorf("provider '%s' has no multi-text request form%s", provider, "");
         return 0;
     }
@@ -1075,6 +1218,33 @@ int at_online_body_multi(const char* provider, const char* source_lang, const ch
 
     out[0] = 0;
     used = 0;
+
+    if (_stricmp(provider, "azure") == 0) {
+        // A JSON array of objects, one per text, in the order they were given. Azure documents that the
+        // reply comes back in that same order, which is what lets the caller read it by index.
+        char escaped[8192];
+
+        for (i = 0; i < count; i++) {
+            if (!json_escape_into(texts[i], escaped, (int)sizeof(escaped))) {
+                set_error("a text is too long to escape");
+                return 0;
+            }
+            written = _snprintf_s(out + used, (size_t)(cap - used), _TRUNCATE,
+                                  i == 0 ? "[{\"Text\":\"%s\"}" : ",{\"Text\":\"%s\"}", escaped);
+            if (written < 0) {
+                _snprintf_s(g_error, sizeof(g_error), _TRUNCATE,
+                            "request body too long (buffer: %d bytes)", cap);
+                return 0;
+            }
+            used += written;
+        }
+        if (_snprintf_s(out + used, (size_t)(cap - used), _TRUNCATE, "]") < 0) {
+            _snprintf_s(g_error, sizeof(g_error), _TRUNCATE, "request body too long (buffer: %d bytes)", cap);
+            return 0;
+        }
+        return 1;
+    }
+
     for (i = 0; i < count; i++) {
         const char* text = texts[i] ? texts[i] : "";
         size_t need = strlen(text) * 3 + 1;
@@ -1116,7 +1286,8 @@ int at_online_body_multi(const char* provider, const char* source_lang, const ch
 // asks instead of hard-coding a provider name: which services ship is the core's business.
 int at_online_supports_multi_text(const char* provider)
 {
-    return provider && (_stricmp(provider, "deepl") == 0 || _stricmp(provider, "google_api") == 0);
+    return provider && (_stricmp(provider, "deepl") == 0 || _stricmp(provider, "google_api") == 0 ||
+                        _stricmp(provider, "azure") == 0);
 }
 
 // Which browser each service is told we are. Not decoration: Bing's keyless translator answers HTTP
@@ -1152,6 +1323,28 @@ int at_online_headers(const char* provider, const char* api_key, char* out, int 
         return 0;
     }
 
+    if (_stricmp(provider, "azure") == 0) {
+        if (!api_key || !*api_key) {
+            set_error("this provider needs an API key");
+            return 0;
+        }
+        if (strlen(out) + strlen(api_key) + 80 > (size_t)cap ||
+            _snprintf_s(out + strlen(out), (size_t)cap - strlen(out), _TRUNCATE,
+                        "Ocp-Apim-Subscription-Key: %s\r\n", api_key) < 0) {
+            set_error("API key is too long for a header");
+            return 0;
+        }
+        // Optional for a global resource, required for a multi-service or regional one, and harmless
+        // either way - so it is sent whenever the player supplied one.
+        if (g_azure_region[0] &&
+            (strlen(out) + strlen(g_azure_region) + 80 > (size_t)cap ||
+             _snprintf_s(out + strlen(out), (size_t)cap - strlen(out), _TRUNCATE,
+                         "Ocp-Apim-Subscription-Region: %s\r\n", g_azure_region) < 0)) {
+            set_error("the region is too long for a header");
+            return 0;
+        }
+    }
+
     if (_stricmp(provider, "deepl") == 0) {
         if (!api_key || !*api_key) {
             set_error("this provider needs an API key");
@@ -1172,6 +1365,10 @@ const char* at_online_content_type(const char* provider)
     if (provider && (_stricmp(provider, "deepl") == 0 || _stricmp(provider, "bing") == 0 ||
                      _stricmp(provider, "yandex") == 0 || _stricmp(provider, "google_api") == 0)) {
         return "application/x-www-form-urlencoded";
+    }
+    // Azure accepts exactly this, and answers 415000 without it.
+    if (provider && _stricmp(provider, "azure") == 0) {
+        return "application/json; charset=UTF-8";
     }
     return NULL;
 }
@@ -1234,7 +1431,8 @@ int at_online_parse_at(const char* provider, const char* body_utf8, int index, c
     }
     out[0] = 0;
 
-    if (_stricmp(provider, "deepl") != 0 && _stricmp(provider, "google_api") != 0) {
+    if (_stricmp(provider, "deepl") != 0 && _stricmp(provider, "google_api") != 0 &&
+        _stricmp(provider, "azure") != 0) {
         set_errorf("provider '%s' has no multi-text reply form%s", provider, "");
         return 0;
     }
@@ -1246,6 +1444,10 @@ int at_online_parse_at(const char* provider, const char* body_utf8, int index, c
     }
     if (_stricmp(provider, "google_api") == 0) {
         _snprintf_s(path, sizeof(path), _TRUNCATE, "data.translations.%d.translatedText", index);
+    } else if (_stricmp(provider, "azure") == 0) {
+        // The top-level array is in request order; the inner translations array has one entry per `to`,
+        // and this build always asks for one target, so index 0 is the right one.
+        _snprintf_s(path, sizeof(path), _TRUNCATE, "%d.translations.0.text", index);
     } else {
         _snprintf_s(path, sizeof(path), _TRUNCATE, "translations.%d.text", index);
     }
@@ -1354,6 +1556,9 @@ int at_online_parse(const char* provider, const char* body_utf8, char* out, int 
     }
     if (_stricmp(provider, "google_api") == 0) {
         return parse_google_api(body_utf8, out, cap);
+    }
+    if (_stricmp(provider, "azure") == 0) {
+        return parse_azure(body_utf8, out, cap);
     }
 
     set_errorf("unknown provider '%s'%s", provider, "");

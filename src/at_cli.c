@@ -259,6 +259,75 @@ static int cmd_selftest(void)
                 at_online_path("deepl", "k", "en", "ja", "Hello", path, (int)sizeof(path)) &&
                     strcmp(path, "/v2/translate") == 0);
     // ZH-HANS / ZH-HANT are DeepL's explicit Simplified / Traditional codes
+    printf("\n== azure ==\n");
+    expect_true("azure host", at_online_host("azure", "K", out, (int)sizeof(out)) &&
+        strcmp(out, "api.cognitive.microsofttranslator.com") == 0);
+    expect_true("azure uses POST", at_online_uses_post("azure") == 1);
+    expect_true("azure needs a key", at_online_needs_key("azure") == 1);
+    // The only Content-Type it accepts; anything else is its documented 415000.
+    expect_true("azure content type", strcmp(at_online_content_type("azure"), "application/json; charset=UTF-8") == 0);
+    // from/to live in the query string for api-version=3.0, and it wants zh-Hans rather than zh-CN.
+    expect_true("azure path", at_online_path("azure", "K", "en", "zh-cn", "Hi", path, (int)sizeof(path)) &&
+        strcmp(path, "/translate?api-version=3.0&from=en&to=zh-Hans") == 0);
+    // The body is a JSON array even for one string (verbatim from the reference's own example).
+    expect_true("azure body is an array of one",
+        at_online_body("azure", "en", "zh-cn", "Hello, what is your name?", body, (int)sizeof(body)) &&
+            strcmp(body, "[{\"Text\":\"Hello, what is your name?\"}]") == 0);
+    expect_true("azure body escapes a quote",
+        at_online_body("azure", "en", "de", "He said \"hi\"\\now", body, (int)sizeof(body)) &&
+            strcmp(body, "[{\"Text\":\"He said \\\"hi\\\"\\\\now\"}]") == 0);
+    expect_true("azure multi body is an array of objects",
+        at_online_body_multi("azure", "en", "zh-cn", parts, 2, body, (int)sizeof(body)) &&
+            strcmp(body, "[{\"Text\":\"Alpha\"},{\"Text\":\"Beta\"}]") == 0);
+    expect_true("azure supports several texts", at_online_supports_multi_text("azure") == 1);
+    // Reply fixtures are the reference page's own examples, verbatim.
+    expect_true("azure single reply",
+        at_online_parse("azure", "[{\"translations\":[{\"text\":\"Xin chao\",\"to\":\"zh-Hans\"}]}]",
+            out, (int)sizeof(out)) > 0 && strcmp(out, "Xin chao") == 0);
+    expect_true("azure reply keeps UTF-8",
+        at_online_parse("azure",
+            "[{\"translations\":[{\"text\":\"\xE4\xBD\xA0\xE5\xA5\xBD\",\"to\":\"zh-Hans\"}]}]",
+            out, (int)sizeof(out)) > 0 && strcmp(out, "\xE4\xBD\xA0\xE5\xA5\xBD") == 0);
+    expect_true("azure auto-detect reply (detectedLanguage present)",
+        at_online_parse("azure",
+            "[{\"detectedLanguage\":{\"language\":\"en\",\"score\":1.0},"
+            "\"translations\":[{\"text\":\"Hallo\",\"to\":\"de\"}]}]",
+            out, (int)sizeof(out)) > 0 && strcmp(out, "Hallo") == 0);
+    // A bare array in request order; the second element is read by index.
+    expect_true("azure multi reply by position",
+        at_online_parse_at("azure",
+            "[{\"translations\":[{\"text\":\"Alpha\",\"to\":\"zh-Hans\"}]},"
+            "{\"translations\":[{\"text\":\"Beta\",\"to\":\"zh-Hans\"}]}]", 1, out, (int)sizeof(out)) &&
+            strcmp(out, "Beta") == 0);
+    // An object instead of an array is the service refusing, and its code is machine-readable.
+    expect_true("azure error carries the code",
+        at_online_parse("azure",
+            "{\"error\":{\"code\":403001,\"message\":\"The operation isn't allowed because the "
+            "subscription has exceeded its free quota.\"}}", out, (int)sizeof(out)) < 0 &&
+            strstr(at_online_error(), "403001") != NULL);
+    expect_true("azure missing key is 401000",
+        at_online_parse("azure",
+            "{\"error\":{\"code\":401000,\"message\":\"The request is not authorized because "
+            "credentials are missing or invalid.\"}}", out, (int)sizeof(out)) < 0 &&
+            strstr(at_online_error(), "401000") != NULL);
+    // The region rides in its own header, and only when one was set.
+    at_online_set_region("westeurope");
+    expect_true("azure region header",
+        at_online_headers("azure", "KEY", out, (int)sizeof(out)) &&
+            strstr(out, "Ocp-Apim-Subscription-Key: KEY") != NULL &&
+            strstr(out, "Ocp-Apim-Subscription-Region: westeurope") != NULL);
+    at_online_set_region("");
+    expect_true("azure without a region omits that header",
+        at_online_headers("azure", "KEY", out, (int)sizeof(out)) &&
+            strstr(out, "Ocp-Apim-Subscription-Region") == NULL);
+    // Its Chinese and Portuguese spellings differ from Google's on purpose.
+    expect_true("azure zh-cn -> zh-Hans",
+        at_online_lang_code_for("azure", "zh-cn", out, (int)sizeof(out)) && strcmp(out, "zh-Hans") == 0);
+    expect_true("azure zh-tw -> zh-Hant",
+        at_online_lang_code_for("azure", "zh-tw", out, (int)sizeof(out)) && strcmp(out, "zh-Hant") == 0);
+    expect_true("azure pt-br -> pt",
+        at_online_lang_code_for("azure", "pt-br", out, (int)sizeof(out)) && strcmp(out, "pt") == 0);
+
     // Multi-text (2026-10-12): Google repeats q= in the form body, which is its documented batch form.
     expect_true("google_api supports several texts", at_online_supports_multi_text("google_api") == 1);
     expect_true("google_api multi body repeats q",
