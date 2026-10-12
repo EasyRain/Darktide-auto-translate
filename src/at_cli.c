@@ -351,11 +351,12 @@ static int cmd_selftest(void)
         at_online_lang_code_for("baidu", "es", out, (int)sizeof(out)) && strcmp(out, "spa") == 0);
     expect_true("baidu pt-br -> pt",
         at_online_lang_code_for("baidu", "pt-br", out, (int)sizeof(out)) && strcmp(out, "pt") == 0);
-    /* The vendor's own language table lists ukr, but the endpoint refuses it: measured 2026-10-12 with a
-       real key, twice with a delay in between, both times 58001 INVALID_TO_PARAM. Declaring it
-       unsupported is what makes the engine hand Ukrainian to someone else instead of sending a request
-       that cannot work. */
-    expect_true("baidu refuses uk (its own table is wrong about it)",
+    /* The vendor's table does list ukr - and the account we could test rejects it in every direction
+       (en->ukr, zh->ukr, ukr->zh, en->uk: all 58001 INVALID_TO_PARAM, while en->ru in the same session
+       worked). So this is a measurement, not a reading of the table. Declaring it unsupported is what
+       makes the engine hand Ukrainian to another provider instead of spending a request that cannot
+       work; an account whose plan allows it only has to put ukr back in the baidu column. */
+    expect_true("baidu: uk is unsupported for the account we measured",
         !at_online_lang_code_for("baidu", "uk", out, (int)sizeof(out)));
     /* The reference client's own test fixture, verbatim. */
     expect_true("baidu reply (the client's fixture)",

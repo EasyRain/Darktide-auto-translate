@@ -45,10 +45,15 @@ typedef struct {
     const char* baidu;
 } LangMap;
 
-// The baidu column is NULL for Ukrainian on purpose: the vendor's own language table lists ukr, but the
-// endpoint refuses it - measured 2026-10-12 with a real key, twice with a delay in between, both times
-// 58001 INVALID_TO_PARAM. A missing code makes at_online_lang_code_for fail, so the engine picks another
-// provider for that language instead of sending a request that cannot work.
+// The baidu column is NULL for Ukrainian on purpose, and this is not a disagreement with the vendor's
+// table: that table does list ukr, and the user checked it. It is a measurement. The account we could test
+// with (a free key from 2021) rejects ukr in *every* direction - en->ukr, zh->ukr, ukr->zh and the short
+// en->uk all answered 58001 INVALID_TO_PARAM, while en->ru in the same session answered normally, so it is
+// neither a language-pair restriction nor a spelling problem. Most likely the plan/product decides.
+//
+// A missing code makes at_online_lang_code_for fail, so the engine gives Ukrainian to another provider
+// instead of spending a request that cannot work. A player whose plan does support it can put ukr back in
+// this column - that is the whole change.
 //
 // The yandex column is empty for Traditional Chinese on purpose: measured 2026-10-10, that endpoint
 // rejects every spelling of it (zh-TW, zh-tw, zh_tw, zh-Hant, zt: HTTP 400) and answers only zh. A
