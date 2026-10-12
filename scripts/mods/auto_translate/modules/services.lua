@@ -38,11 +38,17 @@ function M.has(provider)
     return provider == "libretranslate"
 end
 
--- Language codes, per service. The custom endpoint's own `langs` field uses this exact syntax, so the same
--- mapping code applies. All twelve targets are supported, measured from the instance's own /languages
--- rather than assumed.
+-- Language codes, per service.
+--
+-- A table, not the `langs` string a player types into the custom endpoint: custom.values() looks up
+-- spec.map, and the string form exists only so that a *player* has something to type. Setting `langs`
+-- alone here silently did nothing - the body went out with `zh-cn` and the instance answered 400 - which
+-- is exactly the sort of thing only a live instance catches. tools/live_libretranslate_check.lua does.
+--
+-- The codes are the instance's own, from its /languages: a self-hosted 1.9.6 with --load-only en,zh reports
+-- `zh-Hans`, the same spelling the public instance uses.
 local LANGS = {
-    libretranslate = "zh-cn=zh-Hans,zh-tw=zh-Hant,pt-br=pt-BR",
+    libretranslate = { ["zh-cn"] = "zh-Hans", ["zh-tw"] = "zh-Hant", ["pt-br"] = "pt-BR" },
 }
 
 -- A LibreTranslate key is optional (a self-hosted instance usually has none) and belongs in the body as
@@ -65,7 +71,7 @@ function M.spec(mod, provider)
         body = key ~= "" and LT_BODY_KEY or LT_BODY,
         headers = "",
         path = "translatedText",
-        langs = LANGS.libretranslate,
+        map = LANGS.libretranslate,
     }
 end
 

@@ -424,6 +424,46 @@ guard, test and store still sees one form. `tools/check_wire_boundaries.py` enfo
 | **Azure region** (setting) | - | The region of your Translator resource, for example `westeurope`. Optional for a global resource, required for a multi-service one, and harmless either way - so it is sent whenever it is filled in. |
 | **Custom** | whatever you point it at | Any HTTP endpoint: an OpenAI-compatible chat API, a self-hosted service, or a DeepL-style form endpoint. See below. |
 
+### Hosting LibreTranslate yourself (free, unlimited)
+
+LibreTranslate is the one service here that costs nothing only if you run it yourself; the public instance
+sells subscriptions from 29 USD a month. It is a Python application, so a local instance is a two-command
+install and needs no Docker. This is the sequence that was measured on Windows with Python 3.13.7
+(2026-10-12), and `tools/live_libretranslate_check.lua` verifies the result through the mod's own request
+path:
+
+```powershell
+python -m venv D:\lt-venv
+D:\lt-venv\Scripts\python.exe -m pip install --upgrade pip
+D:\lt-venv\Scripts\python.exe -m pip install libretranslate
+```
+
+Then start it, bound to this machine only (that also avoids the Windows firewall prompt). The first start
+downloads the translation models, about 100 MB per language pair, so `--load-only` keeps the first run
+quick - list the languages you actually translate into:
+
+```powershell
+D:\lt-venv\Scripts\libretranslate.exe --host 127.0.0.1 --port 5000 --load-only en,zh,ja,ko,ru,de,fr,es,it,pl,pt
+```
+
+If the model download fails with `getaddrinfo failed`, its DNS lookup is not getting through and the proxy
+has to be handed to it explicitly (this machine needed it):
+
+```powershell
+$env:HTTPS_PROXY = "http://127.0.0.1:7890"; $env:HTTP_PROXY = $env:HTTPS_PROXY; $env:NO_PROXY = "127.0.0.1,localhost"
+```
+
+Check it without launching the game:
+
+```powershell
+luajit tools/live_libretranslate_check.lua http://127.0.0.1:5000
+```
+
+Finally, in the mod: **API service = LibreTranslate**, **address = `http://127.0.0.1:5000`**, key empty, and
+press Test. Notes worth knowing: no key is needed for your own instance; the server has to be running before
+the game translates (a request that cannot connect just moves on to the next provider); and the language
+codes are whatever your instance reports, which is what the check above compares against.
+
 ### Free endpoints (no key, nothing to download)
 
 The third tier, and the one that makes "no key and no model" translate at all. It is a
