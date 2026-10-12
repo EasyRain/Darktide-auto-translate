@@ -283,6 +283,18 @@ print('uk: %d term(s) took their Ukrainian from translations/uk_extra.lua' % _fi
 # loc_glossary_talent_keystone, loc_talent_broker_ability_stimm_field), and the export - which has
 # all 12 languages for each - is authoritative for its own strings.
 HAND = [
+    # hud_studio's anchor picker. Its own UI words, so no game key exists for them, and the services made a
+    # mess of two: "Center-left" came back as 中左翼 (a wing), "Block Origin" was left in English while the
+    # [Default] beside it was translated. The corners keep the natural "…角" the services already produced;
+    # the mid-edges read 中左/中右 to sit with Center = 居中. One line each to change if you want one style
+    # across all eight.
+    ("Top-left",      {"zh-cn": "左上角", "zh-tw": "左上角", "ja": "左上", "ko": "왼쪽 위", "ru": "слева вверху", "de": "oben links", "fr": "en haut à gauche", "es": "arriba a la izquierda", "it": "in alto a sinistra", "pl": "lewy górny", "pt-br": "superior esquerdo"}),
+    ("Top-right",     {"zh-cn": "右上角", "zh-tw": "右上角", "ja": "右上", "ko": "오른쪽 위", "ru": "справа вверху", "de": "oben rechts", "fr": "en haut à droite", "es": "arriba a la derecha", "it": "in alto a destra", "pl": "prawy górny", "pt-br": "superior direito"}),
+    ("Center-left",   {"zh-cn": "中左", "zh-tw": "中左", "ja": "中央左", "ko": "중앙 왼쪽", "ru": "по центру слева", "de": "mittig links", "fr": "centré à gauche", "es": "centrado a la izquierda", "it": "centrato a sinistra", "pl": "środek-lewo", "pt-br": "centro-esquerda"}),
+    ("Center-right",  {"zh-cn": "中右", "zh-tw": "中右", "ja": "中央右", "ko": "중앙 오른쪽", "ru": "по центру справа", "de": "mittig rechts", "fr": "centré à droite", "es": "centrado a la derecha", "it": "centrato a destra", "pl": "środek-prawo", "pt-br": "centro-direita"}),
+    ("Bottom-left",   {"zh-cn": "左下角", "zh-tw": "左下角", "ja": "左下", "ko": "왼쪽 아래", "ru": "слева внизу", "de": "unten links", "fr": "en bas à gauche", "es": "abajo a la izquierda", "it": "in basso a sinistra", "pl": "lewy dolny", "pt-br": "inferior esquerdo"}),
+    ("Bottom-right",  {"zh-cn": "右下角", "zh-tw": "右下角", "ja": "右下", "ko": "오른쪽 아래", "ru": "справа внизу", "de": "unten rechts", "fr": "en bas à droite", "es": "abajo a la derecha", "it": "in basso a destra", "pl": "prawy dolny", "pt-br": "inferior direito"}),
+    ("Block Origin",  {"zh-cn": "方块原点", "zh-tw": "方塊原點", "ja": "ブロック原点", "ko": "블록 원점", "ru": "начало блока", "de": "Blockursprung", "fr": "origine du bloc", "es": "origen del bloque", "it": "origine del blocco", "pl": "początek bloku", "pt-br": "origem do bloco"}),
     ("Ability",  {"zh-cn": "能力", "zh-tw": "技能", "ja": "アビリティ", "ko": "능력", "ru": "Способность", "de": "Fähigkeit", "fr": "Capacité", "es": "Habilidad", "it": "Abilità", "pl": "Zdolność", "pt-br": "Habilidade"}),
     ("Aura",     {"zh-cn": "光环", "zh-tw": "光環", "ja": "オーラ", "ko": "오라", "ru": "Аура", "de": "Aura", "fr": "Aura", "es": "Aura", "it": "Aura", "pl": "Aura", "pt-br": "Aura"}),
     ("Blitz",    {"zh-cn": "闪击", "zh-tw": "閃擊", "ja": "ブリッツ", "ko": "대공세", "ru": "Блиц", "de": "Blitz", "fr": "Blitz", "es": "Bombardeo", "it": "Incursione", "pl": "Szybki Atak", "pt-br": "Bombardeio"}),
