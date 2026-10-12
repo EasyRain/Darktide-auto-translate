@@ -586,10 +586,12 @@ return {
         "loc_pickup_crafting_material_small_diamantine",
         "loc_pickup_crafting_material_small_plasteel",
         "loc_vendor_view_title",
-        -- interface words (215)
+        -- interface words (218)
         "loc_alf_dmf_ext_reset_tab",
         "loc_body_shop_view_display_name",
+        "loc_breed_display_name_",
         "loc_breed_display_name_cultist_vanguard",
+        "loc_breed_display_name_renegade_gunner",
         "loc_breed_display_name_renegade_vanguard",
         "loc_broker_stimm_builder_view_display_name",
         "loc_character_view_display_name",
@@ -607,6 +609,7 @@ return {
         "loc_keybind_unassigned",
         "loc_main_menu_account_wallet_title",
         "loc_main_menu_warband_count",
+        "loc_options",
         "loc_options_view_display_name",
         "loc_pickup_deployable_ammo_crate_01",
         "loc_pickup_pocketable_1",
@@ -1562,7 +1565,7 @@ return {
         "loc_settings_title",
         "loc_settings_tooltip",
         "loc_settings_video",
-        -- kept from the hand-written list (1132)
+        -- kept from the hand-written list (1131)
         "loc_ability_frag_grenade_description",
         "loc_ability_ogryn_charge_description",
         "loc_ability_ogryn_friend_rock_desc",
@@ -1622,7 +1625,6 @@ return {
         "loc_breed_display_name_renegade_executor",
         "loc_breed_display_name_renegade_flamer",
         "loc_breed_display_name_renegade_grenadier",
-        "loc_breed_display_name_renegade_gunner",
         "loc_breed_display_name_renegade_melee",
         "loc_breed_display_name_renegade_netgunner",
         "loc_breed_display_name_renegade_plasma_gunner",
