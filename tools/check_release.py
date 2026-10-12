@@ -21,7 +21,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
-EXPECTED_ENTRIES = 18
+EXPECTED_ENTRIES = 17   # the README left the archive in 0.3.9
 
 
 def shipped_files() -> list[str]:
@@ -50,8 +50,10 @@ def audit(zip_path: Path) -> tuple[list[str], list[str]]:
     problems, notes = [], []
     with zipfile.ZipFile(zip_path) as archive:
         names = [name for name in archive.namelist() if not name.endswith("/")]
-        if len(names) != EXPECTED_ENTRIES:
-            notes.append("%d entries, expected %d (an older package layout?)" % (len(names), EXPECTED_ENTRIES))
+        # A README in the archive is accepted, not required: 0.3.8 shipped one, 0.3.9 does not.
+        counted = [n for n in names if not n.endswith("/README.md")]
+        if len(counted) != EXPECTED_ENTRIES:
+            notes.append("%d entries, expected %d (an older package layout?)" % (len(counted), EXPECTED_ENTRIES))
         for name in names:
             if not name.startswith("auto_translate/"):
                 problems.append("entry outside auto_translate/: %s" % name)

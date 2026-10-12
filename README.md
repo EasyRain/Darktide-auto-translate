@@ -392,6 +392,22 @@ splits at line breaks in the first place: the online engines send a multi-line s
 request. `tools/smoke_online.lua` pins both rules, and
 `tools/scan_line_breaks.lua <translations-dir>` counts how many stored sources carry each form.
 
+### A note on the markers
+
+Internally a masked string carries `⟦0⟧`, `⟦1⟧`, … (U+27E6/U+27E7), but what goes over the wire is
+**single circled digits**: `①` … `⑳`, then `㉑` … `㉟`, then `㊱` … `㊿` — fifty of them; past that the
+internal form is kept.
+
+The reason is that a *pair* of mathematical brackets reads as two separate tokens to a translator. Measured:
+Yandex turned `⟦2⟧` into `mark2mark` and dropped others, and Bing lost the opening bracket whenever a
+marker sat next to a digit (`Set to ⟦0⟧0⟦1⟧`, the most fragile shape there is). A single circled digit has
+no pair to split and reads like a number, which the endpoints copy through.
+
+If the source text itself contains `①`, that character is masked as a term of its own, so a real marker can
+never be confused with it and the original character comes back unchanged. The conversion happens only at
+the boundary - `glossary.to_wire()` on the way out, `glossary.to_internal()` before any check - so every
+guard, test and store still sees one form. `tools/check_wire_boundaries.py` enforces both directions.
+
 ## The online engine: API services
 
 | service | reachable without a proxy | note |
@@ -409,6 +425,7 @@ three: no key is needed, so nothing is guaranteed either.
 | endpoint | host | what it is |
 | --- | --- | --- |
 | **bing** | `cn.bing.com` | Microsoft's keyless translator, tried **first**. Measured from a China residential IP: **all twelve targets** (including `pl` and `uk`), glossary placeholders kept, `[n]` markers kept, `%s`/`%.0f` kept, line breaks kept, and 15 requests at one per second with no refusal. It costs one extra page load per run — see below. |
+| **yandex** | `translate.yandex.net` | Yandex's keyless JSON endpoint (`srv=android`), tried **second**. It is the one that answered from a China network without a proxy and needs no session page; it also mangled a marker pair - `⟦2⟧` came back as `mark2mark` - which is what moved the markers onto single circled digits (see [the marker section](#a-note-on-the-markers)). It has no Chinese (Traditional), so `zh-tw` targets skip it. |
 | **google_clients5** | `clients5.google.com` | Google's Chrome-dictionary endpoint. Second: measured, it answered while `translate.googleapis.com` was unreachable on the same machine, but on a filtered network it is the first thing to time out. |
 | **google_gtx** | `translate.googleapis.com` | The endpoint most other tools use (`?client=gtx`). Whether it is reachable depends on the route, not on the request: measured on one machine it was TLS-reset direct and answered through a proxy that had a rule for the host. |
 | **mymemory** | `mymemory.translated.net` | A translation *memory*, not a machine translator, so its answers can be human segments that do not fit: measured `Reload Speed` → `ユーザーのリロード速度:` (ja) and `Keystone` → `梯形` (zh-cn). Last on purpose. |
@@ -512,7 +529,7 @@ keyless player has):
 
 | when | what the mod does |
 | --- | --- |
-| one request fails | the item moves to the next provider in the list (`bing` → `clients5` → `gtx` → `MyMemory`) and is retried there |
+| one request fails | the item moves to the next provider in the list (`bing` → `yandex` → `clients5` → `gtx` → `MyMemory`) and is retried there |
 | one provider fails to connect **3 times** | it is dropped for the rest of the session with a log line, so every later key skips it instead of paying the timeout again; a request that succeeds resets that counter |
 | the service answers **429/403** (rate limited, quota) | translation pauses for **5 minutes** and the item is retried when the pause ends — the HUD counts it down |
 | **all three** are unreachable | the run does **not** end: it waits 5 minutes, re-arms all three providers and works through the queue again. Three such waits at most, then it stops with the usual "every provider was unreachable" message — a machine that is simply offline should not loop forever |
@@ -854,12 +871,12 @@ return {
   itself — hand written or machine, it is injected as written — so placeholders, `%`-specifiers,
   line breaks and leftover `⟦⟧` markers are what `luajit tools\check_stores.lua` is for.
 * **A string an engine gave up on gets an entry of its own** instead of vanishing: after three
-  refusals — one budget, shared by the offline model, the API service and the keyless endpoints — the
+  refusals — the budget is spent **per engine**, and it is smaller for the offline model (one attempt: it is
   entry is written with the *source* text as its `text`, `src` saying `refused`, and `refused_by` /
   `refusals` recording who gave up and how often. Nothing is injected from it (the game shows the
   source either way); it is there to be edited — write a translation into `text` and the markers go
   on the next write, which turns the entry into a hand written one that machines leave alone.
-  Switching engine puts the key back in the queue for that engine, so a string the API services
+  deterministic, so a retry cannot say anything different) than for an API or a keyless endpoint (three, plus one plain-text retry when a marker is dropped). Switching engine puts the key back in the queue for that engine, so a string the API services
   cannot do is still tried by the offline model and the other way round. *Clear local translations*
   removes these records, and so does `manual = true` — their text is the source, not a checked
   translation.

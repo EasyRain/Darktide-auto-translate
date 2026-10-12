@@ -33,7 +33,10 @@ MOD_NAME = "auto_translate"
 # Explicit include list, relative to the repository root.
 STATIC_FILES = [
     "auto_translate.mod",
-    "README.md",
+    # README.md is deliberately NOT here: it is documentation the player reads on the mod page, not
+    # something the game loads, and it is the largest file in the repository (~76 KB, ~70 KB of the
+    # archive). Dropping it makes the download smaller and stops a stale copy of it from being unpacked
+    # over a newer one. (0.3.8's uploaded archive still contains it; this applies from 0.3.9 on.)
     "bin/at_core.dll",
     "translations/glossary.lua",
 ]
