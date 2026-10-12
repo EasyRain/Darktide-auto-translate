@@ -1344,35 +1344,24 @@ do
     -- point at one of them - DMF throws on a dangling index - and the list has to cover
     -- all ten (the button included), or a field would be permanently invisible.
     local provider = by_id.api_provider
-    local custom_option = provider and provider.options and provider.options[6]   -- Custom is the sixth now
+    local custom_option = provider and provider.options and provider.options[5]   -- Custom is the fifth now
 
     -- Twelve since 0.3.10: the preset dropdown joined them, and it has to be first so that DMF draws it
     -- above the fields it governs.
     -- Thirteen since 0.3.10: the Azure region joined the twelve the custom endpoint already had.
     check("settings: the API service dropdown owns the custom-endpoint widgets",
-        provider ~= nil and provider.sub_widgets ~= nil and #provider.sub_widgets == 16, true)
+        provider ~= nil and provider.sub_widgets ~= nil and #provider.sub_widgets == 14, true)
     check("settings: the services are offered",
-        provider ~= nil and provider.options ~= nil and #provider.options == 6, true)
-    -- Six, not seven: ModernMT was built and then dropped, because its own site says it sunsets at the end
-    -- of 2026. A provider that is scheduled to stop answering is worse than one that was never offered.
-    check("settings: and they are the six services, in order",
+        provider ~= nil and provider.options ~= nil and #provider.options == 5, true)
+    -- Five, not six: ModernMT was built and dropped before its release (its own site says it sunsets at the
+    -- end of 2026), and LibreTranslate was dropped after the user tried it - the Argos models behind it are
+    -- free but the weakest of the options, and a provider players cannot rely on is worse than none.
+    check("settings: and they are the five services, in order",
         provider ~= nil and provider.options ~= nil
             and provider.options[1].value == "deepl" and provider.options[2].value == "google_api"
-            and provider.options[3].value == "azure" and provider.options[4].value == "libretranslate"
-            and provider.options[5].value == "baidu" and provider.options[6].value == "custom", true)
-    -- The described services build their requests through the custom path, which is where the header
-    -- values are substituted - the spec has to exist and name real fields.
-    local svc = require("scripts/mods/auto_translate/modules/services")
-    check("services: the described service is known", svc.has("libretranslate"), true)
-    -- The predicate the engine-availability check and the dispatch both ask. It used to be spelled out twice,
-    -- and the engine check spelled it as "custom" alone - so LibreTranslate was asked for a key it does not
-    -- have and translation refused to start.
-    check("services: and described() covers the custom endpoint too",
-        svc.described("libretranslate") and svc.described("custom"), true)
-    check("services: but not a native provider", not svc.described("deepl") and not svc.described("baidu"), true)
-    check("services: and nothing else is, ModernMT included",
-        not svc.has("deepl") and not svc.has("custom") and not svc.has("modernmt"), true)
-    -- Index 13 is the test button (1 is the preset, 2..10 the fields, 11 the custom region, 12 Azure's);
+            and provider.options[3].value == "azure" and provider.options[4].value == "baidu"
+            and provider.options[5].value == "custom", true)
+    -- Index 13 is the test button (1 is the preset, 2..10 the fields, 11 the custom region, 12 Azure's,
     -- every service can be tested, and only Azure and Custom have a region.
     -- The positions, named. A show_widgets index is a number into this list, and a wrong one hides a
     -- setting for good (DMF throws on a dangling index, but it cannot tell that 13 meant "the test
@@ -1382,8 +1371,7 @@ do
         [1] = "custom_preset", [2] = "custom_url", [3] = "custom_key", [4] = "custom_auth",
         [5] = "custom_method", [6] = "custom_content_type", [7] = "custom_body", [8] = "custom_langs",
         [9] = "custom_headers", [10] = "custom_path", [11] = "custom_region", [12] = "azure_region",
-        [13] = "libretranslate_url", [14] = "libretranslate_key", [15] = "test_custom_api",
-        [16] = "baidu_appid",
+        [13] = "test_custom_api", [14] = "baidu_appid",
     }
     local misplaced = 0
     for index, setting_id in pairs(POSITIONS) do
@@ -1392,13 +1380,13 @@ do
             misplaced = misplaced + 1
         end
     end
-    check("settings: the sixteen sub-widgets are where the indices say", misplaced, 0)
-    check("settings: and the test button is the fifteenth",
-        provider.sub_widgets[15] ~= nil and provider.sub_widgets[15].setting_id == "test_custom_api", true)
+    check("settings: the fourteen sub-widgets are where the indices say", misplaced, 0)
+    check("settings: and the test button is the thirteenth",
+        provider.sub_widgets[13] ~= nil and provider.sub_widgets[13].setting_id == "test_custom_api", true)
     check("settings: every service can be tested",
-        provider.options[1].show_widgets[1] == 15 and provider.options[2].show_widgets[1] == 15
+        provider.options[1].show_widgets[1] == 13 and provider.options[2].show_widgets[1] == 13
             and provider.options[3].show_widgets[1] == 12 and provider.options[4].show_widgets[1] == 13
-            and provider.options[5].show_widgets[1] == 15, true)
+            and provider.options[5].show_widgets[1] == 1, true)
     check("settings: the first of them is the preset dropdown",
         provider ~= nil and provider.sub_widgets ~= nil and provider.sub_widgets[1] ~= nil
             and provider.sub_widgets[1].setting_id == "custom_preset", true)
@@ -1488,15 +1476,13 @@ end
 -- change looked applied. Only calling resolve() says which it is.
 -- ---------------------------------------------------------------------------
 do
-    local svc = require("scripts/mods/auto_translate/modules/services")
     local eng = assert(loadfile("scripts/mods/auto_translate/modules/engines.lua"))()
-    eng.init(nil, nil, svc)
+    eng.init(nil, nil)
 
     local function mod_with(values)
         return { get = function(_, id) return values[id] end, localize = function(_, id) return id end }
     end
     local cases = {
-        { "automatic + LibreTranslate, no key -> the API tier", { engine = "auto", api_provider = "libretranslate" }, "online_api" },
         { "automatic + DeepL, no key -> the free tier",         { engine = "auto", api_provider = "deepl" }, "online_free" },
         { "automatic + DeepL, with a key -> the API tier",      { engine = "auto", api_provider = "deepl", online_api_key = "k" }, "online_api" },
         { "automatic + custom, no key -> the free tier",        { engine = "auto", api_provider = "custom" }, "online_free" },

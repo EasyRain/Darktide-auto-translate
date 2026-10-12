@@ -16,16 +16,14 @@ local glossary
 local engines
 local injector
 local custom          -- modules/custom.lua: builds requests for a user-described endpoint
-local services        -- modules/services.lua: the two services described in that same shape
 
-function M.init(u, s, g, e, i, c, v)
+function M.init(u, s, g, e, i, c)
     util = u
     store = s
     glossary = g
     engines = e
     injector = i
     custom = c
-    services = v
 end
 
 -- ---------------------------------------------------------------------------
@@ -434,9 +432,10 @@ M.relax_mask_for_tests = relax_mask
 local current_wire = nil
 
 local function wire_for(provider)
-    if services and services.has(provider) then
-        return "labels"
-    end
+    -- Bracketed labels exist as a wire form (glossary.WIRE_LABELS) because a self-hosted LibreTranslate
+    -- rewrote single glyphs and kept "[a]" byte for byte. That service is gone, so nothing selects it - the
+    -- capability stays, tested, for the next service that needs it. The circled glyphs are the default for
+    -- every provider, as measured in 0.3.8.
     return nil
 end
 
@@ -1618,11 +1617,8 @@ local function provider_needs_key(name)
     if name == "custom" then
         return false
     end
-    -- LibreTranslate may be keyless on purpose (a self-hosted instance); ModernMT always needs one, and
-    -- the core has never heard of either of them.
-    if name == "libretranslate" then
-        return false
-    end
+    -- The described services were keyless (a self-hosted LibreTranslate); both are gone now, and the core
+    -- has never heard of them.
     if name == "modernmt" then
         return true
     end
@@ -2344,7 +2340,9 @@ local fail_item
 -- went to the native parser, came back negative, and the negative reached ffi.string as a length, so the
 -- test button did nothing while the instance had answered correctly.
 local function is_described(provider)
-    return provider == "custom" or (services ~= nil and services.has(provider))
+    -- The custom endpoint, and only it: LibreTranslate was the other described service until it was dropped
+    -- for translation quality, and this predicate is kept as the one place that answers the question.
+    return provider == "custom"
 end
 
 local dispatch_custom     -- defined below, next to handle_response()
@@ -2541,7 +2539,7 @@ local function dispatch(mod)
     -- travels that path rather than a second copy of it.
     -- The wire form follows the provider: see wire_for() above.
     current_wire = wire_for(provider)
-    if services and services.described(provider) then
+    if is_described(provider) then
         return dispatch_custom(mod, item, provider)
     end
 
@@ -2848,11 +2846,7 @@ function dispatch_custom(mod, item, provider)
     end
 
     local spec
-    if provider and services and services.has(provider) then
-        spec = services.spec(mod, provider)
-    else
-        spec = custom.spec(mod)
-    end
+    spec = custom.spec(mod)
     local problem = custom.problem(spec)
     if problem then
         M.state.last_error = problem
@@ -3988,8 +3982,7 @@ function M.update(mod, dt)
                             if mod:get("engine") == "online_free" then
                                 -- A deliberate choice of the free tier: nothing is wrong with the API.
                                 reason = mod:localize("custom_test_reason_free_engine")
-                            elseif selected ~= "libretranslate"
-                                and (mod:get("online_api_key") == nil or mod:get("online_api_key") == "") then
+                            elseif mod:get("online_api_key") == nil or mod:get("online_api_key") == "" then
                                 reason = mod:localize("custom_test_reason_no_key")
                             else
                                 reason = mod:localize("custom_test_reason_not_configured")
@@ -4175,8 +4168,7 @@ function M.probe(mod, lang)
             util.popup(mod, "custom_test_no_module")
             return false
         end
-        local described = services and services.has(provider)
-        local spec = described and services.spec(mod, provider) or custom.spec(mod)
+        local spec = custom.spec(mod)
         -- LibreTranslate may be keyless on purpose (a self-hosted instance), ModernMT never is, and an
         -- empty key would go out as an empty header and come back 401.
         if provider == "modernmt" and (type(spec.key) ~= "string" or spec.key == "") then

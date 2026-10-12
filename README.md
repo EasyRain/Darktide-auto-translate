@@ -86,7 +86,7 @@ sub-widgets of that dropdown: DMF hides all ten under `DeepL` and shows them the
 | Check the free services at startup | Online (free) | One short request per endpoint when a run starts, in the background, so a network that cannot reach one of them stops paying for it every session. |
 | Translate colour names | General | Off by default: colour swatches are asset names players match in English. |
 | Translation engine | Engine | `Automatic` (key → downloaded model → free endpoints) / `Online (official API)` / `Online (free endpoints)` / `Local model (1.3B)`. |
-| API service | Engine | `DeepL`, `Google Cloud Translation v2`, `Azure Translator v3`, `LibreTranslate`, `Baidu Translate`, or `Custom` (any translation service you describe yourself). The test button below checks whichever one is selected. |
+| API service | Engine | `DeepL`, `Google Cloud Translation v2`, `Azure Translator v3`, `Baidu Translate` or `Custom` (any translation service you describe yourself). The test button below checks whichever one is selected. |
 | API key / Proxy | Engine | The key for the selected service; the proxy every request goes through. |
 | Custom endpoint | Engine | The ten fields that describe an unlisted service (hidden unless `Custom` is selected). |
 | Download the offline model | Offline model | Turn on to download, off to cancel; the part that arrived is kept for the next attempt. |
@@ -353,7 +353,7 @@ only thing the service has to do is copy the markers; measured with `tools/live_
 send the parts side by side and the answer is read position by position: nothing is added to the
 source, and a "lost marker" cannot misattribute an answer because there is none. The core decides
 who gets this (`at_online_supports_multi_text`), so a provider that grows the same feature needs no
-Lua change. LibreTranslate, Baidu, the custom endpoint and the free tier keep the `[n]` markers:
+Lua change. Baidu, the custom endpoint and the free tier keep the `[n]` markers:
 LibreTranslate does accept a `q` array and Baidu accepts newline-joined text, but the marker path is
 the one with the most tests behind it, and a service that returns a single string should not be
 handed several. Measured with
@@ -416,7 +416,6 @@ guard, test and store still sees one form. `tools/check_wire_boundaries.py` enfo
 
 | service | reachable without a proxy | note |
 | --- | --- | --- |
-| **LibreTranslate** | wherever your instance is | **Free only if you host it yourself**; the public instance is a paid subscription from 29 USD a month and there is no free key. Its address is a setting because a player may run their own, possibly under a subpath, which is also why it is described in `modules/services.lua` rather than coded into the core. Optional key, sent in the JSON body as `api_key`; `q` accepts an array, though this build uses the shared marker batch. |
 | **Baidu Translate** | yes on most networks | 2,000,000 characters a month on the free tier. Signs with **two** values - an appid and a key - as `md5(appid + q + salt + key)` over the raw text, which is why the core carries an MD5 (checked against RFC 1321's vectors). Every parameter rides in the query string with an empty body, exactly as the vendor's own demo does. Its codes are its own: `zh`, `cht`, `jp`, `kor`, `fra`, `spa`, `pt`, `ukr`. A refusal comes back as HTTP 200 with an `error_code` in the body. |
 | **Azure Translator v3** | yes when Azure is reachable | The most generous free tier of the three: **2,000,000 characters a month** (F0). It takes `Ocp-Apim-Subscription-Key` plus the resource's `Ocp-Apim-Subscription-Region` header, a JSON array body (one object per string, even for one), and answers with a bare array in request order. Its Chinese is `zh-Hans`/`zh-Hant` where Google's is `zh-CN`/`zh-TW`, so the language table has a column per service. |
 | **Google Cloud Translation v2** | reachable, but blocked on some networks | 500,000 characters a month, but a Cloud project with a card on file is needed for a key. Only v2 takes an API key (v3 is OAuth2 only), and the key rides in the query string while `q`/`source`/`target`/`format=text` go in the form body - which is what makes batching a plain repetition of `q`. `format=text` matters: HTML is its documented default. |
@@ -424,45 +423,6 @@ guard, test and store still sees one form. `tools/check_wire_boundaries.py` enfo
 | **Azure region** (setting) | - | The region of your Translator resource, for example `westeurope`. Optional for a global resource, required for a multi-service one, and harmless either way - so it is sent whenever it is filled in. |
 | **Custom** | whatever you point it at | Any HTTP endpoint: an OpenAI-compatible chat API, a self-hosted service, or a DeepL-style form endpoint. See below. |
 
-### Hosting LibreTranslate yourself (free, unlimited)
-
-LibreTranslate is the one service here that costs nothing only if you run it yourself; the public instance
-sells subscriptions from 29 USD a month. It is a Python application, so a local instance is a two-command
-install and needs no Docker. This is the sequence that was measured on Windows with Python 3.13.7
-(2026-10-12), and `tools/live_libretranslate_check.lua` verifies the result through the mod's own request
-path:
-
-```powershell
-python -m venv D:\lt-venv
-D:\lt-venv\Scripts\python.exe -m pip install --upgrade pip
-D:\lt-venv\Scripts\python.exe -m pip install libretranslate
-```
-
-Then start it, bound to this machine only (that also avoids the Windows firewall prompt). The first start
-downloads the translation models, about 100 MB per language pair, so `--load-only` keeps the first run
-quick - list the languages you actually translate into:
-
-```powershell
-D:\lt-venv\Scripts\libretranslate.exe --host 127.0.0.1 --port 5000 --load-only en,zh,ja,ko,ru,de,fr,es,it,pl,pt
-```
-
-If the model download fails with `getaddrinfo failed`, its DNS lookup is not getting through and the proxy
-has to be handed to it explicitly (this machine needed it):
-
-```powershell
-$env:HTTPS_PROXY = "http://127.0.0.1:7890"; $env:HTTP_PROXY = $env:HTTPS_PROXY; $env:NO_PROXY = "127.0.0.1,localhost"
-```
-
-Check it without launching the game:
-
-```powershell
-luajit tools/live_libretranslate_check.lua http://127.0.0.1:5000
-```
-
-Finally, in the mod: **API service = LibreTranslate**, **address = `http://127.0.0.1:5000`**, key empty, and
-press Test. Notes worth knowing: no key is needed for your own instance; the server has to be running before
-the game translates (a request that cannot connect just moves on to the next provider); and the language
-codes are whatever your instance reports, which is what the check above compares against.
 
 ### Free endpoints (no key, nothing to download)
 

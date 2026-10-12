@@ -23,15 +23,10 @@ local M = {}
 
 local util
 local store
-local services        -- modules/services.lua, injected: a service may legitimately need no key
 
-function M.init(u, s, v)
+function M.init(u, s)
     util = u
     store = s
-    -- Injected, and the signature is the part that matters: an earlier version of this added the assignment
-    -- below without the parameter, so `v` was nil, services stayed nil, and Automatic went on ignoring a
-    -- keyless service even though resolve() had been taught about it.
-    services = v
 end
 
 M.ENGINES = {
@@ -210,9 +205,6 @@ M.API_PROVIDERS = {
     -- Baidu signs each request: md5(appid + text + salt + key). The sign lives in the core (Lua has no
     -- hash and the sign covers the text); everything else about it is a settings entry.
     baidu = "baidu",
-    -- Described rather than coded: modules/services.lua builds their requests in the shape the custom
-    -- endpoint already speaks, so they need no native code of their own.
-    libretranslate = "libretranslate",
     custom = "custom",
 }
 
@@ -417,13 +409,11 @@ function M.resolve(mod, lang)
         return M.canonical(wanted)
     end
 
-    -- The API tier is usable when a key is set - or when the chosen provider is one of the described
-    -- services, which may legitimately need none (a LibreTranslate instance you host yourself). Without the
-    -- second half, selecting such a service and leaving the engine on Automatic quietly used the free tier
-    -- instead of it.
-    local provider = M.api_provider(mod)
+    -- The API tier needs a key. A described service that runs without one (a self-hosted LibreTranslate
+    -- instance) was the exception here until LibreTranslate was dropped for quality - the free tier is the
+    -- better answer for those players.
     local key = mod:get("online_api_key")
-    if (type(key) == "string" and key ~= "") or (services and services.has(provider)) then
+    if type(key) == "string" and key ~= "" then
         return "online_api"
     end
 

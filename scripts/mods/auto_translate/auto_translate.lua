@@ -28,12 +28,8 @@ store.set_notifier(function(mod_id, lang, stripped)
         mod_id, lang, stripped, stripped == 1 and "y" or "ies")
 end)
 
--- Loaded before the engines: engines.resolve() has to know whether the chosen provider is one of the
--- described services, which may legitimately need no key (a LibreTranslate instance you host yourself).
-local services = mod:io_dofile(BASE .. "services")
-
 local engines = mod:io_dofile(BASE .. "engines")
-engines.init(util, store, services)
+engines.init(util, store)
 
 local glossary = mod:io_dofile(BASE .. "glossary")
 glossary.init(util)
@@ -41,7 +37,7 @@ glossary.init(util)
 local custom = mod:io_dofile(BASE .. "custom")
 
 local online = mod:io_dofile(BASE .. "online")
-online.init(util, store, glossary, engines, injector, custom, services)
+online.init(util, store, glossary, engines, injector, custom)
 
 -- The model downloader: owns the file sequence, the progress state and the notices; the
 -- transfer itself is native (src/at_download.c).
@@ -263,11 +259,11 @@ local function check_engine_settings(lang, quiet)
     -- This named "custom" only, so picking LibreTranslate with the API engine asked for a key that does not
     -- exist and translation never started. services.described() is now the one place that answers it.
     local provider = engines.api_provider(mod)
-    if services and services.described(provider) then
+    if provider == "custom" then
         if not custom then
             return true
         end
-        local spec = services.has(provider) and services.spec(mod, provider) or custom.spec(mod)
+        local spec = custom.spec(mod)
         local problem = custom.problem(spec)
         if not problem then
             return true
