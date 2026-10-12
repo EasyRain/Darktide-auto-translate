@@ -1479,6 +1479,32 @@ do
         count("hand_over_provider_options(mod, provider)") >= 3, true)
 end
 
+-- ---------------------------------------------------------------------------
+-- The wire form, in both variants, round-trip.
+--
+-- This is here because the round-trip caught a real bug the moment it was written: a bracketed label goes
+-- into gsub as a Lua *character class* - "[a]" matches the letter a - so "Set to [a] 0[b] Reload Speed" came
+-- back as "Set to [⟦0⟧] 0[⟦1⟧] Relo⟦0⟧d Speed", with the a of
+-- "Reload" replaced too. Circled glyphs need no escaping, so the default form never showed it.
+--
+-- (Written literally: LuaJIT is Lua 5.1 and has no \u escapes.)
+
+do
+    local g = assert(loadfile("scripts/mods/auto_translate/modules/glossary.lua"))()
+    local masked = "Set to ⟦0⟧ 0⟦1⟧ Reload Speed"
+
+    for _, variant in ipairs({ "circled", "labels" }) do
+        local v = (variant == "labels") and "labels" or nil
+        local wire = g.to_wire(masked, nil, v)
+        check("wire " .. variant .. ": swaps the internal form out", wire:find("⟦", 1, true) == nil, true)
+        check("wire " .. variant .. ": and swaps it back exactly", g.to_internal(wire, nil, v), masked)
+    end
+    check("wire: the default form is still a circled digit", g.to_wire("⟦0⟧", nil, nil), "①")
+    check("wire: the label form is bracketed", g.to_wire("⟦0⟧", nil, "labels"), "[a]")
+    check("wire: a label next to a digit survives the swap",
+        g.to_internal("Set to 0[a] Reload Speed", nil, "labels"), "Set to 0⟦0⟧ Reload Speed")
+end
+
 check("custom: an empty key falls back to the API key",
     cu.spec(fake_mod_with({ custom_url = "https://a.example.com/x",
                             online_api_key = "from-the-api-field" })).key, "from-the-api-field")

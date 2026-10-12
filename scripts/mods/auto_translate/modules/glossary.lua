@@ -460,6 +460,14 @@ function M.wire_reserved(tokens)
     return reserved
 end
 
+-- A wire token goes into a gsub, so it has to be a literal pattern. The circled glyphs need nothing, but a
+-- bracketed label is a Lua *character class* ("[a]" matches the letter a) - measured by the round-trip:
+-- "Set to [a] 0[b] Reload Speed" came back as "Set to [⟦0⟧] 0[⟦1⟧] Relo⟦0⟧d Speed",
+-- with the a of "Reload" replaced as well.
+local function literal_pattern(token)
+    return (token:gsub("([%^%$%(%)%%%.%[%]%*%+%-%?])", "%%%1"))
+end
+
 -- The glyphs left for this request, in order.
 local function wire_pool(reserved)
     local pool = {}
@@ -471,34 +479,69 @@ local function wire_pool(reserved)
     return pool
 end
 
+-- Bracketed labels, for a service that rewrites single glyphs.
+--
+-- Measured 2026-10-12 against a self-hosted LibreTranslate 1.9.6: `①` comes back as `1`, `Ⓐ` comes back as
+-- `B` with the first one dropped, `⟦0⟧` loses its brackets, `#0#` and `@0@` come back split - and `[a]`
+-- comes back byte for byte, even when it sits right next to a digit. The circled digits were chosen in
+-- 0.3.8 because the services then kept them and because a marker *adjacent to a digit* was the fragile
+-- shape; a bracketed label ends with `]`, so it cannot be adjacent to a digit at all, and it has 52+
+-- spellings ([a]..[z], [A]..[Z], then [aa].. ).
+--
+-- Only the providers that were measured to need it use this (see wire_variant in modules/online.lua).
+local WIRE_LABELS = {}
+do
+    local letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    for i = 1, #letters do
+        WIRE_LABELS[#WIRE_LABELS + 1] = "[" .. letters:sub(i, i) .. "]"
+    end
+    -- past 52: two letters, which the same service kept as well
+    for i = 1, #letters do
+        for j = 1, #letters do
+            WIRE_LABELS[#WIRE_LABELS + 1] = "[" .. letters:sub(i, i) .. letters:sub(j, j) .. "]"
+        end
+    end
+end
+
+local function label_pool(reserved)
+    local pool = {}
+    for i = 1, #WIRE_LABELS do
+        if not (reserved and reserved[WIRE_LABELS[i]]) then
+            pool[#pool + 1] = WIRE_LABELS[i]
+        end
+    end
+    return pool
+end
+
 function M.wire_glyph_count()
     return #WIRE_GLYPHS
 end
 
 -- "\u27e60\u27e7 hello \u27e61\u27e7" -> "① hello ②"
-function M.to_wire(masked, reserved)
+function M.to_wire(masked, reserved, variant)
     if type(masked) ~= "string" then
         return masked
     end
-    local pool = wire_pool(reserved)
+    local pool = (variant == "labels") and label_pool(reserved) or wire_pool(reserved)
     for i = 1, #pool do
         local placeholder = PLACEHOLDER_OPEN .. (i - 1) .. PLACEHOLDER_CLOSE
         if masked:find(placeholder, 1, true) then
-            masked = masked:gsub(placeholder, pool[i])
+            masked = masked:gsub(literal_pattern(placeholder), pool[i])
         end
     end
     return masked
 end
 
 -- and back again, for an answer that came from a service
-function M.to_internal(wire_text, reserved)
+function M.to_internal(wire_text, reserved, variant)
     if type(wire_text) ~= "string" then
         return wire_text
     end
-    local pool = wire_pool(reserved)
+    local pool = (variant == "labels") and label_pool(reserved) or wire_pool(reserved)
     for i = 1, #pool do
         if wire_text:find(pool[i], 1, true) then
-            wire_text = wire_text:gsub(pool[i], PLACEHOLDER_OPEN .. (i - 1) .. PLACEHOLDER_CLOSE)
+            wire_text = wire_text:gsub(literal_pattern(pool[i]),
+                                       PLACEHOLDER_OPEN .. (i - 1) .. PLACEHOLDER_CLOSE)
         end
     end
     return wire_text

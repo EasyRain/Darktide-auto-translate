@@ -421,16 +421,36 @@ M.relax_mask_for_tests = relax_mask
 
 -- The wire form lives in glossary; the wrappers keep this file working when a test double provides only
 -- mask and unmask (the smoke tests do), and when the module is absent entirely.
+-- Which wire form this provider's text goes out in.
+--
+-- Circled digits by default (0.3.8 measured them as what the services keep), and bracketed labels for the
+-- one service measured to rewrite single glyphs: a self-hosted LibreTranslate 1.9.6 turns `①` into `1` and
+-- `Ⓐ` into `B`, but keeps `[a]` exactly. See the WIRE_LABELS comment in modules/glossary.lua.
+--
+-- Held in one variable rather than threaded through ten call sites, which is safe because this module keeps
+-- exactly one request in flight (the single `inflight` slot): a reply is read before the next request is
+-- built. It is set where a request is built and reset from req.provider where a reply is read, so the two
+-- directions cannot disagree.
+local current_wire = nil
+
+local function wire_for(provider)
+    if services and services.has(provider) then
+        return "labels"
+    end
+    return nil
+end
+
 local function to_wire(text, tokens)
     if type(glossary) == "table" and glossary.to_wire then
-        return glossary.to_wire(text, glossary.wire_reserved and glossary.wire_reserved(tokens) or nil)
+        return glossary.to_wire(text, glossary.wire_reserved and glossary.wire_reserved(tokens) or nil,
+                            current_wire)
     end
     return text
 end
 
 local function from_wire(text, tokens)
     if type(glossary) == "table" and glossary.to_internal then
-        return glossary.to_internal(text, glossary.wire_reserved and glossary.wire_reserved(tokens) or nil)
+        return glossary.to_internal(text, glossary.wire_reserved and glossary.wire_reserved(tokens, current_wire) or nil)
     end
     return text
 end
@@ -2529,6 +2549,8 @@ local function dispatch(mod)
     -- path (masking, inflight, the accept guards) is exactly the same.
     -- A described service (LibreTranslate, ModernMT) is built exactly like a custom endpoint, so it
     -- travels that path rather than a second copy of it.
+    -- The wire form follows the provider: see wire_for() above.
+    current_wire = wire_for(provider)
     if services and services.described(provider) then
         return dispatch_custom(mod, item, provider)
     end
@@ -3772,6 +3794,10 @@ function M.update(mod, dt)
         end
 
         local req = inflight
+
+        -- The reply is read with the same wire form the request went out in.
+
+        current_wire = wire_for(req.provider)
         inflight = nil
 
         if n < 0 then
@@ -3828,6 +3854,10 @@ function M.update(mod, dt)
         end
 
         local req = inflight
+
+        -- The reply is read with the same wire form the request went out in.
+
+        current_wire = wire_for(req.provider)
         inflight = nil
 
         if rc ~= 1 or result_buf[0] ~= 0 then
@@ -3864,6 +3894,10 @@ function M.update(mod, dt)
             end
 
             local req = inflight
+
+            -- The reply is read with the same wire form the request went out in.
+
+            current_wire = wire_for(req.provider)
             inflight = nil
             local result = result_buf[0]   -- 0 = completed, <0 = transport failure
             local http_code = code_buf[0]  -- only meaningful when result == 0
@@ -3996,6 +4030,8 @@ function M.update(mod, dt)
             end
         elseif rc < 0 then
             local req = inflight
+            -- The reply is read with the same wire form the request went out in.
+            current_wire = wire_for(req.provider)
             inflight = nil
             fail_item(mod, req, "native core poll failed", 0, true)
         else
@@ -4117,6 +4153,7 @@ function M.probe(mod, lang)
     -- The same wire form a real request uses, so the test shows what a run would actually send.
     masked = to_wire(masked, tokens)
     local probe_item = { mod_id = "test", key = "test", en = sample, hash = "" }
+    current_wire = wire_for(provider)
     local job, describe, response_path
 
     if is_described(provider) then
