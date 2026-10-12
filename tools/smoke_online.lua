@@ -653,6 +653,46 @@ check("scanner: unchanged is not", scanner.is_local_source("unchanged"), false)
 check("scanner: nil is not", scanner.is_local_source(nil), false)
 
 -- ---------------------------------------------------------------------------
+-- A translation file deleted while the game runs stays deleted.
+--
+-- The user's flow, and the last piece of the report: delete one mod's file during a session, press Reload - and
+-- the file came back with the previous engine's text while the new engine''s work had nowhere to go. The store's
+-- table is cached for the session, and the cache answered for a file that no longer existed: the flush wrote the
+-- old table back to disk and the run saved the old entries into it.
+--
+-- The cache is dropped when the file is gone, so the run starts from an empty store and writes the new engine''s
+-- translations into a file that is created fresh.
+-- ---------------------------------------------------------------------------
+do
+    local onl = assert(loadfile(here .. "/../scripts/mods/auto_translate/modules/online.lua"))()
+    local exists, loaded = true, 0
+    local st = {
+        path_for = function(mod_id, lang) return mod_id .. "." .. lang .. ".lua" end,
+        -- the real store returns nil for a file that is not there, which is the whole point
+        load = function()
+            loaded = loaded + 1
+            if not exists then return nil end
+            return { enabled = true, entries = { k = { en = "e", text = "t", src = "baidu" } } }
+        end,
+        save = function() return true end,
+    }
+    onl.init({ file_exists = function() return exists end, log = function() end, info = function() end, warn = function() end },
+             st, nil, nil, nil, nil)
+
+    local first = onl.data_for_for_tests("SomeMod", "zh-cn")
+    check("deleted file: the store is loaded once", loaded, 1)
+    check("deleted file: and its entry is there", first.entries.k.src, "baidu")
+    check("deleted file: the cache answers while the file exists",
+        onl.data_for_for_tests("SomeMod", "zh-cn"), first)
+
+    -- the player deletes it mid-session
+    exists = false
+    local after = onl.data_for_for_tests("SomeMod", "zh-cn")
+    check("deleted file: the cache is dropped", after ~= first, true)
+    check("deleted file: and a fresh, empty store is started", next(after.entries), nil)
+end
+
+-- ---------------------------------------------------------------------------
 -- Only what is missing gets translated.
 --
 -- The user was explicit about this after an earlier attempt of mine: switching engines must not re-translate the

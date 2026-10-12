@@ -1194,9 +1194,29 @@ local function cache_key(mod_id, lang)
     return mod_id .. "\0" .. tostring(lang)
 end
 
+-- True when the player has deleted this mod's translation file since we cached it.
+--
+-- Deleting one mod's file while the game runs and pressing Reload is a deliberate thing to do - it is how a
+-- single mod gets redone, possibly with another engine - and the cache used to answer for the file anyway: the
+-- flush wrote the old table back to disk and the run saved the old entries into it, so the file reappeared with
+-- the previous engine's text and the new engine's work had nowhere to go. The user's report was exactly that
+-- ("it still writes Baidu's text back"), with the reload button in the middle of it.
+local function store_file_gone(mod_id, lang)
+    if type(store.path_for) ~= "function" or type(util.file_exists) ~= "function" then
+        return false
+    end
+    return not util.file_exists(store.path_for(mod_id, lang))
+end
+
 local function data_for(mod_id, lang)
     local k = cache_key(mod_id, lang)
     local data = data_cache[k]
+    if data and store_file_gone(mod_id, lang) then
+        -- The player deleted it: forget what we loaded, so the run starts from an empty store and writes the
+        -- new engine's translations into a file that is created fresh.
+        data_cache[k] = nil
+        data = nil
+    end
     if not data then
         data = store.load(mod_id, lang)
         if type(data) ~= "table" then
@@ -1206,6 +1226,8 @@ local function data_for(mod_id, lang)
     end
     return data
 end
+
+M.data_for_for_tests = data_for
 
 local function mark_dirty(mod_id, lang)
     local k = cache_key(mod_id, lang)
@@ -1220,6 +1242,13 @@ function M.flush(mod)
     local written = 0
     for k, item in pairs(dirty) do
         local data = data_cache[k]
+        if data and store_file_gone(item.mod_id, item.lang) then
+            -- Do not resurrect a file the player deleted: dropping the cache is what lets the next scan see the
+            -- keys as missing and redo them.
+            data_cache[k] = nil
+            data = nil
+            util.info(mod, "translation file for %s was deleted; not writing it back", item.mod_id)
+        end
         if data and store.save(item.mod_id, item.lang, data) then
             written = written + 1
         else
