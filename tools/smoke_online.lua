@@ -1468,6 +1468,26 @@ do
 end
 
 -- ---------------------------------------------------------------------------
+-- Which wire form a provider gets.
+--
+-- Measured against Baidu 2026-10-12: with a circled digit the endpoint decides there is nothing to translate
+-- and returns the string untouched - "Show ①" came back as "Show ①" and "Show ① ②" as itself, which is how a
+-- store entry ended up reading "Show 浩劫任务" (the glossary term was restored, the word beside it never was
+-- translated). The identical string with a bracket came back translated: "Show [a]" -> "显示[a]". Baidu is
+-- the provider that is switched; the others keep the circled digits measured in 0.3.8.
+-- ---------------------------------------------------------------------------
+do
+    local onl = assert(loadfile("scripts/mods/auto_translate/modules/online.lua"))()
+    local wf = onl.wire_for_for_tests
+    check("wire: the variant chooser is exported", type(wf), "function")
+    if type(wf) == "function" then
+        check("wire: Baidu gets bracketed labels", wf("baidu"), "labels")
+        check("wire: DeepL keeps the circled digits", wf("deepl"), nil)
+        check("wire: the custom endpoint keeps them too", wf("custom"), nil)
+    end
+end
+
+-- ---------------------------------------------------------------------------
 -- The request interval, per provider.
 --
 -- Baidu's free tier is 1 QPS, so the API engine's 0.25 s sent four requests a second and the endpoint

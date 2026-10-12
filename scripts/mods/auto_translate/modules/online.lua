@@ -431,13 +431,22 @@ M.relax_mask_for_tests = relax_mask
 -- directions cannot disagree.
 local current_wire = nil
 
+M.wire_for_for_tests = nil   -- assigned below, after the definition
 local function wire_for(provider)
-    -- Bracketed labels exist as a wire form (glossary.WIRE_LABELS) because a self-hosted LibreTranslate
-    -- rewrote single glyphs and kept "[a]" byte for byte. That service is gone, so nothing selects it - the
-    -- capability stays, tested, for the next service that needs it. The circled glyphs are the default for
-    -- every provider, as measured in 0.3.8.
+    -- Baidu gets bracketed labels, measured 2026-10-12: with a circled digit in the string the endpoint
+    -- decides there is nothing to translate and returns it untouched - "Show ①" came back as "Show ①",
+    -- "Show ① ②" as itself, and it is why the store held "Show 浩劫任务" (the term was restored, the word
+    -- around it never was). The same string with a bracket came back translated: "Show [a]" -> "显示[a]".
+    --
+    -- Nothing else is switched yet. The circled digits were measured in 0.3.8 against DeepL, Google and bing
+    -- and they keep them, so this is a per-provider choice until those three are measured again with the
+    -- label form.
+    if provider == "baidu" then
+        return "labels"
+    end
     return nil
 end
+M.wire_for_for_tests = wire_for
 
 local function to_wire(text, tokens)
     if type(glossary) == "table" and glossary.to_wire then
