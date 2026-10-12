@@ -262,6 +262,21 @@ check("split: while the sentence before it still is",
 -- placeholders were dropped) instead of an answer, on the tier that is rate limited.
 -- Measured: 26 of 41 queued keys in one run were these.
 local is_asset = online.is_asset_entry_for_tests
+
+-- The colour-name rule, from the report that five-word names slipped through: NumericUI's list showed
+-- "Ui Hud 绿色超轻款" for "Ui Hud Green Super Light" while its four-word neighbours stayed English.
+check("a five word colour name is a swatch", online.is_asset_entry_for_tests(
+    "{#color(216,237,190)}Ui Hud Green Super Light{#reset()}"), true)
+check("and so is a six word style name", online.is_asset_entry_for_tests(
+    "{#color(113,126,103)}Terminal Text Body Sub Header{#reset()}"), true)
+check("a styled instruction is not", online.is_asset_entry_for_tests(
+    "{#color(255,0,0)}Reload your weapon and fire{#reset()}"), false)
+check("a styled sentence is not", online.is_asset_entry_for_tests(
+    "{#color(255,0,0)}This sentence is styled.{#reset()}"), false)
+check("a list of two swatches is not one name", online.is_asset_entry_for_tests(
+    "{#color(1,1,1)}Fire{#reset()} and {#color(2,2,2)}Ice{#reset()}"), false)
+check("a font entry with a sentence is not a name", online.is_asset_entry_for_tests(
+    "{#font(giant)}Pick up the ammo now{#reset()}"), false)
 check("asset: a colour swatch is left alone",
     is_asset("{#color(162,158,145)}Rakarth Flesh{#reset()}"), true)
 check("asset: a font-picker entry is left alone",

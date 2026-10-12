@@ -658,7 +658,24 @@ local function wraps_a_name(text, pattern)
     for _ in inside:gmatch("%S+") do
         words = words + 1
     end
-    return words > 0 and words <= 4 and inside:find("[%.%?!:]") == nil
+    -- A swatch or a style name is written in Title Case; a sentence is not. Measured on NumericUI's
+    -- colour list: `{#color(216,237,190)}Ui Hud Green Super Light{#reset()}` is five words and was
+    -- translated ("Ui Hud 绿色超轻款" - "Light" read as a weight) while its four-word neighbours were
+    -- skipped, so the old limit of four words was simply too tight. Raising it alone went too far the
+    -- other way - `{#color(255,0,0)}Reload your weapon and fire{#reset()}` is five words and is a real
+    -- instruction - so a single lowercase word now decides it: names have none (`Fire and Ice` keeps
+    -- its "and", and is a list that should be translated), and the "Translate colour names" option
+    -- takes every one of them on regardless.
+    if words == 0 or words > 6 or inside:find("[%.%?!:]") ~= nil then
+        return false
+    end
+    for word in inside:gmatch("%S+") do
+        local first = word:match("^%p*(%a)")
+        if first and first == first:lower() and first ~= first:upper() then
+            return false
+        end
+    end
+    return true
 end
 
 local function is_asset_entry(text)
