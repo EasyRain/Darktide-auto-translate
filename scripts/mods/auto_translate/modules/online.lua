@@ -3949,15 +3949,23 @@ function M.probe(mod, lang)
     -- model), testing DeepL would ask for a key the player does not have and miss the point of
     -- the button. The free tier has up to three providers, and the first is the one a run
     -- would try first.
-    -- Make the visible fields agree with the preset before anything is built from them.
-    if provider == "custom" and custom and custom.sync_preset then
-        custom.sync_preset(mod)
-    end
-
     local engine = engines.resolve(mod, lang)
     local provider = engines.api_provider(mod)
     if engine == "online_free" then
         provider = engines.providers_for("online_free", lang)[1] or provider
+    end
+
+    -- But a player who typed a custom endpoint means to test *that*. With no key the engine resolves to the
+    -- free tier, so the button tested Bing instead and answered a question nobody asked - reported as "I
+    -- filled the template and the test failed", with a popup about Bing's session token and a perfectly good
+    -- Azure configuration sitting in the settings.
+    if provider ~= "custom" and custom then
+        local wanted = mod:get("api_provider")
+        local url = mod:get("custom_url")
+        if wanted == "custom" and type(url) == "string" and url ~= "" then
+            provider = "custom"
+            util.info(mod, "the test button follows the custom endpoint the player filled in, not the engine")
+        end
     end
     local sample = "Reload Speed"
     -- The same masking rule the run uses for this provider (a service that passes the game's
@@ -4007,6 +4015,14 @@ function M.probe(mod, lang)
         util.info(mod, "testing the custom endpoint: %s, response path '%s', sample '%s'",
             describe, tostring(spec.path), sample)
     else
+        -- The run path establishes the session before it builds a request (see ensure_session); the button
+        -- skipped it, so testing the free tier answered "bing needs a session token before the first
+        -- request" and the player was told the endpoint was broken when it was the test that was.
+        if core.at_online_bootstrap_needed(provider) == 1 and not ensure_session(mod, provider) then
+            util.popup(mod, "custom_test_session")
+            return false
+        end
+
         local api_key = nil
         if provider_needs_key(provider) then
             api_key = mod:get("online_api_key")
