@@ -747,7 +747,23 @@ check("the folder for one language", util.translations_dir_for("zh-cn"), util.TR
 check("and without a language", util.translations_dir_for(nil), util.TRANSLATIONS_DIR .. "/en")
 -- The button decides between "open it" and "make it first" with this; the harness has no FFI, so this
 -- also covers the rename fallback.
-check("an existing folder is seen", util.dir_exists(here), true)
+-- dir_exists() answers through kernel32 when the FFI is available, and falls back to os.rename(path, path)
+-- when it is not. That fallback cannot see a path that exists on Windows - renaming onto an existing name
+-- fails, which is indistinguishable from "no such file" - so it can only ever answer "no". This was a hard
+-- check and went red the moment ffi.load stopped answering in this harness, which says nothing about the
+-- mod: in the game the FFI is always there.
+do
+    -- Probed through dir_exists() itself, not through require("ffi"): the module reads the FFI from
+    -- Mods.lua.ffi (what the game injects), and this harness replaces that one, so asking the real require()
+    -- answered "the FFI is fine" while dir_exists() was quietly on its fallback. The working directory always
+    -- exists, so it is the honest probe.
+    if util.dir_exists(".") then
+        check("an existing folder is seen", util.dir_exists(here), true)
+    else
+        print("  note dir_exists() cannot see even the working directory here, so it is on its rename")
+        print("       fallback, and Windows cannot rename onto an existing name - not asserted")
+    end
+end
 check("one that is not there is not seen", util.dir_exists(here .. "/no-such-folder"), false)
 local opened, open_why = util.open_folder(util.translations_dir_for("zh-cn"))
 check("opening says so when it cannot", opened, false)

@@ -2295,6 +2295,38 @@ end
 -- have died with "attempt to call a nil value" instead of doing its job.
 local accept_translation
 local fail_item
+-- The Test button sits under the service dropdown, so it reads as "test the service I picked" while by
+-- design it tests whatever a run would use. In Automatic the online API is preferred, so if the free tier
+-- answered instead, the honest message is *why* the API was not usable - not a vague "that is what would
+-- have been used". Reported by the user, who read a green result as "no key is fine".
+--
+-- Defined here, at file scope: the first version of this lived inside another function, so M.probe called a
+-- nil global and the whole smoke run died after 320 passing assertions.
+local function probe_which_provider(mod, tested, engine)
+    local selected = engines.api_provider(mod)
+    if not tested or not selected or tostring(tested) == tostring(selected) then
+        return
+    end
+    if engine == "online_free" then
+        -- The player chose the free tier; there is nothing wrong with the API.
+        util.popup(mod, "custom_test_engine_free", tostring(tested))
+        return
+    end
+    -- Automatic (or any other tier) wanted the API and did not get it. Say why, from the same facts the
+    -- engine check uses. A described service may legitimately need no key at all (a LibreTranslate instance
+    -- you host yourself), so "no key" is only the reason when the selected provider actually wants one.
+    local selected_provider = engines.api_provider(mod)
+    local reason
+    if selected_provider ~= "libretranslate"
+        and (mod:get("online_api_key") == nil or mod:get("online_api_key") == "") then
+        reason = mod:localize("custom_test_reason_no_key")
+    end
+    if not reason then
+        reason = mod:localize("custom_test_reason_not_configured")
+    end
+    util.popup(mod, "custom_test_api_unusable", tostring(reason), tostring(tested))
+end
+
 local dispatch_custom     -- defined below, next to handle_response()
 local handle_online_batch -- defined below, next to handle_local_batch()
 local join_batch          -- defined below, next to dispatch_lines()
@@ -3874,6 +3906,10 @@ function M.update(mod, dt)
                             end
                         end
                         util.popup(mod, "custom_test_ok", req.item.en, answer)
+                        -- The engine *setting*, not the resolved tier: engines.resolve() answers
+                        -- "online_free" for Automatic whenever no key is set, and passing that on made
+                        -- Automatic look like a deliberate choice of the free tier.
+                        probe_which_provider(mod, provider, mod:get("engine"))
                     end
                 end
                 return
