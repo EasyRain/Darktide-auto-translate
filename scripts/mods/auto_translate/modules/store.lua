@@ -369,7 +369,19 @@ end
 -- A manual entry always wins; a machine entry is dropped when the source changed.
 -- Third return value is true when the entry lacks bookkeeping (en/hash) and the
 -- caller should backfill it on the next save.
-function M.lookup(data, key, en, hash)
+-- `engine` is optional: when it is given, an entry written by a *different* engine does not count as a
+-- translation of this one.
+--
+-- The mod's own notes already promised this ("any other engine picks the key up again, which is what makes
+-- switching engines redo the work", online.lua), but nothing implemented it, and the report that surfaced the
+-- gap was precise: translate with Baidu, delete the file, switch to DeepL - and the file came back with Baidu's
+-- text, because the store's entry was served to whatever engine ran next.
+--
+-- Two kinds of entry are exempt, because they are not a machine's work to redo:
+--   * hand written (no `src` line) - the player's own text, which no engine switch may overwrite;
+--   * `unchanged` - the service looked and found nothing to translate (a font name, a number). Asking again on
+--     every engine switch would spend requests to be told the same thing.
+function M.lookup(data, key, en, hash, engine)
     if type(data) ~= "table" or type(data.entries) ~= "table" then
         return nil
     end
@@ -390,6 +402,10 @@ function M.lookup(data, key, en, hash)
     local src = e.src
     if src == nil or src == "" or src == "refused" then
         src = "manual"
+    end
+
+    if engine and src ~= "manual" and src ~= "unchanged" and src ~= engine then
+        return nil, "written by " .. src
     end
 
     if e.hash == nil or e.hash == "" then

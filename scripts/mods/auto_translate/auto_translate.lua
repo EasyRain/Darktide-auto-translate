@@ -197,6 +197,20 @@ local function scan_opts(lang)
     local engine = engines.resolve(mod, lang)
     local opts = { engine = engine }
 
+    -- A store entry's `src` is the *provider* that wrote it (deepl, baidu, bing, local_base), not the tier the
+    -- engine setting names (online_api, online_free). Comparing those two would never match and every scan
+    -- would redo everything, so the value the scanner compares against is spelled the same way the writer
+    -- spells it:
+    --   * the API engine knows its provider up front - that is the service the player picked;
+    --   * the free tier does not: it tries several, and whichever answers writes its own name, so nothing is
+    --     compared there (nil) and its entries are not churned;
+    --   * the offline models write their engine's own name, so `engine` already is the right value for them.
+    if engine == "online_api" then
+        opts.provider = engines.api_provider(mod)
+    elseif engines.is_local_engine(engine) then
+        opts.provider = engine
+    end
+
     if mod:get("retranslate_local") == true and engine ~= nil and not engines.is_local_engine(engine) then
         opts.redo_local = true
     end

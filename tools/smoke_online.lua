@@ -653,6 +653,44 @@ check("scanner: unchanged is not", scanner.is_local_source("unchanged"), false)
 check("scanner: nil is not", scanner.is_local_source(nil), false)
 
 -- ---------------------------------------------------------------------------
+-- A machine translation belongs to the engine that wrote it.
+--
+-- The report: translate with Baidu, switch to DeepL, and the file comes back with Baidu's text. The scan found
+-- those entries "ready" (they were in the store), injected 372 of them, and only sent the 3 keys that had no
+-- entry at all - so the switch changed nothing for anything already translated. The mod's own note claimed the
+-- opposite ("any other engine picks the key up again, which is what makes switching engines redo the work");
+-- this is that sentence, implemented and asserted.
+-- ---------------------------------------------------------------------------
+do
+    local st = assert(loadfile(here .. "/../scripts/mods/auto_translate/modules/store.lua"))()
+    local function data_with(entry) return { entries = { k = entry } } end
+
+    -- The value passed here is what the scan would write into `src` next - a provider name, never the tier
+    -- name. Comparing "online_api" against "baidu" would never match, which is the bug this assertion exists to
+    -- prevent: it would redo every key on every scan.
+    local baidu = data_with({ en = "Reload Speed", hash = "h1", text = "装填速度", src = "baidu" })
+    check("provider: Baidu's entry is not DeepL's translation",
+        st.lookup(baidu, "k", "Reload Speed", "h1", "deepl"), nil)
+    check("provider: and it is Baidu's", st.lookup(baidu, "k", "Reload Speed", "h1", "baidu"), "装填速度")
+    check("provider: the tier name is never compared against a provider name",
+        st.lookup(baidu, "k", "Reload Speed", "h1", "online_api"), nil)
+    check("provider: without one named, nothing is filtered",
+        st.lookup(baidu, "k", "Reload Speed", "h1"), "装填速度")
+
+    local hand = data_with({ en = "Reload Speed", hash = "h1", text = "手写的速度" })
+    check("provider: a hand written entry serves every engine",
+        st.lookup(hand, "k", "Reload Speed", "h1", "deepl"), "手写的速度")
+
+    local same = data_with({ en = "Reload Speed", hash = "h1", text = "重装速度", src = "unchanged" })
+    check("provider: 'unchanged' is not redone on every switch",
+        st.lookup(same, "k", "Reload Speed", "h1", "deepl"), "重装速度")
+
+    local offline = data_with({ en = "Reload Speed", hash = "h1", text = "装填速度", src = "local_base" })
+    check("provider: the offline model's text is not DeepL's", st.lookup(offline, "k", "Reload Speed", "h1", "deepl"), nil)
+    check("provider: but it is the offline engine's", st.lookup(offline, "k", "Reload Speed", "h1", "local_base"), "装填速度")
+end
+
+-- ---------------------------------------------------------------------------
 -- The "delete the file, switch engine, reload" path.
 --
 -- Reported by the user: a store translated by Baidu, deleted, the engine switched to DeepL, and the file came
