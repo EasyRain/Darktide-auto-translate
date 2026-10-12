@@ -3604,19 +3604,26 @@ end
 -- Per-frame driver
 -- ---------------------------------------------------------------------------
 function M.update(mod, dt)
+    elapsed = elapsed + (dt or 0)
+
+    -- Before the core check, and that placement is the whole point: the core is loaded lazily, on the first
+    -- translation or test, so a player who only picks a preset and restarts never gets past that early
+    -- return - which is exactly how this was reported, twice, with the settings file showing
+    -- custom_preset = "azure_v3" beside DeepL's URL. Nothing here needs the core.
+    if custom and custom.watch_preset then
+        local ok, err = pcall(custom.watch_preset, mod)
+        if not ok then
+            -- Not a warning: a diagnostic must not become a notification (see util.warn's history).
+            util.info(mod, "the preset watcher failed: %s", tostring(err))
+        end
+    end
+
     if not core then
         M.state.running = false
         return
     end
 
     local ffi = Mods.lua.ffi
-    elapsed = elapsed + (dt or 0)
-
-    -- One settings read per frame, and a write only when the preset selector actually changed: this is what
-    -- makes picking a preset fill the request fields without any further action from the player.
-    if custom and custom.watch_preset then
-        pcall(custom.watch_preset, mod)
-    end
 
     -- The startup check of the keyless tier must never outlive its budget, whatever else this frame
     -- decides to skip. It holds the queue, so a check that is not driven - because a pacing wait or a
