@@ -277,6 +277,26 @@ check("a list of two swatches is not one name", online.is_asset_entry_for_tests(
     "{#color(1,1,1)}Fire{#reset()} and {#color(2,2,2)}Ice{#reset()}"), false)
 check("a font entry with a sentence is not a name", online.is_asset_entry_for_tests(
     "{#font(giant)}Pick up the ammo now{#reset()}"), false)
+
+-- The regression that followed: requiring Title Case translated every lower-case colour name in
+-- true_level.lua's palette (476 entries, 431 of them colour names). A name is all Title Case OR all
+-- lower case; only a mixture is a sentence.
+check("a lower-case colour name is a swatch", online.is_asset_entry_for_tests(
+    "{#color(240,248,255)}alice blue{#reset()}"), true)
+check("and a lower-case paint name", online.is_asset_entry_for_tests(
+    "{#color(90,87,63)}citadel agrax earthshade{#reset()}"), true)
+check("a mixed-case instruction is still translated", online.is_asset_entry_for_tests(
+    "{#color(255,0,0)}Pick up the ammo now{#reset()}"), false)
+
+-- The pattern the user spotted in true_level.lua's palette: most of the names that had been translated
+-- start with a UI or asset word (citadel 163, ui 68, terminal 30, item 18). That settles it outright,
+-- whatever the length or the capitalisation.
+check("an asset prefix decides it", online.is_asset_entry_for_tests(
+    "{#color(114,73,30)}citadel xv88{#reset()}"), true)
+check("however long the name is", online.is_asset_entry_for_tests(
+    "{#color(1,1,1)}terminal background gradient selected{#reset()}"), true)
+check("a sentence is still a sentence", online.is_asset_entry_for_tests(
+    "{#color(255,0,0)}your team is going down fast{#reset()}"), false)
 check("asset: a colour swatch is left alone",
     is_asset("{#color(162,158,145)}Rakarth Flesh{#reset()}"), true)
 check("asset: a font-picker entry is left alone",

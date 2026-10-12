@@ -647,6 +647,21 @@ local COLOUR_TAG = "{#color%(%d+,%d+,%d+%)"
 local FONT_TAG = "{#font%([^)]+%)"
 local MARKUP_ANY = "{[#%w][^{}]*}"
 
+-- A whole-string colour or font run whose text starts with one of these is an asset or a style name,
+-- whatever its length or capitalisation. Counted over true_level.lua's palette, the names that had been
+-- translated were led by `citadel` (163), `ui` (68), `terminal` (30) and `item` (18) - the user spotted the
+-- pattern, and it is a harder signal than counting words.
+local ASSET_PREFIXES = { ui = true, terminal = true, text = true, citadel = true, item = true }
+
+-- The first word of a run's inner text, lower-cased, or nil.
+local function first_word(text)
+    local word = text:match("^%s*(%S+)")
+    if not word then
+        return nil
+    end
+    return (word:gsub("^%p+", ""):gsub("%p+$", "")):lower()
+end
+
 -- True when the run at `pattern` wraps a name rather than a sentence.
 local function wraps_a_name(text, pattern)
     local inside = text:match(pattern)
@@ -654,6 +669,11 @@ local function wraps_a_name(text, pattern)
         return false
     end
     inside = inside:gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
+    -- An asset prefix settles it outright: "citadel xv88", "ui scale", "terminal background selected",
+    -- "item rarity desaturated 1" are names no matter how long or how they are capitalised.
+    if ASSET_PREFIXES[first_word(inside) or ""] then
+        return true
+    end
     local words = 0
     for _ in inside:gmatch("%S+") do
         words = words + 1
@@ -669,11 +689,33 @@ local function wraps_a_name(text, pattern)
     if words == 0 or words > 6 or inside:find("[%.%?!:]") ~= nil then
         return false
     end
+    -- A name is either entirely Title Case or entirely lower case, and a sentence mixes the two
+    -- ("Reload your weapon and fire", "Fire and Ice"). Case alone is not enough for the second half,
+    -- though: "your team is going down fast" is an all-lower-case sentence. Measured over
+    -- true_level.lua's palette - 435 styled names, every one of them five words or fewer (49 of one
+    -- word, 94 of two, 221 of three, 62 of four, 9 of five) - so an all-lower-case run is a name only
+    -- within five words, while Title Case allows six. Function words do not separate them either:
+    -- "citadel the fang grey" and "ui interaction point of interest" are names that contain one.
+    --
+    -- The residual risk is an all-lower-case sentence of five words or fewer, which is skipped and
+    -- shows in English; the "Translate colour names" option takes it on regardless.
+    local has_upper, has_lower_word, words = false, false, 0
     for word in inside:gmatch("%S+") do
+        words = words + 1
         local first = word:match("^%p*(%a)")
-        if first and first == first:lower() and first ~= first:upper() then
-            return false
+        if first then
+            if first == first:upper() and first ~= first:lower() then
+                has_upper = true
+            elseif first == first:lower() and first ~= first:upper() then
+                has_lower_word = true
+            end
         end
+    end
+    if has_upper and has_lower_word then
+        return false
+    end
+    if not has_upper and words > 5 then
+        return false
     end
     return true
 end
