@@ -1348,6 +1348,12 @@ do
     -- values are substituted - the spec has to exist and name real fields.
     local svc = require("scripts/mods/auto_translate/modules/services")
     check("services: the described service is known", svc.has("libretranslate"), true)
+    -- The predicate the engine-availability check and the dispatch both ask. It used to be spelled out twice,
+    -- and the engine check spelled it as "custom" alone - so LibreTranslate was asked for a key it does not
+    -- have and translation refused to start.
+    check("services: and described() covers the custom endpoint too",
+        svc.described("libretranslate") and svc.described("custom"), true)
+    check("services: but not a native provider", not svc.described("deepl") and not svc.described("baidu"), true)
     check("services: and nothing else is, ModernMT included",
         not svc.has("deepl") and not svc.has("custom") and not svc.has("modernmt"), true)
     -- Index 13 is the test button (1 is the preset, 2..10 the fields, 11 the custom region, 12 Azure's);

@@ -2487,7 +2487,7 @@ local function dispatch(mod)
     -- path (masking, inflight, the accept guards) is exactly the same.
     -- A described service (LibreTranslate, ModernMT) is built exactly like a custom endpoint, so it
     -- travels that path rather than a second copy of it.
-    if provider == "custom" or (services and services.has(provider)) then
+    if services and services.described(provider) then
         return dispatch_custom(mod, item, provider)
     end
 

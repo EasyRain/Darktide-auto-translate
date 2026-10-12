@@ -23,10 +23,12 @@ local M = {}
 
 local util
 local store
+local services        -- modules/services.lua, injected: a service may legitimately need no key
 
 function M.init(u, s)
     util = u
     store = s
+    services = v
 end
 
 M.ENGINES = {
@@ -412,8 +414,13 @@ function M.resolve(mod, lang)
         return M.canonical(wanted)
     end
 
+    -- The API tier is usable when a key is set - or when the chosen provider is one of the described
+    -- services, which may legitimately need none (a LibreTranslate instance you host yourself). Without the
+    -- second half, selecting such a service and leaving the engine on Automatic quietly used the free tier
+    -- instead of it.
+    local provider = M.api_provider(mod)
     local key = mod:get("online_api_key")
-    if type(key) == "string" and key ~= "" then
+    if (type(key) == "string" and key ~= "") or (services and services.has(provider)) then
         return "online_api"
     end
 

@@ -28,17 +28,17 @@ store.set_notifier(function(mod_id, lang, stripped)
         mod_id, lang, stripped, stripped == 1 and "y" or "ies")
 end)
 
+-- Loaded before the engines: engines.resolve() has to know whether the chosen provider is one of the
+-- described services, which may legitimately need no key (a LibreTranslate instance you host yourself).
+local services = mod:io_dofile(BASE .. "services")
+
 local engines = mod:io_dofile(BASE .. "engines")
-engines.init(util, store)
+engines.init(util, store, services)
 
 local glossary = mod:io_dofile(BASE .. "glossary")
 glossary.init(util)
 
 local custom = mod:io_dofile(BASE .. "custom")
-
--- The two services that are described rather than coded (LibreTranslate, ModernMT). They are built in the
--- shape the custom endpoint already speaks, so they travel that path - see modules/services.lua.
-local services = mod:io_dofile(BASE .. "services")
 
 local online = mod:io_dofile(BASE .. "online")
 online.init(util, store, glossary, engines, injector, custom, services)
@@ -255,19 +255,24 @@ local function check_engine_settings(lang, quiet)
         return true
     end
 
-    -- The custom service is configured by fields, not by one key, so what has to be
-    -- checked is its own configuration - and a missing URL or response path is as fatal as
-    -- a missing key (nothing can be sent, or nothing can be read back).
-    if engines.api_provider(mod) == "custom" then
+    -- A described service is configured by fields, not by one key: the custom endpoint by the player's own
+    -- request description, LibreTranslate by the address of an instance. What has to be checked is that
+    -- configuration - a missing URL or response path is as fatal as a missing key - and neither needs a key
+    -- at all.
+    --
+    -- This named "custom" only, so picking LibreTranslate with the API engine asked for a key that does not
+    -- exist and translation never started. services.described() is now the one place that answers it.
+    local provider = engines.api_provider(mod)
+    if services and services.described(provider) then
         if not custom then
             return true
         end
-        local problem = custom.problem(custom.spec(mod))
+        local spec = services.has(provider) and services.spec(mod, provider) or custom.spec(mod)
+        local problem = custom.problem(spec)
         if not problem then
             return true
         end
-        local spec = custom.spec(mod)
-        util.log(mod, "the custom service is not usable: %s", problem)
+        util.log(mod, "the %s service is not usable: %s", tostring(provider), problem)
         if not quiet then
             if problem == "custom_url_invalid" then
                 util.popup(mod, problem, tostring(spec.url))

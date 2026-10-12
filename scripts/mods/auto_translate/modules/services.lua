@@ -38,6 +38,17 @@ function M.has(provider)
     return provider == "libretranslate"
 end
 
+-- A provider that is configured by *fields* rather than by one API key: the custom endpoint, whose request
+-- the player describes, and every service above, whose address and optional key are settings.
+--
+-- This exists because "needs a key" is asked in more than one place, and one of them named `custom` only.
+-- Choosing LibreTranslate with the API engine therefore demanded a key that does not exist, refused to
+-- start, and left the player with a popup and no translation - the log had one warning line and nothing
+-- else happened. One predicate, used everywhere, is what keeps a third service from repeating it.
+function M.described(provider)
+    return M.has(provider) or provider == "custom"
+end
+
 -- Language codes, per service.
 --
 -- A table, not the `langs` string a player types into the custom endpoint: custom.values() looks up
