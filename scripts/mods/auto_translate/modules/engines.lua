@@ -208,7 +208,6 @@ M.API_PROVIDERS = {
     -- Described rather than coded: modules/services.lua builds their requests in the shape the custom
     -- endpoint already speaks, so they need no native code of their own.
     libretranslate = "libretranslate",
-    modernmt = "modernmt",
     custom = "custom",
 }
 

@@ -123,8 +123,6 @@ return {
                               show_widgets = { 12, 15 } },
                             { text = "api_libretranslate", value = "libretranslate",
                               show_widgets = { 13, 14, 15 } },
-                            { text = "api_modernmt", value = "modernmt",
-                              show_widgets = { 15 } },
                             { text = "api_baidu", value = "baidu",
                               show_widgets = { 15, 16 } },
                             { text = "api_custom", value = "custom",

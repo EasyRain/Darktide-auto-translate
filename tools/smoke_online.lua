@@ -1328,7 +1328,7 @@ do
     -- point at one of them - DMF throws on a dangling index - and the list has to cover
     -- all ten (the button included), or a field would be permanently invisible.
     local provider = by_id.api_provider
-    local custom_option = provider and provider.options and provider.options[7]   -- Custom is the seventh now
+    local custom_option = provider and provider.options and provider.options[6]   -- Custom is the sixth now
 
     -- Twelve since 0.3.10: the preset dropdown joined them, and it has to be first so that DMF draws it
     -- above the fields it governs.
@@ -1336,18 +1336,20 @@ do
     check("settings: the API service dropdown owns the custom-endpoint widgets",
         provider ~= nil and provider.sub_widgets ~= nil and #provider.sub_widgets == 16, true)
     check("settings: the services are offered",
-        provider ~= nil and provider.options ~= nil and #provider.options == 7, true)
-    check("settings: and they are the seven services, in order",
+        provider ~= nil and provider.options ~= nil and #provider.options == 6, true)
+    -- Six, not seven: ModernMT was built and then dropped, because its own site says it sunsets at the end
+    -- of 2026. A provider that is scheduled to stop answering is worse than one that was never offered.
+    check("settings: and they are the six services, in order",
         provider ~= nil and provider.options ~= nil
             and provider.options[1].value == "deepl" and provider.options[2].value == "google_api"
             and provider.options[3].value == "azure" and provider.options[4].value == "libretranslate"
-            and provider.options[5].value == "modernmt" and provider.options[6].value == "baidu"
-            and provider.options[7].value == "custom", true)
+            and provider.options[5].value == "baidu" and provider.options[6].value == "custom", true)
     -- The described services build their requests through the custom path, which is where the header
     -- values are substituted - the spec has to exist and name real fields.
     local svc = require("scripts/mods/auto_translate/modules/services")
-    check("services: both described services are known", svc.has("libretranslate") and svc.has("modernmt"), true)
-    check("services: and nothing else is", not svc.has("deepl") and not svc.has("custom"), true)
+    check("services: the described service is known", svc.has("libretranslate"), true)
+    check("services: and nothing else is, ModernMT included",
+        not svc.has("deepl") and not svc.has("custom") and not svc.has("modernmt"), true)
     -- Index 13 is the test button (1 is the preset, 2..10 the fields, 11 the custom region, 12 Azure's);
     -- every service can be tested, and only Azure and Custom have a region.
     -- The positions, named. A show_widgets index is a number into this list, and a wrong one hides a
