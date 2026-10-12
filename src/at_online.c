@@ -288,7 +288,7 @@ int at_online_needs_key(const char* provider)
 int at_online_uses_post(const char* provider)
 {
     return provider && (_stricmp(provider, "deepl") == 0 || _stricmp(provider, "bing") == 0 ||
-                        _stricmp(provider, "yandex") == 0);
+                        _stricmp(provider, "yandex") == 0 || _stricmp(provider, "google_api") == 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -586,14 +586,15 @@ int at_online_path(const char* provider, const char* api_key, const char* source
                               "/api/v1/tr.json/translate?srv=android&id=%s-0-0&lang=%s-%s",
                               yandex_client_id(), src, dst);
     } else if (_stricmp(provider, "google_api") == 0) {
+        // Only the key is in the query string; q/source/target/format go in the body, which is how the
+        // official client sends them and what lets a multi-text request repeat q= without a second shape.
         if (!api_key || !*api_key) {
             free(encoded);
             set_error("this provider needs an API key");
             return 0;
         }
         written = _snprintf_s(out, (size_t)cap, _TRUNCATE,
-                              "/language/translate/v2?key=%s&q=%s&source=%s&target=%s&format=text",
-                              api_key, encoded, src, dst);
+                              "/language/translate/v2?key=%s", api_key);
     } else {
         free(encoded);
         set_errorf("unknown provider '%s'%s", provider, "");
@@ -798,6 +799,21 @@ static int parse_mymemory(const char* body, char* out, int cap)
 // The endpoint puts its own status in the body, so a code that is not 200 is the service refusing the
 // request and must not be read as a translation. `text` is an array because the request may carry
 // several strings (this build sends one - see at_online_supports_multi_text).
+// google_api: the parameters the path no longer carries.
+//
+// q is the text, already percent-encoded by the caller; format=text keeps the reply plain rather than
+// HTML-escaped, which is the documented default otherwise.
+static int body_google_api(const char* encoded, const char* src, const char* dst, char* out, int cap)
+{
+    int written = _snprintf_s(out, (size_t)cap, _TRUNCATE,
+                              "q=%s&source=%s&target=%s&format=text", encoded, src, dst);
+    if (written < 0) {
+        _snprintf_s(g_error, sizeof(g_error), _TRUNCATE, "request body too long (buffer: %d bytes)", cap);
+        return -1;
+    }
+    return written;
+}
+
 static int parse_yandex(const char* body, char* out, int cap)
 {
     JVal* root = json_parse(body);
@@ -955,7 +971,7 @@ int at_online_body(const char* provider, const char* source_lang, const char* ta
         return 0;
     }
     if (_stricmp(provider, "deepl") != 0 && _stricmp(provider, "bing") != 0 &&
-        _stricmp(provider, "yandex") != 0) {
+        _stricmp(provider, "yandex") != 0 && _stricmp(provider, "google_api") != 0) {
         set_errorf("provider '%s' does not use a request body%s", provider, "");
         return 0;
     }
@@ -991,6 +1007,8 @@ int at_online_body(const char* provider, const char* source_lang, const char* ta
         written = _snprintf_s(out, (size_t)cap, _TRUNCATE,
                               "text=%s&fromLang=%s&to=%s&token=%s&key=%s",
                               encoded, src, dst, g_bing_token, g_bing_key);
+    } else if (_stricmp(provider, "google_api") == 0) {
+        written = body_google_api(encoded, src, dst, out, cap);
     } else if (_stricmp(provider, "yandex") == 0) {
         // Yandex takes the direction in the query and only the text in the body. The parameter can be
         // repeated to send several strings at once (the reply is an array), but this build sends one
@@ -1036,7 +1054,7 @@ int at_online_body_multi(const char* provider, const char* source_lang, const ch
         set_error("missing argument");
         return 0;
     }
-    if (_stricmp(provider, "deepl") != 0) {
+    if (_stricmp(provider, "deepl") != 0 && _stricmp(provider, "google_api") != 0) {
         set_errorf("provider '%s' has no multi-text request form%s", provider, "");
         return 0;
     }
@@ -1072,7 +1090,8 @@ int at_online_body_multi(const char* provider, const char* source_lang, const ch
             set_error("text too long to encode");
             return 0;
         }
-        written = _snprintf_s(out + used, (size_t)(cap - used), _TRUNCATE, "text=%s&", encoded);
+        written = _snprintf_s(out + used, (size_t)(cap - used), _TRUNCATE,
+                              _stricmp(provider, "google_api") == 0 ? "q=%s&" : "text=%s&", encoded);
         free(encoded);
         if (written < 0) {
             _snprintf_s(g_error, sizeof(g_error), _TRUNCATE, "request body too long (buffer: %d bytes)", cap);
@@ -1081,8 +1100,12 @@ int at_online_body_multi(const char* provider, const char* source_lang, const ch
         used += written;
     }
 
+    // The tail differs by spelling: DeepL wants source_lang/target_lang, Google v2 wants source/target
+    // plus format=text (html is its documented default).
     if (_snprintf_s(out + used, (size_t)(cap - used), _TRUNCATE,
-                    "source_lang=%s&target_lang=%s", src, dst) < 0) {
+                    _stricmp(provider, "google_api") == 0
+                        ? "source=%s&target=%s&format=text"
+                        : "source_lang=%s&target_lang=%s", src, dst) < 0) {
         _snprintf_s(g_error, sizeof(g_error), _TRUNCATE, "request body too long (buffer: %d bytes)", cap);
         return 0;
     }
@@ -1093,7 +1116,7 @@ int at_online_body_multi(const char* provider, const char* source_lang, const ch
 // asks instead of hard-coding a provider name: which services ship is the core's business.
 int at_online_supports_multi_text(const char* provider)
 {
-    return provider && _stricmp(provider, "deepl") == 0;
+    return provider && (_stricmp(provider, "deepl") == 0 || _stricmp(provider, "google_api") == 0);
 }
 
 // Which browser each service is told we are. Not decoration: Bing's keyless translator answers HTTP
@@ -1147,7 +1170,7 @@ int at_online_headers(const char* provider, const char* api_key, char* out, int 
 const char* at_online_content_type(const char* provider)
 {
     if (provider && (_stricmp(provider, "deepl") == 0 || _stricmp(provider, "bing") == 0 ||
-                     _stricmp(provider, "yandex") == 0)) {
+                     _stricmp(provider, "yandex") == 0 || _stricmp(provider, "google_api") == 0)) {
         return "application/x-www-form-urlencoded";
     }
     return NULL;
@@ -1211,7 +1234,7 @@ int at_online_parse_at(const char* provider, const char* body_utf8, int index, c
     }
     out[0] = 0;
 
-    if (_stricmp(provider, "deepl") != 0) {
+    if (_stricmp(provider, "deepl") != 0 && _stricmp(provider, "google_api") != 0) {
         set_errorf("provider '%s' has no multi-text reply form%s", provider, "");
         return 0;
     }
@@ -1221,7 +1244,11 @@ int at_online_parse_at(const char* provider, const char* body_utf8, int index, c
         set_error("response was not valid JSON");
         return 0;
     }
-    _snprintf_s(path, sizeof(path), _TRUNCATE, "translations.%d.text", index);
+    if (_stricmp(provider, "google_api") == 0) {
+        _snprintf_s(path, sizeof(path), _TRUNCATE, "data.translations.%d.translatedText", index);
+    } else {
+        _snprintf_s(path, sizeof(path), _TRUNCATE, "translations.%d.text", index);
+    }
     node = json_path(root, path);
     text = json_str(node);
     if (!text || !*text) {

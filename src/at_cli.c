@@ -180,6 +180,11 @@ static int cmd_selftest(void)
 {
     char out[8192];
     char path[8192];
+    char body[8192];
+    const char* parts[2];
+
+    parts[0] = "Alpha";
+    parts[1] = "Beta";
 
     printf("at_core %s\n\n== language codes ==\n", at_version());
     expect_true("zh-cn -> zh-CN", at_online_lang_code("zh-cn", out, (int)sizeof(out)) && strcmp(out, "zh-CN") == 0);
@@ -220,9 +225,17 @@ static int cmd_selftest(void)
                 at_online_path("mymemory", NULL, "en", "ja", "Hello", path, (int)sizeof(path)) &&
                     strcmp(path, "/get?q=Hello&langpair=en%7Cja") == 0);
 
-    expect_true("google_api path carries the key",
+    // The key stays in the query; q/source/target/format moved to the body (2026-10-12), which is how the
+    // official client sends them and what lets a multi-text request repeat q= without a second shape.
+    expect_true("google_api path carries the key and nothing else",
                 at_online_path("google_api", "KEY123", "en", "ko", "Hi", path, (int)sizeof(path)) &&
-                    strstr(path, "key=KEY123") != NULL && strstr(path, "target=ko") != NULL);
+                    strcmp(path, "/language/translate/v2?key=KEY123") == 0);
+    expect_true("google_api body carries the parameters",
+                at_online_body("google_api", "en", "ko", "Hi", body, (int)sizeof(body)) &&
+                    strcmp(body, "q=Hi&source=en&target=ko&format=text") == 0);
+    expect_true("google_api body encodes the text",
+                at_online_body("google_api", "en", "ko", "a&b c|d", body, (int)sizeof(body)) &&
+                    strstr(body, "q=a%26b%20c%7Cd") != NULL);
 
     expect_true("google_api without a key is refused",
                 !at_online_path("google_api", "", "en", "ko", "Hi", path, (int)sizeof(path)));
@@ -241,11 +254,22 @@ static int cmd_selftest(void)
                     strcmp(out, "api.deepl.com") == 0);
 
     printf("\n== deepL ==\n");
-    expect_true("deepl uses POST", at_online_uses_post("deepl") && !at_online_uses_post("google_api"));
+    expect_true("deepl uses POST", at_online_uses_post("deepl") && !at_online_uses_post("mymemory"));
     expect_true("deepl path carries no query",
                 at_online_path("deepl", "k", "en", "ja", "Hello", path, (int)sizeof(path)) &&
                     strcmp(path, "/v2/translate") == 0);
     // ZH-HANS / ZH-HANT are DeepL's explicit Simplified / Traditional codes
+    // Multi-text (2026-10-12): Google repeats q= in the form body, which is its documented batch form.
+    expect_true("google_api supports several texts", at_online_supports_multi_text("google_api") == 1);
+    expect_true("google_api multi body repeats q",
+                at_online_body_multi("google_api", "en", "zh-cn", parts, 2, body, (int)sizeof(body)) &&
+                    strcmp(body, "q=Alpha&q=Beta&source=en&target=zh-CN&format=text") == 0);
+    expect_true("google_api multi reply is read by position",
+                at_online_parse_at("google_api",
+                    "{\"data\":{\"translations\":[{\"translatedText\":\"Alpha\"},"
+                    "{\"translatedText\":\"Beta\"}]}}", 1, out, (int)sizeof(out)) &&
+                    strcmp(out, "Beta") == 0);
+
     expect_true("deepl zh-cn -> ZH-HANS",
                 at_online_lang_code_for("deepl", "zh-cn", out, (int)sizeof(out)) &&
                     strcmp(out, "ZH-HANS") == 0);
