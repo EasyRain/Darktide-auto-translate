@@ -52,8 +52,8 @@ thread never blocks. Around it:
 * **Pacing and quota**: one request per second on the free endpoints, four per second on a
   paid API; HTTP 429/403 pauses the queue for five minutes; three consecutive transport
   failures trip the circuit breaker (see [Free endpoints](#free-endpoints-no-key-nothing-to-download)).
-* **Saved as it goes**: files are written every 25 keys and at the end, so quitting mid-run
-  loses nothing, and new keys are injected as soon as the queue drains — no restart needed.
+* **Saved as it goes**: files are written every 20 keys (and every 30 seconds, and at the end), so
+  quitting mid-run loses nothing, and new keys are injected as soon as the queue drains — no restart needed.
 
 The request/response handling itself (URLs, language spellings, JSON, HTML entities) lives
 in the native core `bin/at_core.dll` — see [Testing](#testing-without-launching-the-game).
@@ -83,6 +83,7 @@ sub-widgets of that dropdown: DMF hides all ten under `DeepL` and shows them the
 | Continue translating | General | Off = no new keys are translated; already translated keys still apply. |
 | Target language | General | The language to translate into (`Automatic` follows the game). |
 | Show progress | General | Bottom-right progress line for the translation run. |
+| Check the free services at startup | Online (free) | One short request per endpoint when a run starts, in the background, so a network that cannot reach one of them stops paying for it every session. |
 | Translate colour names | General | Off by default: colour swatches are asset names players match in English. |
 | Translation engine | Engine | `Automatic` (key → downloaded model → free endpoints) / `Online (official API)` / `Online (free endpoints)` / `Local model (1.3B)`. |
 | API service | Engine | `DeepL` or `Custom` (any translation service you describe yourself). |
@@ -424,11 +425,21 @@ three: no key is needed, so nothing is guaranteed either.
 
 | endpoint | host | what it is |
 | --- | --- | --- |
-| **bing** | `cn.bing.com` | Microsoft's keyless translator, tried **first**. Measured from a China residential IP: **all twelve targets** (including `pl` and `uk`), glossary placeholders kept, `[n]` markers kept, `%s`/`%.0f` kept, line breaks kept, and 15 requests at one per second with no refusal. It costs one extra page load per run — see below. |
+| **bing** | `cn.bing.com` / `www.bing.com` / `www4.bing.com` | Microsoft's keyless translator, tried **first**. **The host is not fixed**: it tries them in turn and keeps whichever one answers for this network (see below). Measured from a China residential IP: **all twelve targets** (including `pl` and `uk`), glossary placeholders kept, `[n]` markers kept, `%s`/`%.0f` kept, line breaks kept, and 15 requests at one per second with no refusal. It costs one extra page load per run — see below. |
 | **yandex** | `translate.yandex.net` | Yandex's keyless JSON endpoint (`srv=android`), tried **second**. It is the one that answered from a China network without a proxy and needs no session page; it also mangled a marker pair - `⟦2⟧` came back as `mark2mark` - which is what moved the markers onto single circled digits (see [the marker section](#a-note-on-the-markers)). It has no Chinese (Traditional), so `zh-tw` targets skip it. |
 | **google_clients5** | `clients5.google.com` | Google's Chrome-dictionary endpoint. Second: measured, it answered while `translate.googleapis.com` was unreachable on the same machine, but on a filtered network it is the first thing to time out. |
 | **google_gtx** | `translate.googleapis.com` | The endpoint most other tools use (`?client=gtx`). Whether it is reachable depends on the route, not on the request: measured on one machine it was TLS-reset direct and answered through a proxy that had a rule for the host. |
 | **mymemory** | `mymemory.translated.net` | A translation *memory*, not a machine translator, so its answers can be human segments that do not fit: measured `Reload Speed` → `ユーザーのリロード速度:` (ja) and `Keystone` → `梯形` (zh-cn). Last on purpose. |
+
+**The free services are checked once, when a run starts** (`Check the free services at startup`, on by
+default). Each endpoint gets one very short request in the background while the run is already going, and
+the first one to answer becomes where the run starts; a failure only demotes an endpoint, it never disables
+it. It runs on idle frames, so a run never waits for it, and it happens once per session - the point is to
+stop every session from paying for a host that this network cannot reach.
+
+**Bing is asked in its formal tone.** The web client offers a tone selector for every language, and measured,
+the request without one loses a marker every round where `tone=Formal` keeps them all - the failing shape is
+a marker next to a digit (`Set to ⟦0⟧0⟦1⟧`). The tone is therefore part of every Bing request.
 
 **The order is learned, not fixed — a fixed one cannot fit both networks.** The list below is the
 starting order; what a run actually tries is ranked at dispatch time:
@@ -449,11 +460,12 @@ hosts and then Bing; in a China session the log read:
 06:09:01  first progress line
 ```
 
-**2 min 19 s** between queueing and the first translated key, because a blocked host costs the full
-20-second timeout per attempt and each of the two Google hosts was tried three times first. Putting
-Bing first fixed that for China and created the mirror image for everyone else: `cn.bing.com` is not
-the fastest answer from a European or American connection. Ranking by what actually answered fixes
-both, and the first run on a new network costs at most one timeout before the order corrects itself.
+**2 min 19 s** between queueing and the first translated key, because a blocked host cost the full
+20-second timeout per attempt (the timeout is **8 seconds** since 0.3.8, and the four WinHTTP phases share it) and each of the two Google hosts was tried three times first. Putting
+Bing first fixed that for China, and the mirror image - a European or American connection cannot reach
+`cn.bing.com` quickly - is handled by **discovering the host instead of configuring one** (see below).
+Ranking by what actually answered fixes the order, and the first run on a new network costs at most one
+timeout before it corrects itself.
 
 The ranking is applied **per attempt**, not once per run: an item that has never been tried skips a
 host that has already timed out for the items before it, so one timeout demotes a provider for
@@ -469,8 +481,9 @@ was based on are the ones being cleared. It is still bounded at three waits of f
 which the run stops with the usual "every provider was unreachable" message, so a machine that is
 simply offline ends instead of looping.
 
-Measured on the machine this was developed on, all three Google/MyMemory endpoints answered all
-twelve game languages and all three kept every marker of a batched request
+Measured on the machine this was developed on, the three Google/MyMemory endpoints answered all
+twelve game languages and all three kept every marker of a batched request (the free tier has **five**
+endpoints since 0.3.8: `bing`, `yandex`, `google_clients5`, `google_gtx`, `mymemory`)
 (`tools/live_free_check.lua` re-runs that, direct or with a proxy):
 
 ```
@@ -480,14 +493,21 @@ mymemory         zh-cn=上弹速度  zh-tw=裝填速度  ja=ユーザーのリ�
 batch [1] Reload Speed [2] Ammo [3] Damage [4] Cancel → 4/4 markers kept by all three
 ```
 
-**Bing needs a page before it will translate.** `cn.bing.com/translator` carries a key, a token and
+**Bing needs a page before it will translate.** `…/translator` (on whichever host answers) carries a key, a token and
 an `IG` in the page, and every `/ttranslatev3` request has to send them back, so a run starts by
 fetching that page through the same async HTTP path as everything else — the game thread never
 waits, the item simply goes back into the queue until the session is in hand. One page serves the
 rest of the run (measured: 110 seconds of requests on one token). `{"statusCode":205}` means the
 session expired and is treated as "fetch a new one"; a **0-byte 200 is a failure, not an empty
-translation** — `www.bing.com` answers exactly that to the request `cn.bing.com` answers with a
-translation, which is why the China host is the one configured.
+translation**.
+
+**Which host to talk to is discovered, not configured.** The page that hands out the key must be the same
+host the request goes back to - measured: `www.bing.com` answers a request built from `cn.bing.com`'s
+session with a 0-byte 200. The mirror relationship runs both ways (from China `www.bing.com` redirects to
+`cn.bing.com`; from Singapore `cn.bing.com` redirects to `www.bing.com`; `www4.bing.com` answers both
+without redirecting), and the core does not follow redirects, so a fixed host is wrong for somebody. The mod
+therefore tries the hosts in turn and remembers the one that works, and the session page and the translation
+request are always built through the same host.
 
 Its batching is not as reliable as the probe suggested, and the design accounts for it. Four
 labels in one marker batch came back with all four markers intact in `tools/live_bing_check.lua`,
@@ -527,12 +547,16 @@ labels instead of one.
 **What happens when one is cut off** (the free tier is meant to survive that, since it is all a
 keyless player has):
 
+The progress HUD carries the two waits: `hud_cooldown` counts a rate-limit pause down, and
+`hud_waiting` shows how long a request has been in flight once it passes three seconds, so a slow endpoint
+no longer looks like a stopped run.
+
 | when | what the mod does |
 | --- | --- |
 | one request fails | the item moves to the next provider in the list (`bing` → `yandex` → `clients5` → `gtx` → `MyMemory`) and is retried there |
 | one provider fails to connect **3 times** | it is dropped for the rest of the session with a log line, so every later key skips it instead of paying the timeout again; a request that succeeds resets that counter |
-| the service answers **429/403** (rate limited, quota) | translation pauses for **5 minutes** and the item is retried when the pause ends — the HUD counts it down |
-| **all three** are unreachable | the run does **not** end: it waits 5 minutes, re-arms all three providers and works through the queue again. Three such waits at most, then it stops with the usual "every provider was unreachable" message — a machine that is simply offline should not loop forever |
+| the service answers **429/403** (rate limited, quota) | translation pauses for **5 minutes** and the item is retried when the pause ends. The notice appears **once per streak** (not on every request), it **names the service**, and the progress HUD counts the wait down - a log line that reads like an error was reported as one — the HUD counts it down |
+| **every** provider this language has is unreachable | the run does **not** end: it waits 5 minutes, re-arms them all and works through the queue again. Three such waits at most, then it stops with the usual "every provider was unreachable" message — a machine that is simply offline should not loop forever |
 
 **A refusal can arrive as an HTTP 200.** MyMemory answers with the failure *inside* the
 successful reply: a 774-character query came back as status 200 with `QUERY LENGTH LIMIT
@@ -607,7 +631,8 @@ response path. Two details keep its answer readable:
 
 * the sample ("Reload Speed") is a glossary term in most languages, so masking turns it into a
   bare `⟦0⟧`, and a request carrying nothing but a placeholder proves nothing about the endpoint
-  (DeepL echoes `⟦0⟧` back, and the font has no glyph for it, so the chat reads as mojibake). A
+  (DeepL echoes the placeholder back - it used to show as `⟦0⟧`, which the game font has no glyph for, and
+that is why the markers are circled digits now). A
   real run never sends such a string — it answers from the token table (`is_fully_protected`) —
   so the probe sends the **plain sample** in that case, and masks normally otherwise.
 * when placeholders *were* sent, the reply is unmasked before it is shown, with the count of any
@@ -871,7 +896,15 @@ return {
   itself — hand written or machine, it is injected as written — so placeholders, `%`-specifiers,
   line breaks and leftover `⟦⟧` markers are what `luajit tools\check_stores.lua` is for.
 * **A string an engine gave up on gets an entry of its own** instead of vanishing: after three
-  refusals — the budget is spent **per engine**, and it is smaller for the offline model (one attempt: it is
+  Two more things the guards check, because each was a real answer that would have been stored broken:
+
+* **how many times** a marker appears, not just whether it is there - one term used twice in a sentence
+  shares a marker, so a service that drops one of the two occurrences used to pass the "is it present"
+  test and store a translation missing a word;
+* a **blank answer** is refused as such (Yandex returned one), instead of being reported as "N markers
+  dropped", which sends you looking for a mismatch that is not there.
+
+refusals — the budget is spent **per engine**, and it is smaller for the offline model (one attempt: it is
   entry is written with the *source* text as its `text`, `src` saying `refused`, and `refused_by` /
   `refusals` recording who gave up and how often. Nothing is injected from it (the game shows the
   source either way); it is there to be edited — write a translation into `text` and the markers go
@@ -939,7 +972,7 @@ live install (31 mods, 4449 keys, zh-cn, 1588 pending):
 | category | what it is | that run |
 | --- | --- | --- |
 | **no text to translate** | nothing a translator could change: no letters at all (`12`, `—`), key labels (`[F10]`), or text already in the target language | 247 keys |
-| **styled asset names** | one `{#color(r,g,b)}…{#reset()}` swatch or `{#font(id)}…{#reset()}` font entry: the *name* of an asset, which players match in English (`Citadel Rakarth Flesh`, `Proxima Nova Bold`). A font name is the same in every language on purpose — one mod says so in its own source — and asking a service to translate the markup instead produced refusals, because it drops the placeholders | 1300 colour names, 26 font names |
+| **styled asset names** | one `{#color(r,g,b)}…{#reset()}` swatch or `{#font(id)}…{#reset()}` font entry, or a title built out of a colour per letter (25 `{#color}` tags around three words): the *name* of an asset, which players match in English (`Citadel Rakarth Flesh`, `Proxima Nova Bold`). A font name is the same in every language on purpose — one mod says so in its own source — and asking a service to translate the markup instead produced refusals, because it drops the placeholders | 1300 colour names, 26 font names |
 | **unchanged** | the service handed the string back as it was, so it is tagged `src = "unchanged"` rather than stored as a translation | 0 |
 | **refused** | the engine would not translate this string: a service dropped a glossary placeholder, or the offline model answered with something unusable. Nothing wrong is stored, and the next run tries again | 0 after the font rule above (26 before it) |
 
@@ -1096,7 +1129,8 @@ resumable progress, and the mod's own interface in all twelve game languages.
 Settled as a limitation rather than as work — the one thing that is knowingly imperfect:
 
 * **Long strings on the offline model.** The 1.3B truncates long descriptions; the `too_short`
-  guard refuses those answers, and after three refusals the key is parked for that engine rather
+  guard refuses those answers, and after three refusals the key is parked for that engine (the offline model
+parks after **one** - it is deterministic, so a retry cannot say anything different) rather
   than stored wrong (see *When the placeholder is dropped*). That is the answer: three tries, then
   it counts as failed, and switching engines — or letting `Automatic` fall through to the free
   tier — picks the key up again, because parking is per engine. A better model was the only real
