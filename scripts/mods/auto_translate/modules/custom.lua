@@ -20,7 +20,7 @@ local M = {}
 -- Placeholders the templates may use. Only these are substituted; anything else is left
 -- alone (a template with braces of its own is therefore safe as long as the keys are not
 -- one of these names).
-local PLACEHOLDERS = { "text", "source", "target", "key" }
+local PLACEHOLDERS = { "text", "source", "target", "key", "region" }
 
 -- The shipped defaults *are* one working configuration: DeepL's. The body below carries
 -- DeepL's parameters and the response path is DeepL's reply shape
@@ -36,6 +36,70 @@ local PLACEHOLDERS = { "text", "source", "target", "key" }
 -- has no {key} and the settings pre-fill "Authorization: DeepL-Auth-Key {key}" instead.
 local DEFAULT_BODY = "text={text}&source_lang={source}&target_lang={target}"
 local DEFAULT_PATH = "translations.0.text"
+
+-- Ready-made configurations for the services a player is most likely to have a key for.
+--
+-- Each entry is exactly the set of fields the custom endpoint already has, so selecting a preset is a
+-- shortcut for typing them, not a second code path: the request is still built by build_headers/build and
+-- still read through at_json_string_at. Two of these were verified against the vendors' own documentation
+-- and, where possible, against a live reply:
+--
+--   * google_v2 - the only key-based Google API: v3 wants OAuth2, which a game mod cannot do. The key rides
+--     in the query string (no auth header) and `format=text` keeps the reply plain rather than HTML.
+--     Free: 500,000 characters a month, but a Cloud project with a card on file is needed to get a key.
+--   * azure_v3 - `Ocp-Apim-Subscription-Key`, with the region header for a multi-service resource, a JSON
+--     body of one object per string and a reply that starts with an array. Free: 2,000,000 characters a
+--     month (F0), the most generous of the paid providers, but signup wants a phone and a card.
+--   * deepl - the shipped defaults, repeated here so that switching back and forth works. A check asserts
+--     this entry matches what auto_translate_data.lua ships, so the two cannot drift apart.
+local PRESETS = {
+    deepl = {
+        label = "preset_deepl",
+        url = "https://api-free.deepl.com/v2/translate",
+        auth = "Authorization: DeepL-Auth-Key {key}",
+        headers = "",
+        method = "post",
+        content_type = "application/x-www-form-urlencoded",
+        body = "text={text}&source_lang={source}&target_lang={target}",
+        path = "translations.0.text",
+        langs = "en=EN;; zh-cn=ZH-HANS;; zh-tw=ZH-HANT;; ja=JA;; ko=KO;; ru=RU;; de=DE;; fr=FR;; es=ES;; it=IT;; pl=PL;; pt-br=PT-BR",
+    },
+    google_v2 = {
+        label = "preset_google_v2",
+        url = "https://translation.googleapis.com/language/translate/v2?key={key}",
+        auth = "",
+        headers = "",
+        method = "post",
+        content_type = "application/x-www-form-urlencoded",
+        body = "q={text}&target={target}&source={source}&format=text",
+        path = "data.translations.0.translatedText",
+        langs = "en=en;; zh-cn=zh-CN;; zh-tw=zh-TW;; ja=ja;; ko=ko;; ru=ru;; de=de;; fr=fr;; es=es;; it=it;; pl=pl;; pt-br=pt-BR",
+    },
+    azure_v3 = {
+        label = "preset_azure_v3",
+        url = "https://api.cognitive.microsofttranslator.com/translate?api-version=3.0&from={source}&to={target}",
+        auth = "Ocp-Apim-Subscription-Key: {key}",
+        headers = "Ocp-Apim-Subscription-Region: {region}",
+        method = "post",
+        content_type = "application/json",
+        body = [==[[{"Text":"{text}"}]]==],   -- level-2 brackets: the text itself contains ]]
+        path = "0.translations.0.text",
+        langs = "en=en;; zh-cn=zh-Hans;; zh-tw=zh-Hant;; ja=ja;; ko=ko;; ru=ru;; de=de;; fr=fr;; es=es;; it=it;; pl=pl;; pt-br=pt-br",
+    },
+}
+
+-- The preset names, in the order a player should see them.
+M.PRESET_ORDER = { "deepl", "google_v2", "azure_v3" }
+
+-- One preset by name, or nil.
+function M.preset(name)
+    return PRESETS[name]
+end
+
+-- Every field a preset fills, for the settings screen and for the tests.
+function M.preset_fields()
+    return { "url", "auth", "headers", "method", "content_type", "body", "path", "langs" }
+end
 
 function M.defaults()
     return {
@@ -83,17 +147,31 @@ function M.spec(mod)
         return value
     end
 
+    -- A selected preset supplies the eight request fields; "custom" (or an unknown name, which can only
+    -- come from a hand-edited settings file) falls back to the fields the player typed. The key and the
+    -- region always come from the player: a preset is a shortcut for the request shape, never a credential.
+    local chosen = text("custom_preset")
+    local preset = (chosen ~= "" and chosen ~= "custom") and PRESETS[chosen] or nil
+    local function field(name)
+        if preset and preset[name] then
+            return preset[name]
+        end
+        return text("custom_" .. name)
+    end
+
     local spec = {
-        url = text("custom_url"),
+        preset = chosen,
+        url = field("url"),
         key = text("custom_key"),
-        auth = text("custom_auth"),
-        method = text("custom_method"),
-        content_type = text("custom_content_type"),
-        body = text("custom_body"),
-        headers = text("custom_headers"),
-        path = text("custom_path"),
-        langs = text("custom_langs"),
-        map = parse_lang_map(text("custom_langs")),
+        auth = field("auth"),
+        region = text("custom_region"),
+        method = field("method"),
+        content_type = field("content_type"),
+        body = field("body"),
+        headers = field("headers"),
+        path = field("path"),
+        langs = field("langs"),
+        map = parse_lang_map(field("langs")),
     }
 
     if spec.method ~= "get" then
@@ -189,6 +267,7 @@ function M.values(spec, text, source, target)
         source = M.service_lang(spec, source or "en"),
         target = M.service_lang(spec, target or "en"),
         key = spec.key,
+        region = spec.region or "",
     }
 end
 
@@ -251,6 +330,15 @@ function M.build_headers(spec, values)
         for line in expanded:gmatch("[^\r\n]+") do
             line = line:gsub("^%s+", ""):gsub("%s+$", "")
             if line ~= "" then
+                -- Placeholders work in a header too, substituted raw: a header value is neither form- nor
+                -- JSON-escaped. Without this, Azure's "Ocp-Apim-Subscription-Region: {region}" went out
+                -- with the literal braces in it - found by building the request and reading it back.
+                for _, name in ipairs(PLACEHOLDERS) do
+                    if values[name] ~= nil then
+                        local value = tostring(values[name])
+                        line = line:gsub("{" .. name .. "}", function() return value end)
+                    end
+                end
                 lines[#lines + 1] = line
             end
         end
