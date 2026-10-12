@@ -625,7 +625,7 @@ end
 -- Exported because it has to run even when a string carries no mask at all - unmask() returns early
 -- when it has no tokens, and a plain sentence that comes back with a space in the middle of it was
 -- left alone until this existed. The accept path calls it; unmask calls it for the masked case.
-function M.tidy(text)
+function M.tidy(text, lang)
     -- Scope, and it is deliberately the narrow one.
     --
     -- The only space this file may remove is one that sits beside a token of *ours* - a restored glossary
@@ -636,13 +636,18 @@ function M.tidy(text)
     --     Chinese typography wants, and the Latin is the English source text;
     --   * "Language: 简体中文" - the colon is English, so the space after it is English spacing;
     --   * classifying every space in the user's real stores by the scripts on either side gives 105
-    --     CJK/punctuation, 83 Latin+CJK and 67 CJK+Latin, and *zero* CJK+CJK. There is no corpus behind a
-    --     wider rule.
+    --     CJK/punctuation, 83 Latin+CJK and 67 CJK+Latin - those are the ones above, and none of them may be
+    --     touched.
     --
-    -- Two wider versions were written and removed on that evidence: removing a space between two CJK
-    -- characters (the stores contain none, and the term branch below already covers the measured case), and
-    -- removing one between CJK and ASCII punctuation (it broke "Language: 简体中文" - the colon is the
-    -- source's, not the service's).
+    -- One wider version belongs here and is applied below: a space between two CJK characters. It was written,
+    -- removed and written again, and the removal was my mistake - it rested on a corpus count of zero that was
+    -- only zero because those files held Baidu's output at the time, which does not carry English word spacing
+    -- into Chinese. The counter-example is in the user's own store: "Cancel Edit" (cancel is a term, 取消; edit
+    -- is prose) stored by DeepL as "取消 编辑".
+    --
+    -- A second wider version stays out: removing a space between CJK and ASCII punctuation. It broke
+    -- "Language: 简体中文", where the colon is the English source's and the space after it is English spacing -
+    -- a different case from the one above, which is why only one of the two comes back.
     --
     -- Fullwidth punctuation was measured too, because it is the one mark that cannot have come from the
     -- English source and so would be unambiguous: a space beside a fullwidth comma, colon or bracket, in
@@ -653,7 +658,38 @@ function M.tidy(text)
     -- The term and markup branches in tighten_script_boundary() are where the real work happens. This
     -- function exists so that the accept path can run the markup half even when a string carries no mask at
     -- all, because unmask() returns early without tokens.
+    -- Chinese only, and that limit is evidence: the check_languages fixture caught the general version on
+    -- Japanese, where a space after the middle dot is correct - "ビッグボックス・ オブ・ハート" is the game's own
+    -- wording. Chinese writes no space between characters at all; Japanese does in places like that one.
+    if type(lang) == "string" and lang:sub(1, 2) == "zh" then
+        text = text:gsub("(" .. UNSPACED_3BYTE .. ") +(" .. UNSPACED_3BYTE .. ")", function(left, right)
+            if is_unspaced_part(left) and is_unspaced_part(right) then
+                return left .. right
+            end
+            return nil
+        end)
+    end
     return text
+end
+
+-- A space between two CJK characters, removed. Used only for an answer this mod assembles itself out of its
+-- own terms (see online.lua's terms-only shortcut): the space there came from English word separation -
+-- "Psyker Scream", two terms with the space every English phrase has - and Chinese does not write it.
+--
+-- Deliberately not applied to a service's text: that is what the narrower rules in unmask() are for, and a
+-- blanket version was written, measured against the user's real stores (105 CJK/punctuation, 83 Latin+CJK,
+-- 67 CJK+Latin, zero CJK+CJK) and removed again. Here both sides are terms of ours, which is the case the
+-- corpus does not cover.
+function M.glue_cjk(text)
+    if type(text) ~= "string" then
+        return text
+    end
+    return (text:gsub("(" .. UNSPACED_3BYTE .. ") +(" .. UNSPACED_3BYTE .. ")", function(left, right)
+        if is_unspaced_part(left) and is_unspaced_part(right) then
+            return left .. right
+        end
+        return nil
+    end))
 end
 
 function M.unmask(text, tokens, expected)

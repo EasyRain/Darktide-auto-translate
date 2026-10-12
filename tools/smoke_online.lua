@@ -653,6 +653,74 @@ check("scanner: unchanged is not", scanner.is_local_source("unchanged"), false)
 check("scanner: nil is not", scanner.is_local_source(nil), false)
 
 -- ---------------------------------------------------------------------------
+-- A space between two Chinese characters is the service carrying English word spacing into Chinese.
+--
+-- The counter-example is in the user''s own store: "Cancel Edit" - cancel is a term (取消), edit is prose - was
+-- stored by DeepL as "取消 编辑". This rule was written, removed and written again; the removal rested on a
+-- corpus count of zero that was only zero because those files held Baidu''s output at the time.
+--
+-- Both halves are asserted, because the two are easy to confuse and only one belongs here: a space after an
+-- English colon ("Language: 简体中文") and a space beside Latin or a digit are English spacing and stay.
+-- ---------------------------------------------------------------------------
+do
+    local g = assert(loadfile(here .. "/../scripts/mods/auto_translate/modules/glossary.lua"))()
+    g.init({ MOD_DIR = ".", file_exists = function() return false end,
+             load_lua_file = function() return nil, "stub" end, log = function() end })
+
+    check("cjk space: two Chinese characters are joined", g.tidy("取消 编辑", "zh-cn"), "取消编辑")
+    check("cjk space: a Chinese full stop too", g.tidy("迷路了。 其他", "zh-cn"), "迷路了。其他")
+    check("cjk space: an English colon keeps its space", g.tidy("Language: 简体中文", "zh-cn"), "Language: 简体中文")
+    check("cjk space: Latin keeps its space", g.tidy("在 HUD 上显示", "zh-cn"), "在 HUD 上显示")
+    check("cjk space: a digit keeps its space", g.tidy("即使为 1 或 0", "zh-cn"), "即使为 1 或 0")
+    check("cjk space: Korean is not touched", g.tidy("탄약 수", "ko"), "탄약 수")
+    check("cjk space: Russian is not touched", g.tidy("боезапас счет", "ru"), "боезапас счет")
+    -- Japanese is where the general version failed: the game writes a space after the middle dot.
+    check("cjk space: Japanese keeps its own spacing", g.tidy("ビッグボックス・ オブ・ハート", "ja"),
+        "ビッグボックス・ オブ・ハート")
+    check("cjk space: and a Japanese phrase with a space", g.tidy("ダム労働者ハブ デルタ-9", "ja"),
+        "ダム労働者ハブ デルタ-9")
+end
+
+-- ---------------------------------------------------------------------------
+-- A string that is nothing but terms is answered from the terms.
+--
+-- Measured with Baidu: a string of bare markers comes back as rubbish - "[a] [b]" as "a ____ b", brackets gone
+-- and the gap filled with underscores - and while the guard refuses that answer, the key then never gets
+-- translated at all. When every word is a term of ours there is nothing to send: the terms' own values are the
+-- whole answer. "Psyker Scream" (灵能者 尖叫) is the shape the user asked about, and two Chinese terms are
+-- joined without the space English puts between words.
+-- ---------------------------------------------------------------------------
+do
+    local g = assert(loadfile(here .. "/../scripts/mods/auto_translate/modules/glossary.lua"))()
+    g.init({ MOD_DIR = here .. "/..",
+             file_exists = function(path)
+                 local f = io.open(path, "rb"); if f then f:close(); return true end; return false end,
+             load_lua_file = function(path) return assert(loadfile(path))(), nil end,
+             log = function() end })
+    assert(g.load())
+
+    local function terms_only(text)
+        local m, tk = g.mask(text, "zh-cn", true)
+        return #tk > 0 and m:find("[%a]") == nil, g.glue_cjk(g.unmask(m, tk, m))
+    end
+
+    local only, composed = terms_only("Plasma Gun")
+    check("terms only: a whole string that is one term is composed locally", only, true)
+    check("terms only: and the term is the answer", composed, "等离子枪")
+    local only2, composed2 = terms_only("Reload Speed")
+    check("terms only: Reload Speed likewise", only2, true)
+    check("terms only: with the game's own word for it", composed2, "装弹速度")
+
+    -- A word that is not a term keeps the string going to the service, because part of it is prose.
+    local mixed = g.mask("Psyker Scream", "zh-cn", true)
+    check("terms only: a word that is not a term still leaves prose behind", mixed:find("[%a]") ~= nil, true)
+
+    -- Two Chinese neighbours are glued; a Chinese term next to a Latin one keeps its space.
+    check("terms only: two Chinese terms are joined", g.glue_cjk("灵能者 尖叫"), "灵能者尖叫")
+    check("terms only: a Latin neighbour keeps the space", g.glue_cjk("Show 浩劫任务"), "Show 浩劫任务")
+end
+
+-- ---------------------------------------------------------------------------
 -- A space the service inserts between two placeholders that were adjacent in the source.
 --
 -- The user''s last find, with the distribution that made it actionable: DeepL does not do this, Baidu does.

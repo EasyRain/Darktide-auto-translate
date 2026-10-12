@@ -2412,6 +2412,32 @@ local function dispatch(mod)
         return true
     end
 
+    -- Nothing but masked terms and the separators between them: there is no prose to send.
+    --
+    -- A service turns a string of bare markers into rubbish - measured with Baidu: "[a] [b]" came back as
+    -- "a ____ b", the brackets gone and the gap filled with underscores, and the same string with a word in it
+    -- survives - and although the guard refuses that answer, the key then never gets translated at all. Both
+    -- terms are ours and their values are the whole answer, so it is assembled here: no request, nothing for a
+    -- service to mangle, and no chance of a mismatch to refuse.
+    --
+    -- "No ASCII letters left in the masked text" is the test, which needs no new pattern and does not catch a
+    -- markup-only string: "{#color(..)}" still carries the letters of the tag itself.
+    if #item.en > 0 then
+        local probe_masked, probe_tokens = glossary.mask(item.en, M.state.lang, true)
+        if #probe_tokens > 0 and not has_letters(probe_masked) then
+            local composed = glossary.glue_cjk(glossary.unmask(probe_masked, probe_tokens, probe_masked))
+            -- No "has letters" test on the result: terms the game keeps in English ("Tab") are part of a
+            -- correct answer, so the composed text may well contain letters. That the masked text had none is
+            -- the whole test.
+            if composed and composed ~= item.en then
+                store_translation(mod, item, composed, "terms")
+                M.state.done = M.state.done + 1
+                util.log(mod, "terms only %s:%s -> %s", tostring(item.mod_id), tostring(item.key), composed)
+                return true
+            end
+        end
+    end
+
     -- A request from a run we already threw away can still be finishing, and its
     -- answer would sit at the head of the result queue. Nothing of ours is in flight
     -- here (dispatch is only reached with inflight == nil), so anything already
@@ -2761,7 +2787,7 @@ function accept_translation(mod, req, raw, src)
     -- was stored as-is until this existed. Cheap, and it can only remove a space the target language does
     -- not want.
     if type(glossary) == "table" and glossary.tidy then
-        raw = glossary.tidy(raw)
+        raw = glossary.tidy(raw, M.state.lang)
     end
 
     local restored, missing, missing_indices = glossary.unmask(raw, req.tokens, req.masked)
