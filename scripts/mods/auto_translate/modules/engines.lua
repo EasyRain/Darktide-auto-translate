@@ -200,14 +200,17 @@ M.FREE_PROVIDERS = { "bing", "yandex", "google_clients5", "google_gtx", "mymemor
 -- here - but it is not a setting any more.
 M.API_PROVIDERS = {
     deepl = "deepl",
+    google_api = "google_api",
+    azure = "azure",
     custom = "custom",
 }
 
--- A settings file written before Google was dropped still says api_provider = "google".
--- DeepL is the only shipped service left, so that value maps to it instead of selecting a
--- provider the options no longer offer.
+-- A settings file written before Google was dropped still says api_provider = "google". It used to map to
+-- DeepL, because DeepL was the only service left; now that Google is back (0.3.10) the old value selects
+-- what the player originally chose, which is the honest reading of their own setting.
 local LEGACY_PROVIDERS = {
-    google = "deepl",
+    google = "google_api",
+    google_api = "google_api",
 }
 
 -- provider -> { requested language = language it returns instead }

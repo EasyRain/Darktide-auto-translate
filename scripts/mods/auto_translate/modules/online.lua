@@ -1571,7 +1571,16 @@ M.proxy_hint = ""
 local function provider_needs_key(name)
     -- The custom service has its own key field, which may be empty on purpose (a local
     -- endpoint, or one that authenticates some other way).
-    return name == "google_api" or name == "deepl"
+    if name == "custom" then
+        return false
+    end
+    -- The core knows which of its providers need a key; ask it once it is loaded, and keep this list as
+    -- the fallback for the frames before that. Azure was missing from the hand-written list and would have
+    -- gone out without a key, which is a 401 the player cannot do anything about.
+    if core then
+        return core.at_online_needs_key(name) == 1
+    end
+    return name == "deepl" or name == "google_api" or name == "azure"
 end
 
 -- Which entry of this item's list one attempt should use.
@@ -1766,6 +1775,10 @@ local function tier_probe_send(mod, provider)
         if type(api_key) ~= "string" or api_key == "" then
             return false
         end
+    end
+    -- Azure keeps its resource's region in a header of its own; the core holds it until the next call.
+    if provider == "azure" then
+        core.at_online_set_region(mod:get("azure_region") or "")
     end
     -- Azure keeps its resource's region in a header of its own; the core holds it until the next call.
     if provider == "azure" then
@@ -2514,6 +2527,10 @@ local function dispatch(mod)
         end
     end
 
+    -- Azure keeps its resource's region in a header of its own; the core holds it until the next call.
+    if provider == "azure" then
+        core.at_online_set_region(mod:get("azure_region") or "")
+    end
     if core.at_online_host(provider, api_key, host_buf, 512) == 0 then
         M.state.last_error = cstr(core.at_online_error())
         M.state.failed = M.state.failed + 1
@@ -2936,6 +2953,13 @@ local REASON_KEYS = {
     { "offline model", "hud_reason_model" },
     { "the offline engine refused", "hud_reason_model" },
     { "no API key", "hud_reason_no_key" },
+    { "needs an API key", "hud_reason_no_key" },
+    -- The two first-class services answer with their own codes, both stable and documented; the player
+    -- gets the same short line in their own language either way, and the log keeps the code.
+    { "Azure error 401000", "hud_reason_no_key" },
+    { "Azure error 403001", "hud_reason_quota" },
+    { "API key not valid", "hud_reason_no_key" },
+    { "Daily Limit Exceeded", "hud_reason_quota" },
     { "no usable provider", "hud_reason_no_provider" },
     { "character quota", "hud_reason_quota" },
 }
@@ -4036,7 +4060,11 @@ function M.probe(mod, lang)
                 return false
             end
         end
-        if core.at_online_host(provider, api_key, host_buf, 512) == 0
+        -- Azure keeps its resource's region in a header of its own; the core holds it until the next call.
+    if provider == "azure" then
+        core.at_online_set_region(mod:get("azure_region") or "")
+    end
+    if core.at_online_host(provider, api_key, host_buf, 512) == 0
             or core.at_online_path(provider, api_key, "en", lang, masked, path_buf, PATH_CAP) == 0 then
             util.popup(mod, "custom_test_failed", tostring(cstr(core.at_online_error())))
             return false

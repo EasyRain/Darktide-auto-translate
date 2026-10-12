@@ -104,13 +104,23 @@ return {
                         type = "dropdown",
                         default_value = "deepl",
                         options = {
-                            { text = "api_deepl",  value = "deepl" },
-                            -- Only the custom endpoint needs the nine fields below, so they are
-                            -- sub_widgets of this dropdown and DMF hides every one of them
-                            -- unless this option is the selected value (the indices are
-                            -- positions in `sub_widgets`, 1-based).
+                            -- The indices below are positions in this dropdown's `sub_widgets`, 1-based, and
+                            -- DMF resolves them against the widget that owns them:
+                            --   1      the preset dropdown
+                            --   2..10  the nine request fields (custom endpoint only)
+                            --   11     the custom endpoint's own region field
+                            --   12     Azure's region field
+                            --   13     the test button
+                            -- Honest naming beats counting: a wrong index hides a setting for good, and DMF
+                            -- throws outright if one points at nothing.
+                            { text = "api_deepl", value = "deepl",
+                              show_widgets = { 13 } },
+                            { text = "api_google_v2", value = "google_api",
+                              show_widgets = { 13 } },
+                            { text = "api_azure_v3", value = "azure",
+                              show_widgets = { 12, 13 } },
                             { text = "api_custom", value = "custom",
-                              show_widgets = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 } },
+                              show_widgets = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 13 } },
                         },
                         -- The custom endpoint. Every field here exists because no two services
                         -- agree on anything: the URL, how the key is sent, whether the query goes
@@ -213,6 +223,15 @@ return {
                                 -- Azure wants its resource's region in a header of its own; every other
                                 -- service leaves this empty.
                                 setting_id = "custom_region",
+                                type = "text",
+                                default_value = "",
+                                max_length = 64,
+                            },
+                            {
+                                -- Azure wants its resource's region in a header of its own. Optional for a
+                                -- global resource, required for a multi-service one, and harmless either
+                                -- way - so it is simply sent when it is filled in.
+                                setting_id = "azure_region",
                                 type = "text",
                                 default_value = "",
                                 max_length = 64,

@@ -1328,18 +1328,30 @@ do
     -- point at one of them - DMF throws on a dangling index - and the list has to cover
     -- all ten (the button included), or a field would be permanently invisible.
     local provider = by_id.api_provider
-    local custom_option = provider and provider.options and provider.options[2]
+    local custom_option = provider and provider.options and provider.options[4]   -- Custom is the fourth now
 
     -- Twelve since 0.3.10: the preset dropdown joined them, and it has to be first so that DMF draws it
     -- above the fields it governs.
+    -- Thirteen since 0.3.10: the Azure region joined the twelve the custom endpoint already had.
     check("settings: the API service dropdown owns the custom-endpoint widgets",
-        provider ~= nil and provider.sub_widgets ~= nil and #provider.sub_widgets == 12, true)
+        provider ~= nil and provider.sub_widgets ~= nil and #provider.sub_widgets == 13, true)
+    check("settings: the four services are offered",
+        provider ~= nil and provider.options ~= nil and #provider.options == 4, true)
+    check("settings: and they are DeepL, Google v2, Azure v3 and Custom",
+        provider ~= nil and provider.options ~= nil
+            and provider.options[1].value == "deepl" and provider.options[2].value == "google_api"
+            and provider.options[3].value == "azure" and provider.options[4].value == "custom", true)
+    -- Index 13 is the test button (1 is the preset, 2..10 the fields, 11 the custom region, 12 Azure's);
+    -- every service can be tested, and only Azure and Custom have a region.
+    check("settings: every service can be tested",
+        provider.options[1].show_widgets[1] == 13 and provider.options[2].show_widgets[1] == 13
+            and provider.options[3].show_widgets[1] == 12, true)
     check("settings: the first of them is the preset dropdown",
         provider ~= nil and provider.sub_widgets ~= nil and provider.sub_widgets[1] ~= nil
             and provider.sub_widgets[1].setting_id == "custom_preset", true)
     -- Twelve: the preset dropdown first, then the nine request fields, the region and the test button. The
     -- test button matters - a list that stops at eleven would make it permanently invisible.
-    check("settings: picking Custom asks DMF for all twelve of them",
+    check("settings: picking Custom asks DMF for its twelve widgets",
         custom_option ~= nil and custom_option.value == "custom"
             and custom_option.show_widgets ~= nil and #custom_option.show_widgets == 12, true)
     -- A dropdown's show_widgets are resolved against *its own* sub_widgets (core/options.lua:325) and DMF
