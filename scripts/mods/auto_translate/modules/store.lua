@@ -35,8 +35,12 @@
 local M = {}
 
 local util
-function M.init(u)
+local owner_mod
+function M.init(u, m)
     util = u
+    -- Kept so a write can be reported on its own: the report that made this log necessary was "it writes
+    -- Baidu's text back", with no way to tell which of the writers did it.
+    owner_mod = m
 end
 
 function M.dir_for(lang)
@@ -362,6 +366,33 @@ end
 function M.save(mod_id, lang, data)
     util.ensure_dir(M.dir_for(lang))
     local path = M.path_for(mod_id, lang)
+
+    -- Every write is reported, with the provenance of what goes into it.
+    --
+    -- This exists because a player's translation file kept coming back with the previous engine's text and
+    -- three attempts at reasoning about it from the outside were all wrong. `src=` shows what is being
+    -- written and the traceback names the caller - the two facts that settle it in one look.
+    if util.info then
+        local counts, total = {}, 0
+        local entries = (type(data) == "table" and type(data.entries) == "table") and data.entries or {}
+        for _, entry in pairs(entries) do
+            total = total + 1
+            local s = (type(entry) == "table" and entry.src) or nil
+            if s == nil or s == "" then s = "hand" end
+            counts[s] = (counts[s] or 0) + 1
+        end
+        local parts = {}
+        for s, n in pairs(counts) do parts[#parts + 1] = string.format("%s=%d", tostring(s), n) end
+        table.sort(parts)
+        local trace = "no debug library"
+        if type(debug) == "table" and debug.traceback then
+            trace = tostring(debug.traceback("", 2)):gsub("%s+", " ")
+            trace = trace:sub(1, 300)
+        end
+        util.info(owner_mod, "store.save %s [%s]: %d entr(ies) %s | %s",
+            tostring(mod_id), tostring(lang), total, table.concat(parts, " "), trace)
+    end
+
     return util.write_file_atomic(path, M.serialize(mod_id, lang, data))
 end
 

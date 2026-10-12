@@ -11,7 +11,7 @@ local BASE = "auto_translate/scripts/mods/auto_translate/modules/"
 local util = mod:io_dofile(BASE .. "util")
 
 local store = mod:io_dofile(BASE .. "store")
-store.init(util)
+store.init(util, mod)
 
 local scanner = mod:io_dofile(BASE .. "scanner")
 scanner.init(util, store)
