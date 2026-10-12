@@ -368,14 +368,25 @@ end
 --   * only a space *directly* next to a term we just restored is removed, and only when the term
 --     itself continues in the same script - `FPS 伤害` keeps its space, which Chinese typography
 --     wants, while `显示 小数位` loses one;
---   * the neighbour has to be Han or kana, checked by *code point* rather than by the leading
---     byte. The obvious shortcut (three-byte sequences E3..ED) is wrong: Hangul syllables are
---     U+AC00..U+D7AF, which UTF-8 encodes with the same leading bytes, and Korean does separate
---     its words with spaces. Latin targets have no such neighbours at all, so nothing there is
---     touched either.
-local CJK_3BYTE = "[\227-\237][\128-\191][\128-\191]"
+--   * the neighbour has to belong to a script that does not separate words with spaces, checked
+--     by *code point* rather than by the leading byte. The obvious shortcut (three-byte sequences
+--     E3..ED) is wrong: Hangul syllables are U+AC00..U+D7AF, which UTF-8 encodes with the same
+--     leading bytes, and Korean does separate its words with spaces - leaving that range out is
+--     exactly what keeps Korean intact. Latin and Cyrillic targets have no such neighbours at all,
+--     so nothing there is touched either.
+--
+-- The list is by script rather than "CJK", so a language added later is already right instead of
+-- needing this function edited: Chinese and Japanese are the ones this mod offers today, and the
+-- Southeast Asian scripts are the same shape of problem (Thai, Lao, Myanmar and Khmer write without
+-- spaces between words). Ranges above U+FFFF (CJK extension B and beyond) are not listed: they are
+-- rare in game text and would need the four-byte form.
+-- Any three-byte character, used only as a cheap prefilter: the decision is the code-point list in
+-- is_unspaced_part(). It used to start at E3 (U+3000), which silently excluded Thai and the other Southeast
+-- Asian scripts at U+0E00..U+17FF - their leading byte is E0..E1. Widening it does not add false removals:
+-- Devanagari and friends fall in the same byte range and are rejected by the code-point check, not here.
+local UNSPACED_3BYTE = "[\224-\237][\128-\191][\128-\191]"
 
-local function is_cjk_part(part)
+local function is_unspaced_part(part)
     if type(part) ~= "string" or #part ~= 3 then
         return false
     end
@@ -389,31 +400,67 @@ local function is_cjk_part(part)
     end
 
     local cp = (b1 - 0xE0) * 4096 + (b2 - 0x80) * 64 + (b3 - 0x80)
-    return (cp >= 0x3000 and cp <= 0x30FF)      -- CJK punctuation and kana
+    return (cp >= 0x0E00 and cp <= 0x0E7F)      -- Thai
+        or (cp >= 0x0E80 and cp <= 0x0EFF)      -- Lao
+        or (cp >= 0x1000 and cp <= 0x109F)      -- Myanmar
+        or (cp >= 0x1780 and cp <= 0x17FF)      -- Khmer
+        or (cp >= 0x3000 and cp <= 0x30FF)      -- CJK punctuation and kana
         or (cp >= 0x3400 and cp <= 0x4DBF)      -- unified ideographs, extension A
         or (cp >= 0x4E00 and cp <= 0x9FFF)      -- unified ideographs
         or (cp >= 0xF900 and cp <= 0xFAFF)      -- compatibility ideographs
+        -- Hangul (U+AC00..U+D7AF) is deliberately absent: Korean separates its words with spaces.
 end
 
--- Removes a space the service added between a restored term and a neighbouring character of the
--- same script. Returning nil from the gsub function leaves that match untouched.
+-- Removes a space the service added between a restored term and a neighbouring character of a script
+-- that does not separate words with spaces. Returning nil from the gsub function leaves that match untouched.
+-- True for the game's own rich-text markup ("{#color(..)}", "{#reset()}", "{#font(..)}"). Such a token is
+-- invisible on screen, so a space beside it is really a space beside whatever the tag separates - and if that
+-- neighbour is Chinese, the space is wrong. The term branches below cannot see this: their test is the first
+-- and last three bytes of the token, and a tag starts with "{#".
+local function is_markup(term)
+    return term:sub(1, 2) == "{#" and term:sub(-1) == "}"
+end
+
+-- An ASCII comma or full stop between Chinese characters, which the services emit freely ("任务等级 40,在那里").
+-- Chinese typography puts no space beside a comma or a full stop, whichever half of the world the punctuation
+-- came from.
+local ASCII_PUNCT = "[,%.!%;:%?]"
+
 local function tighten_script_boundary(text, term)
     local escaped = escape_pattern(term)
 
-    if is_cjk_part(term:sub(-3)) then
+    if is_markup(term) then
+        -- The tag followed by a space and Chinese: drop the space (the tag itself stays).
+        text = text:gsub(escaped .. " +(" .. UNSPACED_3BYTE .. ")", function(neighbour)
+            if is_unspaced_part(neighbour) then
+                return term .. neighbour
+            end
+            return nil
+        end)
+        -- Chinese, a space, then the tag.
+        text = text:gsub("(" .. UNSPACED_3BYTE .. ") +" .. escaped, function(neighbour)
+            if is_unspaced_part(neighbour) then
+                return neighbour .. term
+            end
+            return nil
+        end)
+        return text
+    end
+
+    if is_unspaced_part(term:sub(-3)) then
         -- The whole match starts at the term, so the term has to be part of the replacement:
         -- returning just the neighbour deletes it.
-        text = text:gsub(escaped .. " +(" .. CJK_3BYTE .. ")", function(neighbour)
-            if is_cjk_part(neighbour) then
+        text = text:gsub(escaped .. " +(" .. UNSPACED_3BYTE .. ")", function(neighbour)
+            if is_unspaced_part(neighbour) then
                 return term .. neighbour
             end
             return nil
         end)
     end
 
-    if is_cjk_part(term:sub(1, 3)) then
-        text = text:gsub("(" .. CJK_3BYTE .. ") +" .. escaped, function(neighbour)
-            if is_cjk_part(neighbour) then
+    if is_unspaced_part(term:sub(1, 3)) then
+        text = text:gsub("(" .. UNSPACED_3BYTE .. ") +" .. escaped, function(neighbour)
+            if is_unspaced_part(neighbour) then
                 return neighbour .. term
             end
             return nil
@@ -568,6 +615,41 @@ end
 
 -- Puts the official terms back. Returns text and the number of tokens that went
 -- missing (a translator may drop a placeholder; the caller can then discard it).
+-- Spaces a service adds that the target language does not want, independent of any term or token:
+--
+--   * between two characters of a script that does not separate words with spaces (measured:
+--     "显示 小数位" for "Show decimals", "迷路了。 其他" for "lost. Other");
+--   * between such a character and an ASCII comma, full stop and friends, which the services emit
+--     freely in Chinese text ("任务等级 40,在那里").
+--
+-- Exported because it has to run even when a string carries no mask at all - unmask() returns early
+-- when it has no tokens, and a plain sentence that comes back with a space in the middle of it was
+-- left alone until this existed. The accept path calls it; unmask calls it for the masked case.
+function M.tidy(text)
+    -- Scope, and it is deliberately the narrow one.
+    --
+    -- The only space this file may remove is one that sits beside a token of *ours* - a restored glossary
+    -- term or a restored rich-text tag. Everything else in a translation belongs to the target language or
+    -- to the English source, and both of those keep their spaces:
+    --
+    --   * "在 HUD 上显示", "为 1 或 0", "屏幕 HUD 元素" - a space between Chinese and Latin or digits is what
+    --     Chinese typography wants, and the Latin is the English source text;
+    --   * "Language: 简体中文" - the colon is English, so the space after it is English spacing;
+    --   * classifying every space in the user's real stores by the scripts on either side gives 105
+    --     CJK/punctuation, 83 Latin+CJK and 67 CJK+Latin, and *zero* CJK+CJK. There is no corpus behind a
+    --     wider rule.
+    --
+    -- Two wider versions were written and removed on that evidence: removing a space between two CJK
+    -- characters (the stores contain none, and the term branch below already covers the measured case), and
+    -- removing one between CJK and ASCII punctuation (it broke "Language: 简体中文" - the colon is the
+    -- source's, not the service's).
+    --
+    -- The term and markup branches in tighten_script_boundary() are where the real work happens. This
+    -- function exists so that the accept path can run the markup half even when a string carries no mask at
+    -- all, because unmask() returns early without tokens.
+    return text
+end
+
 function M.unmask(text, tokens, expected)
     if type(text) ~= "string" then
         return text, 0
@@ -623,6 +705,8 @@ function M.unmask(text, tokens, expected)
             result = tighten_script_boundary(result, token.term)
         end
     end
+
+    result = M.tidy(result)
 
     -- The third value names the tokens, so a caller can retry with just those sent as plain text
     -- (see relax_mask in online.lua).

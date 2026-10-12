@@ -2701,6 +2701,14 @@ function accept_translation(mod, req, raw, src)
         return false, "the service returned an empty answer", false, "empty"
     end
 
+    -- The typographic tidy runs even when this request carried no mask at all: unmask() returns early
+    -- without tokens, and a plain sentence that came back with a space in the middle of it ("显示 小数位")
+    -- was stored as-is until this existed. Cheap, and it can only remove a space the target language does
+    -- not want.
+    if type(glossary) == "table" and glossary.tidy then
+        raw = glossary.tidy(raw)
+    end
+
     local restored, missing, missing_indices = glossary.unmask(raw, req.tokens, req.masked)
     req.missing = missing_indices
     if missing and missing > 0 then
