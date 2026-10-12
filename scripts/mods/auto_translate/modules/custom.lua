@@ -88,6 +88,37 @@ local PRESETS = {
     },
 }
 
+-- Writes the selected preset's values into the settings, so the fields a player can see say what the
+-- request will actually send.
+--
+-- The request does not depend on this - spec() reads the preset itself - but the settings screen shows the
+-- stored values, and a preset that leaves them showing the previous service is a screen that lies. DMF has
+-- no setting-changed callback and its dropdown resolves visibility through a file-local function, so this
+-- runs where the endpoint is actually used (a test, or a request going out) and the fields catch up the
+-- next time the screen is opened. Returns how many fields it wrote.
+function M.sync_preset(mod)
+    if type(mod) ~= "table" or type(mod.get) ~= "function" or type(mod.set) ~= "function" then
+        return 0
+    end
+    local chosen = mod:get("custom_preset")
+    if type(chosen) ~= "string" or chosen == "" or chosen == "custom" then
+        return 0
+    end
+    local preset = PRESETS[chosen]
+    if not preset then
+        return 0
+    end
+    local written = 0
+    for _, field in ipairs({ "url", "auth", "headers", "method", "content_type", "body", "path", "langs" }) do
+        local value = preset[field]
+        if type(value) == "string" and mod:get("custom_" .. field) ~= value then
+            mod:set("custom_" .. field, value)
+            written = written + 1
+        end
+    end
+    return written
+end
+
 -- The preset names, in the order a player should see them.
 M.PRESET_ORDER = { "deepl", "google_v2", "azure_v3" }
 

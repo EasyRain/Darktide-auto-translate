@@ -1946,6 +1946,12 @@ function M.start(mod, report, lang)
     -- model on disk and (asynchronously) in memory.
     if is_local then
         providers = {}
+
+    -- A selected preset is the request's source of truth, but the settings screen shows the stored fields:
+    -- write them once here so the two agree before the first request goes out.
+    if custom and custom.sync_preset then
+        pcall(custom.sync_preset, mod)
+    end
     elseif #providers == 0 then
         util.info(mod, "engine '%s' has no online provider for '%s'", engine, tostring(lang))
         return false
@@ -3930,6 +3936,11 @@ function M.probe(mod, lang)
     -- model), testing DeepL would ask for a key the player does not have and miss the point of
     -- the button. The free tier has up to three providers, and the first is the one a run
     -- would try first.
+    -- Make the visible fields agree with the preset before anything is built from them.
+    if provider == "custom" and custom and custom.sync_preset then
+        custom.sync_preset(mod)
+    end
+
     local engine = engines.resolve(mod, lang)
     local provider = engines.api_provider(mod)
     if engine == "online_free" then

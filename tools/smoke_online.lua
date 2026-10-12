@@ -2367,6 +2367,23 @@ check("presets: azure reads the reply from an array", azure.path, "0.translation
 check("presets: and the JSON body escapes a quote",
     cu.build(azure, azure_values_built), [==[[{"Text":"He said \"hi\""}]]==])
 
+-- sync_preset writes the selected preset into the fields the screen shows, so the two cannot disagree.
+-- It is idempotent, and it does nothing when the player is on Custom.
+do
+    local saved = { custom_preset = "google_v2", custom_url = "https://api-free.deepl.com/v2/translate",
+        custom_body = "text={text}&source_lang={source}&target_lang={target}" }
+    local mod = {
+        get = function(_, key) return saved[key] end,
+        set = function(_, key, value) saved[key] = value end,
+    }
+    check("presets: syncing writes the fields", cu.sync_preset(mod) > 0, true)
+    check("presets: ...and the url becomes the preset's", saved.custom_url,
+        cu.preset("google_v2").url)
+    check("presets: ...and it is idempotent", cu.sync_preset(mod), 0)
+    saved.custom_preset = "custom"
+    check("presets: on Custom it changes nothing", cu.sync_preset(mod), 0)
+end
+
 -- A preset is a request shape, never a credential: with no key typed, the auth line is empty and
 -- nothing is sent that the player did not enter.
 local keyless = cu.spec(fake_mod_with({ custom_preset = "google_v2" }))
