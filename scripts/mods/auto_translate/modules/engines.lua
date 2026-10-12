@@ -25,9 +25,12 @@ local util
 local store
 local services        -- modules/services.lua, injected: a service may legitimately need no key
 
-function M.init(u, s)
+function M.init(u, s, v)
     util = u
     store = s
+    -- Injected, and the signature is the part that matters: an earlier version of this added the assignment
+    -- below without the parameter, so `v` was nil, services stayed nil, and Automatic went on ignoring a
+    -- keyless service even though resolve() had been taught about it.
     services = v
 end
 

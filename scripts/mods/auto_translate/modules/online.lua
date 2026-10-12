@@ -2315,37 +2315,6 @@ end
 -- have died with "attempt to call a nil value" instead of doing its job.
 local accept_translation
 local fail_item
--- The Test button sits under the service dropdown, so it reads as "test the service I picked" while by
--- design it tests whatever a run would use. In Automatic the online API is preferred, so if the free tier
--- answered instead, the honest message is *why* the API was not usable - not a vague "that is what would
--- have been used". Reported by the user, who read a green result as "no key is fine".
---
--- Defined here, at file scope: the first version of this lived inside another function, so M.probe called a
--- nil global and the whole smoke run died after 320 passing assertions.
-local function probe_which_provider(mod, tested, engine)
-    local selected = engines.api_provider(mod)
-    if not tested or not selected or tostring(tested) == tostring(selected) then
-        return
-    end
-    if engine == "online_free" then
-        -- The player chose the free tier; there is nothing wrong with the API.
-        util.popup(mod, "custom_test_engine_free", tostring(tested))
-        return
-    end
-    -- Automatic (or any other tier) wanted the API and did not get it. Say why, from the same facts the
-    -- engine check uses. A described service may legitimately need no key at all (a LibreTranslate instance
-    -- you host yourself), so "no key" is only the reason when the selected provider actually wants one.
-    local selected_provider = engines.api_provider(mod)
-    local reason
-    if selected_provider ~= "libretranslate"
-        and (mod:get("online_api_key") == nil or mod:get("online_api_key") == "") then
-        reason = mod:localize("custom_test_reason_no_key")
-    end
-    if not reason then
-        reason = mod:localize("custom_test_reason_not_configured")
-    end
-    util.popup(mod, "custom_test_api_unusable", tostring(reason), tostring(tested))
-end
 
 -- A request built from a *description* rather than from the native core: the custom endpoint, whose
 -- request the player wrote, or a service out of modules/services.lua (LibreTranslate). They share the same
@@ -3656,6 +3625,12 @@ M.native_batch_for_tests = native_batch_for
 -- Extracted (and exposed below) because this is the rule that decides what a batched request
 -- says: the rest of the path is transport, and the smoke test can only check what it can call.
 local function join_batch_impl(items, provider)
+    -- Set here rather than trusting the caller's order: this is where the markers are laid down, and a path
+    -- that reached it before the dispatch had set the variant sent the internal ⟦n⟧ form instead. A
+    -- self-hosted LibreTranslate drops those outright, so an item carrying rich-text markup came back with
+    -- no tags at all and the guard refused it - "the rich-text tags differ (... translation none)" in the
+    -- log, with the tags intact in every isolated test of this path. The provider is an argument here.
+    current_wire = wire_for(provider)
     local parts, tokens, lines = {}, {}, {}
     for i, one in ipairs(items) do
         local masked, item_tokens = glossary.mask(one.en, M.state.lang, not MARKUP_SAFE[provider])
@@ -3930,20 +3905,26 @@ function M.update(mod, dt)
                 local body = len > 0 and ffi.string(body_buf, len) or ""
                 util.info(mod, "test reply (%d bytes) from %s: %s", #body, tostring(req.describe), body)
                 if result ~= 0 then
-                    util.popup(mod, "custom_test_transport", tostring(result))
+                    util.popup(mod, "custom_test_failed_provider", tostring(req.provider), tostring(result))
                 elseif http_code < 200 or http_code >= 300 then
                     local key = custom and custom.error_key(http_code)
                     -- The service's own sentence, when it wrote one: DeepL answers a bad
-                    -- parameter with "Value for 'source_lang' not supported", which is the
-                    -- whole diagnosis. The status alone leaves eight fields to guess between.
+                    -- parameter with "Value for 'source_lang' not supported", and a self-hosted
+                    -- LibreTranslate without that language's model answers "ja is not supported" - which is
+                    -- the whole diagnosis. Naming the provider matters just as much as the sentence: the
+                    -- user saw "HTTP 400: ja is not supported" and reasonably read it as the mod being
+                    -- broken, when it was their instance missing a model.
                     local said = custom and custom.error_message(core, body, out_buf,
                                                                   SMALL_CAP, ffi.string)
+                    local reason
                     if said and not key then
-                        util.popup(mod, "custom_test_failed",
-                            string.format("HTTP %d: %s", http_code, said))
+                        reason = string.format("HTTP %d: %s", http_code, said)
+                    elseif key then
+                        reason = mod:localize(key, tostring(http_code))
                     else
-                        util.popup(mod, key or "custom_test_failed", tostring(http_code))
+                        reason = string.format("HTTP %d", http_code)
                     end
+                    util.popup(mod, "custom_test_failed_provider", tostring(req.provider), reason)
                 else
                     local why
                     local n = read_response(req, body, function(_, message) why = message end)
@@ -3970,17 +3951,28 @@ function M.update(mod, dt)
                         --
                         -- req.provider, not the local `provider`: that name does not exist in this
                         -- function, so the first version of this passed nil and did nothing at all.
+                        -- Who answered goes into the message itself, and so does the reason when it was
+                        -- not the service the player picked: the button sits under the service dropdown, so
+                        -- a bare "Reload Speed -> 装填速度" reads as "the service I picked works" even when
+                        -- a free provider answered. The user reported exactly that with DeepL selected and
+                        -- no key entered, and then asked for the reason in the same popup rather than in a
+                        -- second one.
                         local answered = tostring(req.provider or "?")
                         local selected = tostring(engines.api_provider(mod) or "")
-                        -- One message, always naming who answered: the user's suggestion, and simpler than
-                        -- a follow-up popup - the provider is in the line the player is already reading.
-                        util.popup(mod, "custom_test_ok", req.item.en, answer, answered)
-                        if answered ~= selected then
-                            -- And when it was not the service they picked, say why the API was not used.
-                            -- The engine *setting*, not the resolved tier: engines.resolve() answers
-                            -- "online_free" for Automatic whenever no key is set, and passing that on made
-                            -- Automatic look like a deliberate choice of the free tier.
-                            probe_which_provider(mod, answered, mod:get("engine"))
+                        if answered == "" or answered == selected then
+                            util.popup(mod, "custom_test_ok", req.item.en, answer, answered)
+                        else
+                            local reason
+                            if mod:get("engine") == "online_free" then
+                                -- A deliberate choice of the free tier: nothing is wrong with the API.
+                                reason = mod:localize("custom_test_reason_free_engine")
+                            elseif selected ~= "libretranslate"
+                                and (mod:get("online_api_key") == nil or mod:get("online_api_key") == "") then
+                                reason = mod:localize("custom_test_reason_no_key")
+                            else
+                                reason = mod:localize("custom_test_reason_not_configured")
+                            end
+                            util.popup(mod, "custom_test_ok_other", req.item.en, answer, answered, reason)
                         end
                     end
                 end

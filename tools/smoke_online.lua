@@ -1480,6 +1480,34 @@ do
 end
 
 -- ---------------------------------------------------------------------------
+-- What Automatic picks, behaviourally.
+--
+-- engines.resolve() decides which tier a run uses, and "is the API usable" used to mean "is a key set". That
+-- left a keyless service (a LibreTranslate instance you host yourself) unused on Automatic, and the first
+-- attempt to fix it added the assignment without the init parameter, so it went on being unused while the
+-- change looked applied. Only calling resolve() says which it is.
+-- ---------------------------------------------------------------------------
+do
+    local svc = require("scripts/mods/auto_translate/modules/services")
+    local eng = assert(loadfile("scripts/mods/auto_translate/modules/engines.lua"))()
+    eng.init(nil, nil, svc)
+
+    local function mod_with(values)
+        return { get = function(_, id) return values[id] end, localize = function(_, id) return id end }
+    end
+    local cases = {
+        { "automatic + LibreTranslate, no key -> the API tier", { engine = "auto", api_provider = "libretranslate" }, "online_api" },
+        { "automatic + DeepL, no key -> the free tier",         { engine = "auto", api_provider = "deepl" }, "online_free" },
+        { "automatic + DeepL, with a key -> the API tier",      { engine = "auto", api_provider = "deepl", online_api_key = "k" }, "online_api" },
+        { "automatic + custom, no key -> the free tier",        { engine = "auto", api_provider = "custom" }, "online_free" },
+        { "automatic + baidu, no key -> the free tier",         { engine = "auto", api_provider = "baidu" }, "online_free" },
+    }
+    for _, case in ipairs(cases) do
+        check("resolve: " .. case[1], eng.resolve(mod_with(case[2]), "zh-cn"), case[3])
+    end
+end
+
+-- ---------------------------------------------------------------------------
 -- The wire form, in both variants, round-trip.
 --
 -- This is here because the round-trip caught a real bug the moment it was written: a bracketed label goes
@@ -1784,8 +1812,11 @@ do
 
     -- A 400 with a service sentence on it: what the player sees is that sentence, not the
     -- response path.
+    -- Key, provider, reason: the popup names the service as well as the sentence, because a bare
+    -- "HTTP 400: ja is not supported" reads as the mod being broken (reported exactly that way, when it was
+    -- the instance missing that language's model).
     local sentences = {}
-    online.init({ popup = function(_, key, ...) sentences[#sentences + 1] = select(1, ...) end,
+    online.init({ popup = function(_, key, ...) sentences[#sentences + 1] = { key, select(1, ...), select(2, ...) } end,
                   info = function() end, warn = function() end, log = function() end },
                 nil, probe_glossary, probe_engines, nil, cu)
     status = 400
@@ -1800,7 +1831,9 @@ do
     end
     online.probe(probe_mod, "zh-cn")
     online.update(probe_mod, 0.016)
-    check("probe: a 400 shows the service's own sentence", sentences[1],
+    check("probe: a 400 names the provider that failed", sentences[1] and sentences[1][1],
+        "custom_test_failed_provider")
+    check("probe: a 400 shows the service's own sentence", sentences[1] and sentences[1][3],
         "HTTP 400: Bad request. Reason: Value for 'source_lang' not supported.")
     fake_http_core.at_json_string_at = extract_translation
 
