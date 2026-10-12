@@ -1330,11 +1330,30 @@ do
     local provider = by_id.api_provider
     local custom_option = provider and provider.options and provider.options[2]
 
-    check("settings: the API service dropdown owns the custom-endpoint fields",
-        provider ~= nil and provider.sub_widgets ~= nil and #provider.sub_widgets == 10, true)
-    check("settings: picking Custom asks DMF for all ten of them",
+    -- Twelve since 0.3.10: the preset dropdown joined them, and it has to be first so that DMF draws it
+    -- above the fields it governs.
+    check("settings: the API service dropdown owns the custom-endpoint widgets",
+        provider ~= nil and provider.sub_widgets ~= nil and #provider.sub_widgets == 12, true)
+    check("settings: the first of them is the preset dropdown",
+        provider ~= nil and provider.sub_widgets ~= nil and provider.sub_widgets[1] ~= nil
+            and provider.sub_widgets[1].setting_id == "custom_preset", true)
+    -- Twelve: the preset dropdown first, then the nine request fields, the region and the test button. The
+    -- test button matters - a list that stops at eleven would make it permanently invisible.
+    check("settings: picking Custom asks DMF for all twelve of them",
         custom_option ~= nil and custom_option.value == "custom"
-            and custom_option.show_widgets ~= nil and #custom_option.show_widgets == 10, true)
+            and custom_option.show_widgets ~= nil and #custom_option.show_widgets == 12, true)
+    -- A dropdown's show_widgets are resolved against *its own* sub_widgets (core/options.lua:325) and DMF
+    -- throws on a dangling index, so the preset's own options must not carry a list: they own nothing.
+    local preset_widget = provider and provider.sub_widgets and provider.sub_widgets[1]
+    local preset_options_clean = preset_widget ~= nil and preset_widget.options ~= nil
+    if preset_options_clean then
+        for _, option in ipairs(preset_widget.options) do
+            if option.show_widgets ~= nil then
+                preset_options_clean = false
+            end
+        end
+    end
+    check("settings: the preset options own no widgets of their own", preset_options_clean, true)
 
     if provider and custom_option then
         local dangling = 0
@@ -1357,10 +1376,11 @@ do
             end
         end
 
-        check("settings: and the ten are the nine custom fields plus the test button",
-            shown.custom_url and shown.custom_key and shown.custom_auth and shown.custom_method
-                and shown.custom_content_type and shown.custom_body and shown.custom_langs
-                and shown.custom_headers and shown.custom_path and shown.test_custom_api, true)
+        check("settings: and the twelve are the preset, the nine fields, the region and the test button",
+            shown.custom_preset and shown.custom_url and shown.custom_key and shown.custom_auth
+                and shown.custom_method and shown.custom_content_type and shown.custom_body
+                and shown.custom_langs and shown.custom_headers and shown.custom_path
+                and shown.custom_region and shown.test_custom_api, true)
     end
 end
 
@@ -2316,3 +2336,50 @@ end
 
 print(string.format("%d failure(s) in total", failures))
 os.exit(failures == 0 and 0 or 1)
+
+
+-- ---------------------------------------------------------------------------
+-- custom.lua: the presets
+--
+-- Each preset is the nine-field request shape of a service, verified against that service's own
+-- documentation. What is checked here is that the shape survives the module: the fields arrive, the
+-- placeholders are substituted (including in a header, where the first version left them literal), and
+-- the JSON body stays valid with a quote in the text.
+-- ---------------------------------------------------------------------------
+check("presets: the three names are offered", #cu.PRESET_ORDER, 3)
+check("presets: in the promised order", cu.PRESET_ORDER[2], "google_v2")
+
+local google = cu.preset("google_v2")
+check("presets: google keeps the key in the query", google.url:find("?key={key}", 1, true) ~= nil, true)
+check("presets: google asks for plain text", google.body:find("format=text", 1, true) ~= nil, true)
+check("presets: google reads the v2 wrapper", google.path, "data.translations.0.translatedText")
+
+local azure_values = { custom_preset = "azure_v3", custom_key = "AZKEY", custom_region = "westeurope" }
+local azure = cu.spec(fake_mod_with(azure_values))
+local azure_values_built = cu.values(azure, 'He said "hi"', "en", "zh-cn")
+check("presets: azure sends the api-version", azure.url:find("api-version=3.0", 1, true) ~= nil, true)
+local azure_headers = cu.build_headers(azure, azure_values_built)
+check("presets: azure sends the key header",
+    azure_headers:find("Ocp-Apim-Subscription-Key: AZKEY", 1, true) ~= nil, true)
+check("presets: and the region, substituted rather than literal",
+    azure_headers:find("Ocp-Apim-Subscription-Region: westeurope", 1, true) ~= nil, true)
+check("presets: azure reads the reply from an array", azure.path, "0.translations.0.text")
+check("presets: and the JSON body escapes a quote",
+    cu.build(azure, azure_values_built), [==[[{"Text":"He said \"hi\""}]]==])
+
+-- A preset is a request shape, never a credential: with no key typed, the auth line is empty and
+-- nothing is sent that the player did not enter.
+local keyless = cu.spec(fake_mod_with({ custom_preset = "google_v2" }))
+check("presets: no key means no key", keyless.key, "")
+
+-- The shipped DeepL defaults and PRESETS.deepl have to say the same thing, or switching preset
+-- silently changes what "Custom, untouched" does. The data file is checked as text, whitespace
+-- flattened, so a reflow does not break it.
+local data_path = here .. "/../scripts/mods/auto_translate/auto_translate_data.lua"
+local data_text = (io.open(data_path, "rb"):read("*a")):gsub("%s+", " ")
+local deepl = cu.preset("deepl")
+for _, field in ipairs({ "url", "body", "path" }) do
+    local value = (deepl[field]:gsub("%s+", " "))
+    check("presets: the shipped default matches the preset (" .. field .. ")",
+        data_text:find(value, 1, true) ~= nil, true)
+end

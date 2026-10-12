@@ -110,7 +110,7 @@ return {
                             -- unless this option is the selected value (the indices are
                             -- positions in `sub_widgets`, 1-based).
                             { text = "api_custom", value = "custom",
-                              show_widgets = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 } },
+                              show_widgets = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 } },
                         },
                         -- The custom endpoint. Every field here exists because no two services
                         -- agree on anything: the URL, how the key is sent, whether the query goes
@@ -124,6 +124,21 @@ return {
                         -- another service - and because they are the settings' own values (not
                         -- hidden substitutions), what the box shows is exactly what is sent.
                         sub_widgets = {
+                            {
+                                -- Choosing a preset *writes* the nine request fields below, so what the
+                                -- screen shows is what the request will send - one source of truth, and no
+                                -- second place for them to drift apart. The key and the region are always
+                                -- the player's: a preset is a request shape, never a credential.
+                                setting_id = "custom_preset",
+                                type = "dropdown",
+                                default_value = "custom",
+                                options = {
+                                    { text = "preset_custom", value = "custom" },
+                                    { text = "preset_deepl", value = "deepl" },
+                                    { text = "preset_google_v2", value = "google_v2" },
+                                    { text = "preset_azure_v3", value = "azure_v3" },
+                                },
+                            },
                             {
                                 setting_id = "custom_url",
                                 type = "text",
@@ -193,6 +208,14 @@ return {
                                 type = "text",
                                 default_value = "translations.0.text",
                                 max_length = 128,
+                            },
+                            {
+                                -- Azure wants its resource's region in a header of its own; every other
+                                -- service leaves this empty.
+                                setting_id = "custom_region",
+                                type = "text",
+                                default_value = "",
+                                max_length = 64,
                             },
                             {
                                 setting_id = "test_custom_api",
