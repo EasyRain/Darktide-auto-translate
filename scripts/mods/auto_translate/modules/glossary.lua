@@ -644,6 +644,12 @@ function M.tidy(text)
     -- removing one between CJK and ASCII punctuation (it broke "Language: 简体中文" - the colon is the
     -- source's, not the service's).
     --
+    -- Fullwidth punctuation was measured too, because it is the one mark that cannot have come from the
+    -- English source and so would be unambiguous: a space beside a fullwidth comma, colon or bracket, in
+    -- either direction, occurs zero times across every store. The single hit was " 删除？无法撤销！ " and its
+    -- English source is " Delete? NO UNDO! " - the spaces are the source's own edges, preserved. DeepL wrote
+    -- the fullwidth question and exclamation marks with no space around them, unasked.
+    --
     -- The term and markup branches in tighten_script_boundary() are where the real work happens. This
     -- function exists so that the accept path can run the markup half even when a string carries no mask at
     -- all, because unmask() returns early without tokens.
