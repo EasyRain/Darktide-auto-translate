@@ -1778,6 +1778,22 @@ end
 
 -- Sends one check request. Mirrors the dispatch's request building, minus masking: the sample is
 -- plain text, and what is being measured is whether the endpoint answers at all.
+-- A provider may need a second value beside its key: Azure the resource's region (a header of its own),
+-- Baidu an appid (half of its signature). The core holds each until its next call, so *every* place that
+-- builds a request has to set them - the run, the free-tier probe and the test button.
+--
+-- This was three copies of the same two lines, which is how the appid ended up handed over in one of them
+-- and forgotten in the other two: at_cli tested fine while a real run would have failed to build a Baidu
+-- request. One helper, so that cannot happen twice.
+local function hand_over_provider_options(mod, provider)
+    if provider == "azure" then
+        core.at_online_set_region(mod:get("azure_region") or "")
+    elseif provider == "baidu" then
+        core.at_online_set_appid(mod:get("baidu_appid") or "")
+    end
+end
+M.hand_over_provider_options_for_tests = hand_over_provider_options
+
 local function tier_probe_send(mod, provider)
     local ffi = Mods.lua.ffi
     local api_key = nil
@@ -1787,17 +1803,8 @@ local function tier_probe_send(mod, provider)
             return false
         end
     end
-    -- Two providers need a second value beside the key: Azure the resource's region (a header of its own)
-    -- and Baidu an appid (half of the signature). The core holds each until the next call.
-    if provider == "azure" then
-        core.at_online_set_region(mod:get("azure_region") or "")
-    elseif provider == "baidu" then
-        core.at_online_set_appid(mod:get("baidu_appid") or "")
-    end
-    -- Azure keeps its resource's region in a header of its own; the core holds it until the next call.
-    if provider == "azure" then
-        core.at_online_set_region(mod:get("azure_region") or "")
-    end
+    hand_over_provider_options(mod, provider)
+    hand_over_provider_options(mod, provider)
     if core.at_online_host(provider, api_key, host_buf, 512) == 0 or
         core.at_online_path(provider, api_key, "en", M.state.lang or "en", TIER_PROBE_TEXT,
             path_buf, PATH_CAP) == 0 or
@@ -2543,10 +2550,7 @@ local function dispatch(mod)
         end
     end
 
-    -- Azure keeps its resource's region in a header of its own; the core holds it until the next call.
-    if provider == "azure" then
-        core.at_online_set_region(mod:get("azure_region") or "")
-    end
+    hand_over_provider_options(mod, provider)
     if core.at_online_host(provider, api_key, host_buf, 512) == 0 then
         M.state.last_error = cstr(core.at_online_error())
         M.state.failed = M.state.failed + 1
@@ -4094,10 +4098,7 @@ function M.probe(mod, lang)
                 return false
             end
         end
-        -- Azure keeps its resource's region in a header of its own; the core holds it until the next call.
-    if provider == "azure" then
-        core.at_online_set_region(mod:get("azure_region") or "")
-    end
+        hand_over_provider_options(mod, provider)
     if core.at_online_host(provider, api_key, host_buf, 512) == 0
             or core.at_online_path(provider, api_key, "en", lang, masked, path_buf, PATH_CAP) == 0 then
             util.popup(mod, "custom_test_failed", tostring(cstr(core.at_online_error())))

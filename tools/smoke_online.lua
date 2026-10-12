@@ -1427,6 +1427,34 @@ end
 
 -- One key, entered once: an empty 'Custom: key' falls back to the API key, which is what
 -- makes the pre-filled DeepL defaults runnable without pasting the key twice.
+-- ---------------------------------------------------------------------------
+-- The per-provider options (Azure's region, Baidu's appid) are handed to the core by one helper, and every
+-- place that builds a request has to call it. This is a source-level assertion on purpose: the bug it
+-- guards against was invisible to every runtime test we have. The appid was handed over in the free-tier
+-- probe only, so at_cli (which sets it directly) passed while a real run could not build a Baidu request at
+-- all - and a Lua-level test cannot catch that, because the core is a local inside the module.
+-- ---------------------------------------------------------------------------
+do
+    local file = io.open("scripts/mods/auto_translate/modules/online.lua", "r")
+    local src = file and file:read("*a") or ""
+    if file then file:close() end
+
+    local function count(needle)
+        local n, at = 0, 1
+        while true do
+            local i = src:find(needle, at, true)
+            if not i then return n end
+            n, at = n + 1, i + #needle
+        end
+    end
+
+    check("handover: the core setters are called in exactly one place (the helper)",
+        count("core.at_online_set_region(") == 1 and count("core.at_online_set_appid(") == 1, true)
+    -- The run, the free-tier probe and the test button.
+    check("handover: and every request builder calls that helper",
+        count("hand_over_provider_options(mod, provider)") >= 3, true)
+end
+
 check("custom: an empty key falls back to the API key",
     cu.spec(fake_mod_with({ custom_url = "https://a.example.com/x",
                             online_api_key = "from-the-api-field" })).key, "from-the-api-field")
