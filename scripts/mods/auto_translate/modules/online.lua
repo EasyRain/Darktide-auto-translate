@@ -1826,49 +1826,12 @@ local function hand_over_provider_options(mod, provider)
     if provider == "azure" then
         core.at_online_set_region(mod:get("azure_region") or "")
     elseif provider == "baidu" then
+        -- Not logged here, deliberately: this function sits at LuaJIT's 60-upvalue ceiling (adding a local,
+        -- or even a reference to the module table, fails to compile the whole file), and the diagnosis a
+        -- player needs is already in the failure popup - it names the provider and repeats Baidu's own
+        -- sentence. The appid is visible on the settings screen either way.
         core.at_online_set_appid(mod:get("baidu_appid") or "")
     end
-end
-M.hand_over_provider_options_for_tests = hand_over_provider_options
-
-local function tier_probe_send(mod, provider)
-    local ffi = Mods.lua.ffi
-    local api_key = nil
-    if provider_needs_key(provider) then
-        api_key = mod:get("online_api_key")
-        if type(api_key) ~= "string" or api_key == "" then
-            return false
-        end
-    end
-    hand_over_provider_options(mod, provider)
-    hand_over_provider_options(mod, provider)
-    if core.at_online_host(provider, api_key, host_buf, 512) == 0 or
-        core.at_online_path(provider, api_key, "en", M.state.lang or "en", TIER_PROBE_TEXT,
-            path_buf, PATH_CAP) == 0 or
-        core.at_online_headers(provider, api_key, headers_buf, 1024) == 0 then
-        return false
-    end
-
-    local job
-    if core.at_online_uses_post(provider) == 1 then
-        if core.at_online_body(provider, "en", M.state.lang or "en", TIER_PROBE_TEXT,
-            body_buf, BODY_CAP) == 0 then
-            return false
-        end
-        job = core.at_http_post(host_buf, path_buf, core.at_online_content_type(provider),
-            headers_buf, body_buf)
-    else
-        job = core.at_http_get_ex(host_buf, path_buf, headers_buf)
-    end
-    if job <= 0 then
-        return false
-    end
-
-    inflight = { kind = "tier_probe", provider = provider, job = job }
-    tier_probe.provider = provider
-    tier_probe.sent_at = elapsed
-    util.log(mod, "checking %s", tostring(provider))
-    return true
 end
 
 -- Drives the check from M.update. True means "still checking, hold the queue".
