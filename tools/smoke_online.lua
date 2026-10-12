@@ -653,6 +653,38 @@ check("scanner: unchanged is not", scanner.is_local_source("unchanged"), false)
 check("scanner: nil is not", scanner.is_local_source(nil), false)
 
 -- ---------------------------------------------------------------------------
+-- A space the service inserts between two placeholders that were adjacent in the source.
+--
+-- The user''s last find, with the distribution that made it actionable: DeepL does not do this, Baidu does.
+-- "{#color(144,155,136)}[X]{#reset()}" was stored as "{#color(144,155,136)} [X]{#reset()}" - a leading space in
+-- a tooltip. The earlier space rule could not see it: that one wants a Chinese neighbour, and this side is
+-- "[X]", a source glyph we masked ourselves.
+--
+-- The rule compares with the source rather than guessing: only a space between two placeholders that are
+-- adjacent in the source is the service''s. A space the source itself had is left where it is.
+-- ---------------------------------------------------------------------------
+do
+    local g = assert(loadfile(here .. "/../scripts/mods/auto_translate/modules/glossary.lua"))()
+    g.init({ MOD_DIR = ".", file_exists = function() return false end,
+             load_lua_file = function() return nil, "stub" end, log = function() end })
+    local O, C = g.placeholder_open(), "⟧"
+    local function ph(i) return O .. tostring(i) .. C end
+
+    local source = "{#color(144,155,136)}[X]{#reset()}"
+    local masked, tokens = g.mask(source, "zh-cn", true)
+    local inserted = masked:gsub("(" .. O .. "%d+" .. C .. ")", "%1 ", 1)
+    check("service space: a space the source did not have is removed",
+        g.unmask(inserted, tokens, masked), source)
+    check("service space: and the untouched reply is unchanged",
+        g.unmask(masked, tokens, masked), source)
+
+    -- a space between two placeholders the source kept apart stays where it is
+    local apart = ph(0) .. " " .. ph(1)
+    check("service space: a source space survives",
+        g.unmask(apart, {}, apart), apart)
+end
+
+-- ---------------------------------------------------------------------------
 -- The in-memory reuse map does not outlive the engine that filled it.
 --
 -- The user switched DeepL -> Baidu and got a file with two entries still reading src = "deepl" and DeepL's

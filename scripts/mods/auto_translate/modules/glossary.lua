@@ -695,6 +695,28 @@ function M.unmask(text, tokens, expected)
         end
     end
 
+    -- A space the service put between two placeholders that were adjacent in the source.
+    --
+    -- Measured against Baidu: "{#color(144,155,136)}[X]{#reset()}" came back as "{#color(144,155,136)} [X]{#reset()}",
+    -- and DeepL does not do it. The earlier rule could not see it - that one asks for a Chinese neighbour, and
+    -- this side is "[X]", a source glyph we masked ourselves.
+    --
+    -- Comparing with the source is what makes this safe rather than another guess: a space between two tokens
+    -- that the source kept apart (two terms in a phrase) is left alone, because the source has the same space
+    -- in the same place. Only the service's own insertion goes.
+    if type(expected) == "string" and expected ~= "" then
+        local pair = "(" .. PLACEHOLDER_OPEN .. "%s*(%d+)%s*" .. PLACEHOLDER_CLOSE .. ") +"
+            .. "(" .. PLACEHOLDER_OPEN .. "%s*(%d+)%s*" .. PLACEHOLDER_CLOSE .. ")"
+        text = text:gsub(pair, function(left, i, right, j)
+            local canon = PLACEHOLDER_OPEN .. tostring(tonumber(i)) .. PLACEHOLDER_CLOSE
+                .. PLACEHOLDER_OPEN .. tostring(tonumber(j)) .. PLACEHOLDER_CLOSE
+            if expected:find(canon, 1, true) then
+                return left .. right
+            end
+            return nil
+        end)
+    end
+
     local result = text:gsub(PLACEHOLDER_OPEN .. "%s*(%d+)%s*" .. PLACEHOLDER_CLOSE, function(index)
         local token = tokens[tonumber(index) + 1]
         if token then
