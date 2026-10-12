@@ -804,15 +804,20 @@ mod.on_setting_changed = function(setting_id)
             util.info(mod, "target language set to: %s", tostring(mod:get("target_language")))
         elseif setting_id == "engine" then
             util.info(mod, "engine set to: %s", tostring(mod:get("engine")))
-            -- Answers cached in memory were produced by the engine being left behind, and a reused answer
-            -- carries its engine with it (online.shared_text): after DeepL -> Baidu, keys whose source text was
-            -- already cached were answered from DeepL's text without Baidu seeing them, and the file kept
-            -- DeepL's wording. This drops the shortcut only; the store is untouched and nothing re-translates
-            -- because of it.
-            online.clear_shared_text()
         elseif setting_id == "online_api_key" then
             -- a new key deserves a fresh attempt after a failure streak
             engines.reset(mod)
+        end
+
+        -- Answers cached in memory carry the engine that produced them, and a reused answer is written into
+        -- the file with that engine's marker (online.shared_text, store.set_entry). Switching the *service*
+        -- - Baidu to DeepL, which is what the player actually changes, since both are the API engine - left the
+        -- map full of the previous service's text, so keys whose source was already in it were "answered"
+        -- without a request (30 ms from queued to finished in the log) and the file kept the old wording and
+        -- the old src. Both settings are cleared here for that reason: `engine` picks the tier, `api_provider`
+        -- picks the service inside it.
+        if setting_id == "engine" or setting_id == "api_provider" then
+            online.clear_shared_text()
         end
 
         online.flush(mod)
