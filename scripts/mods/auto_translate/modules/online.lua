@@ -647,10 +647,9 @@ local COLOUR_TAG = "{#color%(%d+,%d+,%d+%)"
 local FONT_TAG = "{#font%([^)]+%)"
 local MARKUP_ANY = "{[#%w][^{}]*}"
 
--- A whole-string colour or font run whose text starts with one of these is an asset or a style name,
--- whatever its length or capitalisation. Counted over true_level.lua's palette, the names that had been
--- translated were led by `citadel` (163), `ui` (68), `terminal` (30) and `item` (18) - the user spotted the
--- pattern, and it is a harder signal than counting words.
+-- A mod that writes its own colour names uses these words to open them (`citadel` is the game's own table
+-- too, but a mod can borrow the shape). The game's table is consulted first, so this is the fallback for
+-- names the table does not know - the user's "keep the filter for colours a mod hand-writes".
 local ASSET_PREFIXES = { ui = true, terminal = true, text = true, citadel = true, item = true }
 
 -- The game's own colour table is the source of these names: scripts/foundation/utilities/color.lua defines a
@@ -697,76 +696,35 @@ local function first_word(text)
     return (word:gsub("^%p+", ""):gsub("%p+$", "")):lower()
 end
 
--- True when the run at `pattern` wraps a name rather than a sentence.
+-- True when a whole-string colour or font run wraps a name rather than a sentence.
+--
+-- Two hard signals only. The game's own colour table (Color.list, read above) is exact, and a mod that
+-- writes its own colour names uses the UI/asset prefixes. The case-and-length guesses this used to make are
+-- gone: measured over every store on this machine (19 files, 1352 entries), they marked nothing the table
+-- did not already cover - 0 entries - and a rule that cannot be shown to do anything is a rule that will
+-- quietly do the wrong thing later.
 local function wraps_a_name(text, pattern)
     local inside = text:match(pattern)
     if not inside then
         return false
     end
     inside = inside:gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
-    -- The game's own colour table settles it outright, and exactly.
     if is_game_colour_name(inside) then
         return true
     end
-    -- An asset prefix settles it outright: "citadel xv88", "ui scale", "terminal background selected",
-    -- "item rarity desaturated 1" are names no matter how long or how they are capitalised.
-    if ASSET_PREFIXES[first_word(inside) or ""] then
-        return true
-    end
-    local words = 0
-    for _ in inside:gmatch("%S+") do
-        words = words + 1
-    end
-    -- A swatch or a style name is written in Title Case; a sentence is not. Measured on NumericUI's
-    -- colour list: `{#color(216,237,190)}Ui Hud Green Super Light{#reset()}` is five words and was
-    -- translated ("Ui Hud 绿色超轻款" - "Light" read as a weight) while its four-word neighbours were
-    -- skipped, so the old limit of four words was simply too tight. Raising it alone went too far the
-    -- other way - `{#color(255,0,0)}Reload your weapon and fire{#reset()}` is five words and is a real
-    -- instruction - so a single lowercase word now decides it: names have none (`Fire and Ice` keeps
-    -- its "and", and is a list that should be translated), and the "Translate colour names" option
-    -- takes every one of them on regardless.
-    if words == 0 or words > 6 or inside:find("[%.%?!:]") ~= nil then
-        return false
-    end
-    -- A name is either entirely Title Case or entirely lower case, and a sentence mixes the two
-    -- ("Reload your weapon and fire", "Fire and Ice"). Case alone is not enough for the second half,
-    -- though: "your team is going down fast" is an all-lower-case sentence. Measured over
-    -- true_level.lua's palette - 435 styled names, every one of them five words or fewer (49 of one
-    -- word, 94 of two, 221 of three, 62 of four, 9 of five) - so an all-lower-case run is a name only
-    -- within five words, while Title Case allows six. Function words do not separate them either:
-    -- "citadel the fang grey" and "ui interaction point of interest" are names that contain one.
-    --
-    -- The residual risk is an all-lower-case sentence of five words or fewer, which is skipped and
-    -- shows in English; the "Translate colour names" option takes it on regardless.
-    local has_upper, has_lower_word, words = false, false, 0
-    for word in inside:gmatch("%S+") do
-        words = words + 1
-        local first = word:match("^%p*(%a)")
-        if first then
-            if first == first:upper() and first ~= first:lower() then
-                has_upper = true
-            elseif first == first:lower() and first ~= first:upper() then
-                has_lower_word = true
-            end
-        end
-    end
-    if has_upper and has_lower_word then
-        return false
-    end
-    if not has_upper and words > 5 then
-        return false
-    end
-    return true
+    return ASSET_PREFIXES[first_word(inside) or ""] == true
 end
 
 local function is_asset_entry(text)
     if type(text) ~= "string" then
         return false
     end
-    if wraps_a_name(text, "^{#color%(%d+,%d+,%d+%)}([^{}]*){#reset%(%)}$") then
+    -- A whole-string font run is a style or font name: structural, not a guess about its words, and the one
+    -- case the game's colour table cannot answer for.
+    if text:match("^{#font%([^)]+%)}([^{}]*){#reset%(%)}$") then
         return true
     end
-    if wraps_a_name(text, "^{#font%([^)]+%)}([^{}]*){#reset%(%)}$") then
+    if wraps_a_name(text, "^{#color%(%d+,%d+,%d+%)}([^{}]*){#reset%(%)}$") then
         return true
     end
     if text:find(COLOUR_TAG) == nil and text:find(FONT_TAG) == nil then

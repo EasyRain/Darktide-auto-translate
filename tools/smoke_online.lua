@@ -275,12 +275,22 @@ check("a styled sentence is not", online.is_asset_entry_for_tests(
     "{#color(255,0,0)}This sentence is styled.{#reset()}"), false)
 check("a list of two swatches is not one name", online.is_asset_entry_for_tests(
     "{#color(1,1,1)}Fire{#reset()} and {#color(2,2,2)}Ice{#reset()}"), false)
-check("a font entry with a sentence is not a name", online.is_asset_entry_for_tests(
-    "{#font(giant)}Pick up the ammo now{#reset()}"), false)
+-- A whole-string font run is a style name whatever it says: that is structural, and it is why this one is
+-- skipped. (The case, length and punctuation guesses this rule used to make were removed once the game's
+-- colour table turned out to cover every case they did - measured, 0 entries over 19 store files.)
+check("a font run is a style name", online.is_asset_entry_for_tests(
+    "{#font(giant)}Pick up the ammo now{#reset()}"), true)
 
 -- The regression that followed: requiring Title Case translated every lower-case colour name in
 -- true_level.lua's palette (476 entries, 431 of them colour names). A name is all Title Case OR all
 -- lower case; only a mixture is a sentence.
+-- The game's colour table (scripts/foundation/utilities/color.lua) is the rule's hardest signal: every mod
+-- with a colour picker iterates Color.list, which is why their lists are identical. The stub stands in for
+-- it here, and has to be in place before the asset assertions below. Names are underscored in the table,
+-- spaced in the strings.
+Color = { list = { "alice_blue", "citadel_agrax_earthshade", "cheeseburger", "tan", "maroon", "medium_purple",
+    "ui_health_default", "terminal_background_selected", "item_rarity_desaturated_1" } }
+
 check("a lower-case colour name is a swatch", online.is_asset_entry_for_tests(
     "{#color(240,248,255)}alice blue{#reset()}"), true)
 check("and a lower-case paint name", online.is_asset_entry_for_tests(
@@ -298,21 +308,16 @@ check("however long the name is", online.is_asset_entry_for_tests(
 check("a sentence is still a sentence", online.is_asset_entry_for_tests(
     "{#color(255,0,0)}your team is going down fast{#reset()}"), false)
 
--- The source itself: the game's Color table (scripts/foundation/utilities/color.lua), which every colour
--- picker in every mod iterates. Names in it are skipped exactly, which is why the heuristics no longer
--- have to guess - and the table is underscored while the strings have spaces.
-Color = { list = { "alice_blue", "citadel_agrax_earthshade", "cheeseburger",
-    "ui_health_default", "terminal_background_selected", "item_rarity_desaturated_1" } }
 check("a game colour name is a swatch", online.is_asset_entry_for_tests(
     "{#color(240,248,255)}alice blue{#reset()}"), true)
 check("even one the heuristics would let through", online.is_asset_entry_for_tests(
     "{#color(1,1,1)}terminal background selected{#reset()}"), true)
 check("and one that is really an instruction is still a sentence", online.is_asset_entry_for_tests(
     "{#color(255,0,0)}your team is going down fast{#reset()}"), false)
-check("a name outside the table still falls back to the heuristics", online.is_asset_entry_for_tests(
+check("a font entry is a name", online.is_asset_entry_for_tests(
     "{#font(giant)}Ammo{#reset()}"), true)
 check("asset: a colour swatch is left alone",
-    is_asset("{#color(162,158,145)}Rakarth Flesh{#reset()}"), true)
+    is_asset("{#color(162,158,145)}Medium Purple{#reset()}"), true)
 check("asset: a font-picker entry is left alone",
     is_asset("{#font(mono_tide_bold)}Mono Tide Bold{#reset()}"), true)
 check("asset: another font entry, with a raw id inside the tag",
@@ -324,8 +329,11 @@ check("asset: plain interface text is untouched",
 check("asset: an unstyled colour name is not an asset entry either",
     is_asset("Rakarth Flesh"), false)
 -- A styled *name* with nothing around it is still skipped (that is the swatch shape).
-check("asset: a colour tag wrapping a single name is skipped",
-    is_asset("{#color(14,127,120)}Cragtown{#reset()}"), true)
+-- A styled word the game's table does not know and that carries no asset prefix is translated now: the
+-- shape alone stopped being enough when the case, length and punctuation guesses were removed. (Measured:
+-- no such string exists in any store on this machine - the guesses marked 0 entries the table did not.)
+check("asset: a styled word outside the table is not a name on shape alone",
+    is_asset("{#color(14,127,120)}Cragtown{#reset()}"), false)
 -- What the user asked about: a sentence that merely *carries* colour must be translated, not skipped.
 check("asset: a coloured sentence is translated, not skipped",
     is_asset("{#color(255,0,0)}Warning: the reactor is failing{#reset()}"), false)
