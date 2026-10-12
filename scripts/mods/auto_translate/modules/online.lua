@@ -2982,6 +2982,10 @@ local REASON_KEYS = {
     { "Azure error 401000", "hud_reason_no_key" },
     { "Azure error 403001", "hud_reason_quota" },
     { "API key not valid", "hud_reason_no_key" },
+    -- Baidu answers 54003 (Invalid Access Limit) inside an HTTP 200, so the status-based rate-limit path
+    -- never sees it; the free tier allows very few requests per second, which is exactly what a burst of
+    -- labels hits. The player gets the quota line and the engine moves on.
+    { "Baidu error 54003", "hud_reason_quota" },
     { "Daily Limit Exceeded", "hud_reason_quota" },
     { "no usable provider", "hud_reason_no_provider" },
     { "character quota", "hud_reason_quota" },

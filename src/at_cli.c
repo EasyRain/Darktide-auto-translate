@@ -351,8 +351,12 @@ static int cmd_selftest(void)
         at_online_lang_code_for("baidu", "es", out, (int)sizeof(out)) && strcmp(out, "spa") == 0);
     expect_true("baidu pt-br -> pt",
         at_online_lang_code_for("baidu", "pt-br", out, (int)sizeof(out)) && strcmp(out, "pt") == 0);
-    expect_true("baidu uk -> ukr",
-        at_online_lang_code_for("baidu", "uk", out, (int)sizeof(out)) && strcmp(out, "ukr") == 0);
+    /* The vendor's own language table lists ukr, but the endpoint refuses it: measured 2026-10-12 with a
+       real key, twice with a delay in between, both times 58001 INVALID_TO_PARAM. Declaring it
+       unsupported is what makes the engine hand Ukrainian to someone else instead of sending a request
+       that cannot work. */
+    expect_true("baidu refuses uk (its own table is wrong about it)",
+        !at_online_lang_code_for("baidu", "uk", out, (int)sizeof(out)));
     /* The reference client's own test fixture, verbatim. */
     expect_true("baidu reply (the client's fixture)",
         at_online_parse("baidu", "{\"from\":\"en\",\"to\":\"zh\",\"trans_result\":[{\"src\":\"hello\",\"dst\":\"\xE4\xBD\xA0\xE5\xA5\xBD\"}]}",
@@ -1081,11 +1085,14 @@ static int cmd_provider(int argc, char** argv)
     const char* name;
     const char* lang;
     const char* api_key = NULL;
+    const char* appid = NULL;
+    const char* region = NULL;
     int i;
     int rc;
 
     if (argc < 5) {
-        fprintf(stderr, "usage: at_cli.exe provider <name> <target-lang> <text...> [--key <api-key>]\n");
+        fprintf(stderr, "usage: at_cli.exe provider <name> <target-lang> <text...> "
+                        "[--key <api-key>] [--appid <baidu-appid>] [--region <azure-region>]\n");
         return 1;
     }
 
@@ -1099,6 +1106,16 @@ static int cmd_provider(int argc, char** argv)
 
         if (_stricmp(argv[i], "--key") == 0 && i + 1 < argc) {
             api_key = argv[++i];
+            continue;
+        }
+        /* Baidu signs with an appid beside its key, and Azure puts its resource's region in a header; both
+           are set on the core before a request is built, exactly as the mod does it. */
+        if (_stricmp(argv[i], "--appid") == 0 && i + 1 < argc) {
+            appid = argv[++i];
+            continue;
+        }
+        if (_stricmp(argv[i], "--region") == 0 && i + 1 < argc) {
+            region = argv[++i];
             continue;
         }
         used = strlen(text);
@@ -1121,6 +1138,9 @@ static int cmd_provider(int argc, char** argv)
         fprintf(stderr, "error: provider '%s' needs an API key; add --key <api-key>\n", name);
         return 1;
     }
+
+    at_online_set_appid(appid ? appid : "");
+    at_online_set_region(region ? region : "");
 
     if (!at_online_host(name, api_key, host, (int)sizeof(host))) {
         fprintf(stderr, "error: %s\n", at_online_error());
@@ -2036,7 +2056,7 @@ static void usage(void)
     printf("  at_cli.exe proxy [host:port]                           (show / set the proxy)\n");
     printf("  at_cli.exe http <url>\n");
     printf("  at_cli.exe http <host> <path>\n");
-    printf("  at_cli.exe provider <name> <target-lang> <text...> [--key <api-key>]\n");
+    printf("  at_cli.exe provider <name> <target-lang> <text...> [--key <k>] [--appid <baidu>] [--region <azure>]\n");
     printf("  at_cli.exe model <model-dir> <target-lang> <text...>  (offline NLLB, no network)\n");
     printf("             [--src en|zh-cn|ja|...] [--compute int8|int8_float32|float32|auto|default]\n");
     printf("             [--threads N]   (default: half the cores; 0 = all of them)\n");

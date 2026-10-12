@@ -45,6 +45,11 @@ typedef struct {
     const char* baidu;
 } LangMap;
 
+// The baidu column is NULL for Ukrainian on purpose: the vendor's own language table lists ukr, but the
+// endpoint refuses it - measured 2026-10-12 with a real key, twice with a delay in between, both times
+// 58001 INVALID_TO_PARAM. A missing code makes at_online_lang_code_for fail, so the engine picks another
+// provider for that language instead of sending a request that cannot work.
+//
 // The yandex column is empty for Traditional Chinese on purpose: measured 2026-10-10, that endpoint
 // rejects every spelling of it (zh-TW, zh-tw, zh_tw, zh-Hant, zt: HTTP 400) and answers only zh. A
 // missing code makes at_online_lang_code_for fail, which is exactly how providers_for() drops a
@@ -62,7 +67,7 @@ static const LangMap LANG_MAP[] = {
     { "it",    "it",    "IT",      "it",      "it",      "it",      "it" },
     { "pl",    "pl",    "PL",      "pl",      "pl",      "pl",      "pl" },
     { "pt-br", "pt-BR", "PT-BR",   "pt",      "pt",      "pt",      "pt" },
-    { "uk",    "uk",    "UK",      "uk",      "uk",      "uk",      "ukr" },
+    { "uk",    "uk",    "UK",      "uk",      "uk",      "uk",      NULL  },
 };
 
 int at_online_lang_code_for(const char* provider, const char* internal_lang, char* out, int cap)
