@@ -804,6 +804,12 @@ mod.on_setting_changed = function(setting_id)
             util.info(mod, "target language set to: %s", tostring(mod:get("target_language")))
         elseif setting_id == "engine" then
             util.info(mod, "engine set to: %s", tostring(mod:get("engine")))
+            -- Answers cached in memory were produced by the engine being left behind, and a reused answer
+            -- carries its engine with it (online.shared_text): after DeepL -> Baidu, keys whose source text was
+            -- already cached were answered from DeepL's text without Baidu seeing them, and the file kept
+            -- DeepL's wording. This drops the shortcut only; the store is untouched and nothing re-translates
+            -- because of it.
+            online.clear_shared_text()
         elseif setting_id == "online_api_key" then
             -- a new key deserves a fresh attempt after a failure streak
             engines.reset(mod)

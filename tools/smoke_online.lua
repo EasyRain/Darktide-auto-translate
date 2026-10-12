@@ -653,6 +653,28 @@ check("scanner: unchanged is not", scanner.is_local_source("unchanged"), false)
 check("scanner: nil is not", scanner.is_local_source(nil), false)
 
 -- ---------------------------------------------------------------------------
+-- The in-memory reuse map does not outlive the engine that filled it.
+--
+-- The user switched DeepL -> Baidu and got a file with two entries still reading src = "deepl" and DeepL's
+-- wording. Those keys were never sent: reused answers are stored as { text, src }, and the map survived the
+-- switch, so a key whose source text was already in it was "answered" from DeepL''s text - engine marker and
+-- all. Clearing it costs nothing but the shortcut; the store is untouched and no other mod is affected.
+-- ---------------------------------------------------------------------------
+do
+    local onl = assert(loadfile(here .. "/../scripts/mods/auto_translate/modules/online.lua"))()
+    local m = onl.shared_text_for_tests
+    m.clear()
+    m.remember("SomeMod", "zh-cn", "Reload Speed", "装填速度", "deepl")
+    check("reuse: an answer is remembered with its engine",
+        m.get("SomeMod", "zh-cn", "Reload Speed").src, "deepl")
+    check("reuse: and is not shared across mods", m.get("Other", "zh-cn", "Reload Speed"), nil)
+    check("reuse: the engine change clears it", type(onl.clear_shared_text), "function")
+    onl.clear_shared_text()
+    check("reuse: so the next engine is asked for real",
+        m.get("SomeMod", "zh-cn", "Reload Speed"), nil)
+end
+
+-- ---------------------------------------------------------------------------
 -- A translation file deleted while the game runs stays deleted.
 --
 -- The user's flow, and the last piece of the report: delete one mod's file during a session, press Reload - and

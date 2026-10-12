@@ -2336,6 +2336,14 @@ end
 
 -- The reuse map (one English string, several keys): the smoke pins the rules it enforces. Declared
 -- here, after both functions, because a name assigned before its `local` is defined would be nil.
+-- Thrown away when the engine changes, because a reused answer carries the engine that produced it: after
+-- DeepL -> Baidu the map still held DeepL's text and `src = "deepl"`, so keys whose source text was already in
+-- it were "answered" without Baidu ever seeing them and the file kept DeepL's wording. Clear() drops only this
+-- in-memory shortcut - the store is untouched, and no other mod is affected.
+function M.clear_shared_text()
+    shared_text = {}
+end
+
 M.shared_text_for_tests = {
     remember = remember_shared_text,
     get = shared_text_for,
