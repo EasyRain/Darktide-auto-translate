@@ -119,6 +119,35 @@ function M.sync_preset(mod)
     return written
 end
 
+-- Watches the preset selector and fills the fields the moment it changes.
+--
+-- The first version only synced when a test was run or a run started, which meant a player who simply picked
+-- a preset and restarted the game still saw the old service in the fields - reported back exactly that way,
+-- with the settings file showing custom_preset = "azure_v3" next to DeepL's URL. This runs from the mod's
+-- per-frame update instead (one setting read per frame, a write only when the value actually changed).
+local last_preset = nil
+
+function M.watch_preset(mod)
+    if type(mod) ~= "table" or type(mod.get) ~= "function" then
+        return 0
+    end
+    local chosen = mod:get("custom_preset")
+    if chosen == last_preset then
+        return 0
+    end
+    local previous = last_preset
+    last_preset = chosen
+    local written = M.sync_preset(mod)
+    if written > 0 and type(mod.info) == "function" then
+        mod:info("the %s preset filled %d request field(s); reopen the settings screen to see them",
+            tostring(chosen), written)
+    elseif written == 0 and type(chosen) == "string" and chosen ~= "" and chosen ~= "custom"
+        and previous ~= nil and type(mod.warning) == "function" then
+        mod:warning("the %s preset could not fill the request fields", tostring(chosen))
+    end
+    return written
+end
+
 -- The preset names, in the order a player should see them.
 M.PRESET_ORDER = { "deepl", "google_v2", "azure_v3" }
 

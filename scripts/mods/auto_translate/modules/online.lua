@@ -3612,6 +3612,12 @@ function M.update(mod, dt)
     local ffi = Mods.lua.ffi
     elapsed = elapsed + (dt or 0)
 
+    -- One settings read per frame, and a write only when the preset selector actually changed: this is what
+    -- makes picking a preset fill the request fields without any further action from the player.
+    if custom and custom.watch_preset then
+        pcall(custom.watch_preset, mod)
+    end
+
     -- The startup check of the keyless tier must never outlive its budget, whatever else this frame
     -- decides to skip. It holds the queue, so a check that is not driven - because a pacing wait or a
     -- rate-limit cooldown (up to 300 s) returned first, or because the run was stopped - would hold

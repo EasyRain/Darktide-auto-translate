@@ -2382,6 +2382,31 @@ do
     check("presets: ...and it is idempotent", cu.sync_preset(mod), 0)
     saved.custom_preset = "custom"
     check("presets: on Custom it changes nothing", cu.sync_preset(mod), 0)
+
+-- The watcher, which is what makes picking a preset fill the fields without the player doing anything else:
+-- the first version only synced on a test or at run start, so a player who picked a preset and restarted
+-- still saw the old service in the fields.
+do
+    local saved = {
+        custom_preset = "azure_v3",
+        custom_url = "https://api-free.deepl.com/v2/translate",
+        custom_body = "text={text}&source_lang={source}&target_lang={target}",
+    }
+    local logged = {}
+    local mod = {
+        get = function(_, key) return saved[key] end,
+        set = function(_, key, value) saved[key] = value end,
+        info = function(_, fmt, ...) logged[#logged + 1] = string.format(fmt, ...) end,
+        warning = function(_, fmt, ...) logged[#logged + 1] = string.format(fmt, ...) end,
+    }
+    check("presets: the watcher fills the fields", cu.watch_preset(mod) > 0, true)
+    check("presets: ...with the selected preset's url", saved.custom_url, cu.preset("azure_v3").url)
+    check("presets: ...and says so once", #logged > 0, true)
+    check("presets: a frame with no change writes nothing", cu.watch_preset(mod), 0)
+    saved.custom_preset = "google_v2"
+    check("presets: switching preset fills them again", cu.watch_preset(mod) > 0, true)
+    check("presets: ...with google's url now", saved.custom_url, cu.preset("google_v2").url)
+end
 end
 
 -- A preset is a request shape, never a credential: with no key typed, the auth line is empty and
