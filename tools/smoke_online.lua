@@ -1531,6 +1531,25 @@ do
     check("wire: the label form is bracketed", g.to_wire("⟦0⟧", nil, "labels"), "[a]")
     check("wire: a label next to a digit survives the swap",
         g.to_internal("Set to 0[a] Reload Speed", nil, "labels"), "Set to 0⟦0⟧ Reload Speed")
+
+    -- A bracketed single letter is one of our label spellings *and* something the game writes itself:
+    -- "[X]" is a hotkey label. The pool claimed it, to_internal() converted it to a placeholder no token
+    -- owned, and unmask dropped it - measured on a real store, which came back as
+    -- "{#color(144,155,136)}{#reset()}". Masking it like a source glyph, and keeping the pool away from it,
+    -- is what fixes that; this is the case that was wrong.
+    g.init({ MOD_DIR = ".", file_exists = function() return false end,
+             load_lua_file = function() return nil, "stub" end, log = function() end })
+    for _, variant in ipairs({ "circled", "labels" }) do
+        local v = (variant == "labels") and "labels" or nil
+        local source = "{#color(144,155,136)}[X]{#reset()}"
+        local masked, tokens = g.mask(source, "zh-cn", true)
+        local reserved = g.wire_reserved(tokens)
+        local wire = g.to_wire(masked, reserved, v)
+        local restored = g.unmask(g.to_internal(wire, reserved, v), tokens, masked)
+        check("wire " .. variant .. ": a source [X] survives the whole swap", restored, source)
+    end
+    check("wire: and the pool never hands out a label the source used",
+        g.to_wire(g.mask("[X] Reload Speed", "zh-cn", true), nil, "labels"):find("[X]", 1, true) == nil, true)
 end
 
 check("custom: an empty key falls back to the API key",

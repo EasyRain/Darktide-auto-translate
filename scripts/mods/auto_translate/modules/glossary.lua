@@ -337,6 +337,25 @@ function M.mask(text, lang, mask_markup)
         end
     end
 
+    -- The same treatment for a bracketed single letter, which is one of *our* label spellings as well as
+    -- something the game writes itself: "[X]" is a hotkey label. Without this the label pool claimed it,
+    -- to_internal() converted it back to an internal placeholder that no token owned, and unmask dropped
+    -- it - measured: "{#color(144,155,136)}[X]{#reset()}" was stored as "{#color(144,155,136)}{#reset()}".
+    -- Masking it means the model never sees it, and wire_reserved() keeps the pool away from it.
+    do
+        local labels = {}
+        for label in result:gmatch("%[[a-zA-Z]%]") do
+            labels[label] = true
+        end
+        for label in pairs(labels) do
+            local index = #tokens + 1
+            tokens[index] = { term = label, source = label, glyph = true }
+            -- escaped: a label is a Lua character class, not a literal
+            result = result:gsub(label:gsub("([%^%$%(%)%%%.%[%]%*%+%-%?])", "%%%1"),
+                                 PLACEHOLDER_OPEN .. (index - 1) .. PLACEHOLDER_CLOSE)
+        end
+    end
+
     return result, tokens
 end
 
@@ -443,7 +462,7 @@ function M.wire_reserved(tokens)
         end
         for i = 1, #list do
             local term = list[i] and list[i].term
-            if type(term) == "string" and WIRE_SET[term] then
+            if type(term) == "string" and (WIRE_SET[term] or term:match("^%[[a-zA-Z]%]$")) then
                 reserved[term] = true
             end
         end
