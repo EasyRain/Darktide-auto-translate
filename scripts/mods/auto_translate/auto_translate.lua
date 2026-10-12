@@ -207,7 +207,10 @@ end
 -- (The free endpoints mean "nothing configured at all" is almost impossible now - they need
 -- neither a key nor a download - so the no-engine notice only appears when even they are
 -- unavailable for the target language.)
-local function check_engine_settings(lang)
+-- `quiet` is for the callers that run because a setting changed: a half-filled custom endpoint is a normal
+-- state while somebody is typing into it, and a popup per cleared field is not a diagnostic, it is noise.
+-- The run itself still says what is wrong (see the run_pipeline call), and the test button always does.
+local function check_engine_settings(lang, quiet)
     -- tripped circuit breaker: stop hammering a failing service
     if engines.is_paused() then
         local _, _, reason = engines.failure_state()
@@ -238,7 +241,9 @@ local function check_engine_settings(lang)
     local gap = engines.gap(engine, lang)
     if gap then
         util.log(mod, "engine '%s' cannot produce '%s' (would return '%s')", engine, tostring(lang), tostring(gap.actual))
-        util.popup(mod, "engine_language_gap", engine, tostring(gap.actual), tostring(lang), tostring(gap.actual))
+        if not quiet then
+            util.popup(mod, "engine_language_gap", engine, tostring(gap.actual), tostring(lang), tostring(gap.actual))
+        end
         return false
     end
 
@@ -259,10 +264,12 @@ local function check_engine_settings(lang)
         end
         local spec = custom.spec(mod)
         util.log(mod, "the custom service is not usable: %s", problem)
-        if problem == "custom_url_invalid" then
-            util.popup(mod, problem, tostring(spec.url))
-        else
-            util.popup(mod, problem)
+        if not quiet then
+            if problem == "custom_url_invalid" then
+                util.popup(mod, problem, tostring(spec.url))
+            else
+                util.popup(mod, problem)
+            end
         end
         return false
     end
@@ -273,7 +280,9 @@ local function check_engine_settings(lang)
     end
 
     util.log(mod, "engine 'online_api' is selected but no API key is set")
-    util.popup(mod, "api_key_missing")
+    if not quiet then
+        util.popup(mod, "api_key_missing")
+    end
     return false
 end
 
@@ -323,7 +332,7 @@ local function stand_down(reason)
     end
 end
 
-local function run_pipeline(reason)
+local function run_pipeline(reason, quiet)
     local on, why = active()
     if not on then
         util.info(mod, "nothing to do: %s (%s)", why, reason)
@@ -417,7 +426,7 @@ local function run_pipeline(reason)
     end
 
     if mod:get("auto_translate_enabled") then
-        if check_engine_settings(lang) then
+        if check_engine_settings(lang, quiet) then
             -- One queue driver for every engine. The offline model goes through
             -- online.start() as well; only the way a string travels differs (a
             -- submit/poll pair in the core instead of an HTTP job). Keeping both on
@@ -502,7 +511,8 @@ end
 
 -- DMF calls this once every mod has finished loading (localization registry ready).
 function mod.on_all_mods_loaded()
-    local ok, err = pcall(run_pipeline, "startup")
+    -- Quiet as well: nothing was pressed, and the reason is in the log either way.
+    local ok, err = pcall(run_pipeline, "startup", true)
     if not ok then
         util.warn(mod, "startup pipeline error: %s", tostring(err))
     end
@@ -796,12 +806,13 @@ mod.on_setting_changed = function(setting_id)
         online.stop(mod)
 
         if mod:get("auto_translate_enabled") then
-            local ok, err = pcall(run_pipeline, "setting changed")
+            -- Quiet: this is a settings change, not a run the player asked for.
+            local ok, err = pcall(run_pipeline, "setting changed", true)
             if not ok then
                 util.warn(mod, "could not restart after the setting change: %s", tostring(err))
             end
         else
-            check_engine_settings(current_lang())
+            check_engine_settings(current_lang(), true)
         end
     elseif setting_id == "auto_translate_enabled" then
         online.flush(mod)
