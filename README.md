@@ -86,7 +86,7 @@ sub-widgets of that dropdown: DMF hides all ten under `DeepL` and shows them the
 | Check the free services at startup | Online (free) | One short request per endpoint when a run starts, in the background, so a network that cannot reach one of them stops paying for it every session. |
 | Translate colour names | General | Off by default: colour swatches are asset names players match in English. |
 | Translation engine | Engine | `Automatic` (key → downloaded model → free endpoints) / `Online (official API)` / `Online (free endpoints)` / `Local model (1.3B)`. |
-| API service | Engine | `DeepL` or `Custom` (any translation service you describe yourself). |
+| API service | Engine | `DeepL`, `Google Cloud Translation v2`, `Azure Translator v3`, or `Custom` (any translation service you describe yourself). The test button below checks whichever one is selected. |
 | API key / Proxy | Engine | The key for the selected service; the proxy every request goes through. |
 | Custom endpoint | Engine | The ten fields that describe an unlisted service (hidden unless `Custom` is selected). |
 | Download the offline model | Offline model | Turn on to download, off to cancel; the part that arrived is kept for the next attempt. |
@@ -348,12 +348,13 @@ only thing the service has to do is copy the markers; measured with `tools/live_
 `[1] Reload Speed [2] Ammo [3] Damage [4] Cancel` came back with all four markers intact from
 `google_clients5`, `google_gtx`, `bing`, MyMemory and DeepL alike.
 
-**DeepL does not use markers at all.** Its API accepts several `text` parameters in one request,
-so the paid provider sends the parts side by side and the answer is read position by position:
-nothing is added to the source, and a "lost marker" cannot misattribute an answer because there
-is none. The core decides who gets this (`at_online_supports_multi_text`) and the answer comes
-back indexed, so a provider that grows the same feature needs no Lua change; DeepL is the only
-one today, and the custom endpoint and the free tier keep the `[n]` markers. Measured with
+**The API services do not use markers at all.** Each accepts several strings in one request -
+DeepL as repeated `text` parameters, Google v2 as repeated `q`, Azure as an array of JSON objects
+- so they send the parts side by side and the answer is read position by position: nothing is
+added to the source, and a "lost marker" cannot misattribute an answer because there is none. The
+core decides who gets this (`at_online_supports_multi_text`, true for all three) and the answer
+comes back indexed, so a provider that grows the same feature needs no Lua change; the custom
+endpoint and the free tier keep the `[n]` markers. Measured with
 `tools/live_deepl_batch.lua` (four labels, en → zh-cn): **88 characters native against 119 with
 markers**, all four answers back in order (`重载速度 / 弹药 / 损坏 / 取消`). The core's cap is
 16 parts in one request; the batch rule (8 items) is what applies in practice.
@@ -361,7 +362,7 @@ markers**, all four answers back in order (`重载速度 / 弹药 / 损坏 / 取
 **What batching costs, measured** (`tools/batch_cost.lua` drives the real planner) over the same
 135 strings: requests **135 → 67 (−50%)**, characters **3,405 → 3,830 (+12.5%)**. The extra
 characters land on short labels only, which makes the rule a clear win for the free endpoints
-(billed per request) and no cost at all for DeepL (native multi-text).
+(billed per request) and no cost at all for the three API services (native multi-text).
 
 ### Multi-line strings
 
@@ -413,9 +414,11 @@ guard, test and store still sees one form. `tools/check_wire_boundaries.py` enfo
 
 | service | reachable without a proxy | note |
 | --- | --- | --- |
+| **Azure Translator v3** | yes when Azure is reachable | The most generous free tier of the three: **2,000,000 characters a month** (F0). It takes `Ocp-Apim-Subscription-Key` plus the resource's `Ocp-Apim-Subscription-Region` header, a JSON array body (one object per string, even for one), and answers with a bare array in request order. Its Chinese is `zh-Hans`/`zh-Hant` where Google's is `zh-CN`/`zh-TW`, so the language table has a column per service. |
+| **Google Cloud Translation v2** | reachable, but blocked on some networks | 500,000 characters a month, but a Cloud project with a card on file is needed for a key. Only v2 takes an API key (v3 is OAuth2 only), and the key rides in the query string while `q`/`source`/`target`/`format=text` go in the form body - which is what makes batching a plain repetition of `q`. `format=text` matters: HTML is its documented default. |
 | **DeepL** | yes, on most networks | 1,000,000 characters/month on the free tier; keys ending in `:fx` use `api-free.deepl.com` automatically. |
+| **Azure region** (setting) | - | The region of your Translator resource, for example `westeurope`. Optional for a global resource, required for a multi-service one, and harmless either way - so it is sent whenever it is filled in. |
 | **Custom** | whatever you point it at | Any HTTP endpoint: an OpenAI-compatible chat API, a self-hosted service, or a DeepL-style form endpoint. See below. |
-| Google Cloud Translation | **no, on many networks** | `translation.googleapis.com` is unreachable there (the TLS handshake is reset by network filtering). The code is still in `at_online.c` and still passes its offline tests, but it is no longer offered: sign-up is the most involved of the three and it needs a proxy to work at all. A settings file that still says `api_provider = "google"` maps to DeepL. |
 
 ### Free endpoints (no key, nothing to download)
 
