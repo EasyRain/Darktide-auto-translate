@@ -1468,6 +1468,26 @@ do
 end
 
 -- ---------------------------------------------------------------------------
+-- The request interval, per provider.
+--
+-- Baidu's free tier is 1 QPS, so the API engine's 0.25 s sent four requests a second and the endpoint
+-- answered 54003 - measured: seven back-to-back requests failed, the same seven 1.6 s apart all succeeded.
+-- The interval is now a floor rather than a per-engine value, at 1.5 s for Baidu (the limit plus half a
+-- second, the user's suggestion). Whichever is slower wins, so this can only make a provider gentler.
+-- ---------------------------------------------------------------------------
+do
+    local onl = assert(loadfile("scripts/mods/auto_translate/modules/online.lua"))()
+    local mi = onl.min_interval_for_tests
+    check("pace: the interval probe is exported", type(mi), "function")
+    if type(mi) == "function" then
+        check("pace: the API engine plus Baidu waits 1.5 s", mi("online_api", "baidu"), 1.5)
+        check("pace: the API engine plus DeepL keeps 0.25 s", mi("online_api", "deepl"), 0.25)
+        check("pace: and so does Azure", mi("online_api", "azure"), 0.25)
+        check("pace: the free tier keeps its own 1 s", mi("online_free", "bing"), 1)
+    end
+end
+
+-- ---------------------------------------------------------------------------
 -- What Automatic picks, behaviourally.
 --
 -- engines.resolve() decides which tier a run uses, and "is the API usable" used to mean "is a key set". That

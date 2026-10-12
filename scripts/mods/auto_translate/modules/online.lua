@@ -1930,15 +1930,28 @@ local function tier_probe_step(mod)
     return false
 end
 
-local function base_interval(engine)
-    return engine == "online_api" and MIN_INTERVAL_API or MIN_INTERVAL_FREE
+-- Some services limit by requests per second, and the engine's interval is not their limit. Baidu's free
+-- tier is 1 QPS, so the API engine's 0.25 s would send four requests a second and the endpoint answers 54003
+-- - measured: seven back-to-back requests failed, the same seven 1.6 s apart all succeeded. The user's
+-- suggestion, and the number used here: the limit plus half a second for latency.
+--
+-- A floor rather than a value: whichever is slower wins, so a provider can only ever be paced *more*
+-- gently than its engine.
+local PROVIDER_MIN_INTERVAL = {
+    baidu = 1.5,
+}
+
+local function base_interval(engine, provider)
+    local engine_interval = engine == "online_api" and MIN_INTERVAL_API or MIN_INTERVAL_FREE
+    local provider_interval = provider and PROVIDER_MIN_INTERVAL[provider] or 0
+    return math.max(engine_interval, provider_interval)
 end
 
 -- The pace actually used: the engine's own interval times whatever backoff the rate limiter asked
 -- for (1 while the service is answering normally). Assigned rather than declared here because the
 -- startup check, which paces itself with it, is defined above.
-min_interval = function(engine)
-    return base_interval(engine) * backoff
+min_interval = function(engine, provider)
+    return base_interval(engine, provider) * backoff
 end
 
 -- Exposed because the two numbers encode a rule, not a preference: the free endpoints are the
@@ -2694,7 +2707,7 @@ local function dispatch(mod)
             tokens = tokens,
         }
     end
-    next_slot = elapsed + min_interval(M.state.engine)
+    next_slot = elapsed + min_interval(M.state.engine, M.state.provider)
     return true
 end
 
@@ -3252,10 +3265,10 @@ function fail_item(mod, req, reason, http_status, transport, code, quiet_provide
         local line = "service is rate limiting (HTTP 429, %s); pausing %d s, then one request "
             .. "every %.2f s (backoff x%d), and it continues on its own%s"
         if rate_limit_streak <= 1 or hard then
-            util.warn(mod, line, tostring(req.provider), pause, min_interval(M.state.engine), backoff,
+            util.warn(mod, line, tostring(req.provider), pause, min_interval(M.state.engine, M.state.provider), backoff,
                 advice)
         else
-            util.info(mod, line, tostring(req.provider), pause, min_interval(M.state.engine), backoff,
+            util.info(mod, line, tostring(req.provider), pause, min_interval(M.state.engine, M.state.provider), backoff,
                 advice)
         end
         q_unshift(item) -- retried once the pause expires
