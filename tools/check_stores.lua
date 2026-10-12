@@ -22,6 +22,22 @@ for _, a in ipairs(arg) do if a == "--strict" then strict = true end end
 
 local PLACEHOLDER = { ["\226\159\166"] = true, ["\226\159\167"] = true }   -- ⟦ ⟧
 
+-- The wire form of a mask marker: single circled digits, ①…⑳ then ㉑…㉟ then ㊱…㊿ (fifty of them, and past
+-- that the internal ⟦n⟧ is kept). Lua 5.1 patterns are byte based, so these are the three byte ranges.
+-- Three patterns rather than one alternation: Lua patterns have no "or" operator, so a "|" between them
+-- matches a literal pipe (which is how the first version of this counted zero every time).
+local WIRE_GLYPHS = { "\226\145[\160-\179]", "\227\137[\145-\159]", "\227\138[\177-\191]" }
+
+local function count_wire(text)
+    local n = 0
+    for _, pattern in ipairs(WIRE_GLYPHS) do
+        for _ in text:gmatch(pattern) do
+            n = n + 1
+        end
+    end
+    return n
+end
+
 local hard, soft = 0, 0
 local function hard_issue(fmt, ...)
     hard = hard + 1
@@ -209,6 +225,19 @@ for _, lang in ipairs(langs) do
                                 hard_issue("%s: leftover mask placeholder in the text", where_)
                                 break
                             end
+                        end
+
+                        -- a wire marker that was never decoded back. On the wire a marker is a single
+                        -- circled digit and it comes back the same way, so one in the text that the source
+                        -- does not have means a reply was stored before the decode step ran. Compared
+                        -- rather than rejected: a source may legitimately contain one, because the mask
+                        -- keeps such a character as a term of its own.
+                        local wire_en, wire_text = count_wire(en), count_wire(text)
+                        if wire_text > wire_en then
+                            hard_issue("%s: leftover wire marker in the text (%d in the text, %d in the source)",
+                                where_, wire_text, wire_en)
+                        elseif wire_text < wire_en then
+                            soft_issue("%s: a circled digit in the source is missing from the text", where_)
                         end
 
                         -- warnings
