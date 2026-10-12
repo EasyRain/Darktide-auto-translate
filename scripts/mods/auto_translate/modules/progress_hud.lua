@@ -21,6 +21,9 @@ local M = {}
 
 local mod, util, online, download
 
+-- The lines last built for the status branch, and the numbers they were built from (see compose).
+local cache_key, cache_lines
+
 local UIRenderer, UIFonts, UIFontSettings, UIConstantElements
 local ready = false
 local tried = false
@@ -247,6 +250,19 @@ local function compose(t)
         return nil
     end
 
+    -- The HUD draws every frame, and building these lines formats a dozen strings and calls mod:localize
+    -- as often. Memoise them on the numbers that actually change: the countdowns move once a second, so a
+    -- frame that changes nothing now allocates nothing instead of ~20 strings and their boxes.
+    local signature = table.concat({
+        tostring(status.lang), tostring(status.loading), tostring(status.running),
+        tostring(status.finished), tostring(status.done), tostring(queued), tostring(status.left),
+        tostring(status.failed), tostring(status.refused), tostring(status.cooldown),
+        tostring(status.waiting), tostring(status.provider), tostring(status.last_error),
+    }, "|")
+    if signature == cache_key then
+        return cache_lines
+    end
+
     local lines = {}
     lines[#lines + 1] = {
         text = string.format("%s  %s", mod:localize("mod_name"),
@@ -289,6 +305,7 @@ local function compose(t)
         lines[#lines + 1] = { text = mod:localize("hud_finished", status.done or 0), color = TEXT_DIM }
     end
 
+    cache_key, cache_lines = signature, lines
     return lines
 end
 
