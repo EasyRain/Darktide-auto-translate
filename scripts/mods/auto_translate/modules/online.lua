@@ -449,10 +449,21 @@ local function to_wire(text, tokens)
 end
 
 local function from_wire(text, tokens)
-    if type(glossary) == "table" and glossary.to_internal then
-        return glossary.to_internal(text, glossary.wire_reserved and glossary.wire_reserved(tokens, current_wire) or nil)
+    if type(glossary) ~= "table" or not glossary.to_internal then
+        return text
     end
-    return text
+    local reserved = glossary.wire_reserved and glossary.wire_reserved(tokens) or nil
+    -- The variant goes to to_internal, not to wire_reserved. An earlier version of this line passed it to
+    -- the wrong call, so to_internal fell back to the circled pool and never converted a bracketed label
+    -- back: two store entries were written with "[a]"/"[b]" in the text and the player saw them. Isolated
+    -- tests passed throughout because they passed the variant by hand.
+    local out = glossary.to_internal(text, reserved, current_wire)
+    -- And if a label from the *other* variant is still in there, the two directions disagreed - convert it
+    -- too, since a marker reaching the store is displayed as-is.
+    if out:find("%[[a-zA-Z%]]%]") then
+        out = glossary.to_internal(out, reserved, current_wire == "labels" and nil or "labels")
+    end
+    return out
 end
 
 -- Characters, not bytes: Lua's '#' counts bytes, so a 13-character Chinese translation
@@ -609,6 +620,16 @@ function M.text_is_safe(source, translated, lang)
     end
     if translated:find(open, 1, true) or translated:find(close, 1, true) then
         return false, "a mask placeholder was left in the translation"
+    end
+
+    -- And the *wire* form of one, which the internal check above cannot see. Two store entries were written
+    -- with "[a]"/"[b]" in the text because the reply was un-wired with the wrong variant, and the game
+    -- showed the markers. Only a label the source did not itself contain counts: game strings legitimately
+    -- contain things like "[F10]" or "[X]".
+    for label in translated:gmatch("%[[a-zA-Z%]]%]") do
+        if not source:find(label, 1, true) then
+            return false, string.format("a wire marker was left in the translation ('%s')", label)
+        end
     end
     local src_tags, dst_tags = tag_sequence(source), tag_sequence(translated)
     if src_tags ~= dst_tags then
@@ -3016,6 +3037,7 @@ local REASON_KEYS = {
     { "the translation dropped most of the text", "hud_reason_too_short" },
     { "the line breaks differ", "hud_reason_line_breaks" },
     { "a mask placeholder was left", "hud_reason_placeholders" },
+    { "a wire marker was left", "hud_reason_placeholders" },
     { "the rich-text tags differ", "hud_reason_placeholders" },
     { "stray '%'", "hud_reason_placeholders" },
     { "format placeholder", "hud_reason_placeholders" },
