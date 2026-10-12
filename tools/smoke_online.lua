@@ -297,6 +297,20 @@ check("however long the name is", online.is_asset_entry_for_tests(
     "{#color(1,1,1)}terminal background gradient selected{#reset()}"), true)
 check("a sentence is still a sentence", online.is_asset_entry_for_tests(
     "{#color(255,0,0)}your team is going down fast{#reset()}"), false)
+
+-- The source itself: the game's Color table (scripts/foundation/utilities/color.lua), which every colour
+-- picker in every mod iterates. Names in it are skipped exactly, which is why the heuristics no longer
+-- have to guess - and the table is underscored while the strings have spaces.
+Color = { list = { "alice_blue", "citadel_agrax_earthshade", "cheeseburger",
+    "ui_health_default", "terminal_background_selected", "item_rarity_desaturated_1" } }
+check("a game colour name is a swatch", online.is_asset_entry_for_tests(
+    "{#color(240,248,255)}alice blue{#reset()}"), true)
+check("even one the heuristics would let through", online.is_asset_entry_for_tests(
+    "{#color(1,1,1)}terminal background selected{#reset()}"), true)
+check("and one that is really an instruction is still a sentence", online.is_asset_entry_for_tests(
+    "{#color(255,0,0)}your team is going down fast{#reset()}"), false)
+check("a name outside the table still falls back to the heuristics", online.is_asset_entry_for_tests(
+    "{#font(giant)}Ammo{#reset()}"), true)
 check("asset: a colour swatch is left alone",
     is_asset("{#color(162,158,145)}Rakarth Flesh{#reset()}"), true)
 check("asset: a font-picker entry is left alone",

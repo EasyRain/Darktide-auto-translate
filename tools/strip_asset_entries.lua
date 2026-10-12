@@ -40,6 +40,31 @@ local online = assert(loadfile(repo .. "/scripts/mods/auto_translate/modules/onl
 local stub = { info = function() end, warn = function() end, error = function() end,
     get = function() return nil end, log = function() end, popup = function() end }
 online.init(stub, store, glossary, nil, nil, nil)
+
+-- The game's own colour table is the rule's hardest signal, and this tool runs outside the game, so the
+-- names are read from the game's source file and handed over exactly as the game's Color.list would be.
+-- (The heuristics still apply to everything else.)
+local COLOUR_LUA = [[D:\DshWorkSpace\Darktide\game-data\source\Darktide-Source-Code\scripts\foundation\utilities\color.lua]]
+do
+    local handle = io.open(COLOUR_LUA, "rb")
+    if handle then
+        local text = handle:read("*a")
+        handle:close()
+        local names = {}
+        local body = text:match("local color_definitions = %{")
+        if body then
+            for name in text:gmatch("\n\t([%a][%w_]*) = %{") do
+                names[#names + 1] = name
+            end
+        end
+        if #names > 0 then
+            _G.Color = { list = names }
+            print("  the game colour table: " .. #names .. " name(s)")
+        end
+    else
+        print("  (the game colour table was not readable; heuristics only)")
+    end
+end
 -- store.dir_for() reads util.TRANSLATIONS_DIR, so the stub has to carry it (the first version passed the
 -- mod directory and store.save died on a nil concatenation - the backup it takes first is what kept the
 -- store itself untouched).

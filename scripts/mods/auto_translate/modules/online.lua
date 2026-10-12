@@ -653,6 +653,41 @@ local MARKUP_ANY = "{[#%w][^{}]*}"
 -- pattern, and it is a harder signal than counting words.
 local ASSET_PREFIXES = { ui = true, terminal = true, text = true, citadel = true, item = true }
 
+-- The game's own colour table is the source of these names: scripts/foundation/utilities/color.lua defines a
+-- global Color with Color.list in it, and every mod with a colour picker iterates it (true_level_data.lua
+-- does `for i, name in ipairs(Color.list)`), which is why their lists are identical and why no colour name
+-- appears as a literal in any mod's source. Verified against the palette that had been translated: all
+-- fifteen names sampled - alice blue, citadel agrax earthshade, cheeseburger, ui health default, terminal
+-- background selected, item rarity desaturated 1 among them - are in that table, so this lookup is exact
+-- where the prefix, case and length heuristics below can only be a good guess. The table is keyed with
+-- underscores ("alice_blue"), the strings carry spaces, so the lookup normalises both.
+--
+-- It is read lazily and only cached once found: our module may load before the game defines Color, and an
+-- empty cache would then be wrong for the rest of the session. The heuristics stay as the fallback for
+-- everything the table does not cover - font entries, and any tool or test that runs outside the game.
+local game_colour_names = nil
+
+local function normalise_name(text)
+    return (text:lower():gsub("[_%s]+", " "):gsub("^%s+", ""):gsub("%s+$", ""))
+end
+
+local function is_game_colour_name(text)
+    local names = game_colour_names
+    if names == nil then
+        names = {}
+        local colour = rawget(_G or {}, "Color")
+        if type(colour) == "table" and type(colour.list) == "table" then
+            for _, name in ipairs(colour.list) do
+                if type(name) == "string" then
+                    names[normalise_name(name)] = true
+                end
+            end
+            game_colour_names = names
+        end
+    end
+    return names[normalise_name(text)] == true
+end
+
 -- The first word of a run's inner text, lower-cased, or nil.
 local function first_word(text)
     local word = text:match("^%s*(%S+)")
@@ -669,6 +704,10 @@ local function wraps_a_name(text, pattern)
         return false
     end
     inside = inside:gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
+    -- The game's own colour table settles it outright, and exactly.
+    if is_game_colour_name(inside) then
+        return true
+    end
     -- An asset prefix settles it outright: "citadel xv88", "ui scale", "terminal background selected",
     -- "item rarity desaturated 1" are names no matter how long or how they are capitalised.
     if ASSET_PREFIXES[first_word(inside) or ""] then
