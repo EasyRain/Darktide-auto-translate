@@ -2327,6 +2327,16 @@ local function probe_which_provider(mod, tested, engine)
     util.popup(mod, "custom_test_api_unusable", tostring(reason), tostring(tested))
 end
 
+-- A request built from a *description* rather than from the native core: the custom endpoint, whose
+-- request the player wrote, or a service out of modules/services.lua (LibreTranslate). They share the same
+-- request shape and the same reader, and several places spelled that as req.provider == "custom" - a
+-- literal, which a described service is not. The one that bit was read_response(): a LibreTranslate reply
+-- went to the native parser, came back negative, and the negative reached ffi.string as a length, so the
+-- test button did nothing while the instance had answered correctly.
+local function is_described(provider)
+    return provider == "custom" or (services ~= nil and services.has(provider))
+end
+
 local dispatch_custom     -- defined below, next to handle_response()
 local handle_online_batch -- defined below, next to handle_local_batch()
 local join_batch          -- defined below, next to dispatch_lines()
@@ -2781,7 +2791,13 @@ end
 local function read_response(req, body, why_out)
     local ffi = Mods.lua.ffi
 
-    if req.provider == "custom" then
+    -- A request that carries a response path was built from a *description* - the custom endpoint, or a
+    -- service out of modules/services.lua - and both read their reply the same way. This used to test
+    -- req.provider == "custom", which is a literal: LibreTranslate is not that literal, so its reply went to
+    -- the native parser instead, which does not know the name and returns a negative, and the negative was
+    -- then handed to ffi.string as a length. The result was "string length overflow" and a test button that
+    -- appeared to do nothing at all, while the instance had answered correctly.
+    if req.response_path then
         -- custom.string_at() owns the one trap here: at_json_string_at() answers 1 when it
         -- found a string - a flag, not a length - and NUL-terminates the buffer. Taking that
         -- flag for a length is what truncated every custom translation to its first byte
@@ -2797,6 +2813,12 @@ local function read_response(req, body, why_out)
     end
 
     local n = core.at_online_parse(req.provider, body, out_buf, SMALL_CAP)
+    -- A parser that failed answers negative, and a negative length is not a length: ffi.string() raises
+    -- "string length overflow" on it, which is how the above turned into a button that did nothing.
+    if n and n < 0 then
+        why_out(nil, tostring(cstr(core.at_online_error())))
+        return 0
+    end
     return n
 end
 
@@ -2889,7 +2911,7 @@ local function handle_response(mod, req, body)
         return true
     end
 
-    if req.provider == "custom" then
+    if is_described(req.provider) then
         local parse_error
         local n = read_response(req, body, function(_, message) parse_error = message end)
         if n == 0 then
@@ -3181,9 +3203,9 @@ function fail_item(mod, req, reason, http_status, transport, code, quiet_provide
         return
     end
 
-    -- A custom endpoint's HTTP failures are almost always configuration, and each one has
+    -- A described service's HTTP failures are almost always configuration, and each one has
     -- a different fix (key, URL, quota), so they get their own wording - once per session.
-    if req.provider == "custom" and core and custom then
+    if is_described(req.provider) and core and custom then
         local key = custom.error_key(http_status)
         if key then
             note_custom_problem(mod, key, tostring(http_status))
@@ -3891,7 +3913,9 @@ function M.update(mod, dt)
                 else
                     local why
                     local n = read_response(req, body, function(_, message) why = message end)
-                    if n == 0 then
+                    -- <= 0, not == 0: a negative answer is a failed parse, and using it as a length is
+                    -- what crashed this path ("string length overflow") instead of saying why.
+                    if not n or n <= 0 then
                         util.popup(mod, "custom_unreadable", tostring(why))
                     else
                         -- The reply is whatever the endpoint did with the *masked* text, so the
@@ -3905,11 +3929,25 @@ function M.update(mod, dt)
                                 answer = mod:localize("custom_test_placeholder_lost", answer, missing)
                             end
                         end
-                        util.popup(mod, "custom_test_ok", req.item.en, answer)
-                        -- The engine *setting*, not the resolved tier: engines.resolve() answers
-                        -- "online_free" for Automatic whenever no key is set, and passing that on made
-                        -- Automatic look like a deliberate choice of the free tier.
-                        probe_which_provider(mod, provider, mod:get("engine"))
+                        -- Who answered goes into the message itself, not only into a follow-up: the
+                        -- button sits under the service dropdown, so a bare "Reload Speed -> 装填速度"
+                        -- reads as "the service I picked works" even when a free provider answered. The
+                        -- user reported exactly that, with DeepL selected and no key entered.
+                        --
+                        -- req.provider, not the local `provider`: that name does not exist in this
+                        -- function, so the first version of this passed nil and did nothing at all.
+                        local answered = tostring(req.provider or "?")
+                        local selected = tostring(engines.api_provider(mod) or "")
+                        -- One message, always naming who answered: the user's suggestion, and simpler than
+                        -- a follow-up popup - the provider is in the line the player is already reading.
+                        util.popup(mod, "custom_test_ok", req.item.en, answer, answered)
+                        if answered ~= selected then
+                            -- And when it was not the service they picked, say why the API was not used.
+                            -- The engine *setting*, not the resolved tier: engines.resolve() answers
+                            -- "online_free" for Automatic whenever no key is set, and passing that on made
+                            -- Automatic look like a deliberate choice of the free tier.
+                            probe_which_provider(mod, answered, mod:get("engine"))
+                        end
                     end
                 end
                 return
@@ -3935,7 +3973,7 @@ function M.update(mod, dt)
                 -- only thing that distinguishes a wrong language code from a wrong key from a
                 -- wrong URL. Reported once per session, like the other configuration
                 -- problems: the failure itself is per item and would repeat verbatim.
-                if req.provider == "custom" and custom and not custom.error_key(http_code) then
+                if is_described(req.provider) and custom and not custom.error_key(http_code) then
                     local len = len_buf[0]
                     local said = len > 0
                         and custom.error_message(core, ffi.string(body_buf, len), out_buf,
@@ -4081,7 +4119,7 @@ function M.probe(mod, lang)
     local probe_item = { mod_id = "test", key = "test", en = sample, hash = "" }
     local job, describe, response_path
 
-    if provider == "custom" or (services and services.has(provider)) then
+    if is_described(provider) then
         if not custom then
             util.popup(mod, "custom_test_no_module")
             return false
