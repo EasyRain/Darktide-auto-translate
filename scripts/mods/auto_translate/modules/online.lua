@@ -2027,6 +2027,13 @@ function M.start(mod, report, lang)
     local gap = engines.gap(engine, lang)
 
     M.stop(mod)
+    -- The in-memory reuse map is for *this* run: "one English string, several keys" is deduplicated as the
+    -- answers arrive, which is what makes a mod's first run cheap. It must not survive into the next run,
+    -- because the store may have been edited in between - and it was, exactly this way: three entries were
+    -- removed from a translation file so the mod would redo them with a new glossary term, and two of the three
+    -- were answered out of this map with the old engine's wording. The log said "queued: 1 key" where three
+    -- were expected, which is the symptom that led here.
+    M.clear_shared_text()
     -- One rate-limit notice per run (the notice is the only place the player is told the run is
     -- waiting rather than stuck), and a clean backoff for a run that may use another engine.
     rate_limit_notified = false

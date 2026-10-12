@@ -792,6 +792,10 @@ do
         m.get("SomeMod", "zh-cn", "Reload Speed").src, "deepl")
     check("reuse: and is not shared across mods", m.get("Other", "zh-cn", "Reload Speed"), nil)
     check("reuse: the engine change clears it", type(onl.clear_shared_text), "function")
+    -- and every run clears it, because the store can be edited between runs: three entries were removed from a
+    -- file so the mod would redo them with a new term, and two came back with the old engine's wording out of
+    -- this map. The log said "queued: 1 key" where three were expected.
+    check("reuse: starting a run clears it", type(onl.start), "function")
     onl.clear_shared_text()
     check("reuse: so the next engine is asked for real",
         m.get("SomeMod", "zh-cn", "Reload Speed"), nil)
