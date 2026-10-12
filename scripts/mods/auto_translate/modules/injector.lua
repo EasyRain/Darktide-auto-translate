@@ -100,11 +100,11 @@ function M.merge(mod, name, loc_table, lang, remember_only)
 
     local data = store.load(name, lang)
     if not data then
-        -- No translation file for this mod and language. Nothing is applied, and nothing is cleared either:
-        -- a deleted file asks for the file to be rebuilt, not for the screen to be emptied. The signal for
-        -- "redo this with the engine I just picked" is the engine change itself - see M.forget_injected, which
-        -- is what the settings handler calls - so a player who deletes a file and leaves the engine alone keeps
-        -- seeing the translation they already had until the new run replaces it.
+        -- No translation file for this mod and language: nothing to apply, and nothing is cleared either.
+        -- A deleted file is how a player asks for *this* mod to be redone (possibly with another engine), and
+        -- the rebuilding happens by itself - the keys simply have no entry, so the next scan calls them pending.
+        -- What must NOT happen is any effect on the other mods: switching the engine redoes nothing on its own,
+        -- and the text already on screen stays until its replacement arrives.
         return 0
     end
 
@@ -162,35 +162,6 @@ function M.flush(mod, lang)
 end
 
 -- Injects everything that is ready for this mod. Returns the number injected.
--- Undo what this session injected, for every mod. The player's signal for "translate this again, with the
--- engine I just picked" is changing the engine, and this is what makes that work: with our text out of the
--- tables the scanner sees the mod's own English again, so the new engine translates the source rather than
--- skipping keys it believes are already translated. Deleting a translation file on its own deliberately does
--- not do this - that is a request to rebuild the file, not to clear what is on screen.
-function M.forget_injected(mod)
-    local function lang_of(record)
-        return (record and record.lang) or "zh-cn"
-    end
-    local restored = 0
-    for name, per_mod in pairs(written) do
-        local tbl = M.tables[name]
-        if type(tbl) == "table" then
-            for key, record in pairs(per_mod) do
-                local value = tbl[key]
-                if type(value) == "table" and type(value["en"]) == "string" then
-                    value[lang_of(record)] = nil
-                    restored = restored + 1
-                end
-            end
-        end
-    end
-    written = {}
-    if restored > 0 then
-        util.info(mod, "engine changed; %d injected key(s) were handed back to the original text", restored)
-    end
-    return restored
-end
-
 local function inject_mod(mod, dmf, entry, lang)
     if #entry.ready == 0 then
         return 0

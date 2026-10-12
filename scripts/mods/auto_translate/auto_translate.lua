@@ -197,20 +197,6 @@ local function scan_opts(lang)
     local engine = engines.resolve(mod, lang)
     local opts = { engine = engine }
 
-    -- A store entry's `src` is the *provider* that wrote it (deepl, baidu, bing, local_base), not the tier the
-    -- engine setting names (online_api, online_free). Comparing those two would never match and every scan
-    -- would redo everything, so the value the scanner compares against is spelled the same way the writer
-    -- spells it:
-    --   * the API engine knows its provider up front - that is the service the player picked;
-    --   * the free tier does not: it tries several, and whichever answers writes its own name, so nothing is
-    --     compared there (nil) and its entries are not churned;
-    --   * the offline models write their engine's own name, so `engine` already is the right value for them.
-    if engine == "online_api" then
-        opts.provider = engines.api_provider(mod)
-    elseif engines.is_local_engine(engine) then
-        opts.provider = engine
-    end
-
     if mod:get("retranslate_local") == true and engine ~= nil and not engines.is_local_engine(engine) then
         opts.redo_local = true
     end
@@ -821,16 +807,6 @@ mod.on_setting_changed = function(setting_id)
         elseif setting_id == "online_api_key" then
             -- a new key deserves a fresh attempt after a failure streak
             engines.reset(mod)
-        end
-
-        -- Changing the engine (or the service it talks to) is the player's way of saying "translate this again
-        -- with the other one", and the report behind this was that it did not work: the file came back with the
-        -- previous engine's text. Handing our injected text back to the source first is what makes the new
-        -- engine translate the English rather than skip keys it believes the mod already ships. Deleting a
-        -- translation file on its own deliberately does not do this - that asks for the file to be rebuilt, not
-        -- for the screen to be cleared.
-        if setting_id == "engine" or setting_id == "api_provider" then
-            injector.forget_injected(mod)
         end
 
         online.flush(mod)

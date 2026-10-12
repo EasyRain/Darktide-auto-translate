@@ -97,11 +97,7 @@ function M.scan_mod(name, lang, opts)
                 -- player deleted, an engine they switched), in which case it is not a translation at all and
                 -- the loop below decides it again - from the store if it survived, as pending if it did not.
                 local hash = util.hash(value["en"])
-                -- opts.provider, not opts.engine: the entry's `src` names the provider that wrote it. The
-                -- caller spells both the same way (see scan_opts in auto_translate.lua) and leaves it nil for
-                -- the free tier, whose provider is only known once it answers.
-                local text, reason = store.lookup(data, key, value["en"], hash,
-                    opts and opts.provider or nil)
+                local text, reason = store.lookup(data, key, value["en"], hash)
                 if text then
                     entry.ready[#entry.ready + 1] = { key = key, en = value["en"], hash = hash, text = text, src = reason }
                 elseif opts and opts.engine and store.parked_for(data, key, hash) == opts.engine then
