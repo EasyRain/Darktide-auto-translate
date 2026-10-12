@@ -678,10 +678,33 @@ do
     check("service space: and the untouched reply is unchanged",
         g.unmask(masked, tokens, masked), source)
 
-    -- a space between two placeholders the source kept apart stays where it is
+    -- A space between two placeholders the source kept apart stays where it is. This is the ordinary English
+    -- case - two terms side by side have a space between them ("Psyker Scream" - 灵能者 尖叫) - and the rule
+    -- must not touch it, which is exactly why it compares with the source instead of looking at the characters.
     local apart = ph(0) .. " " .. ph(1)
-    check("service space: a source space survives",
+    check("service space: a source space between two terms survives",
         g.unmask(apart, {}, apart), apart)
+
+    -- The real shape of that case, with the *real* glossary doing the tokenising: a term next to a word keeps
+    -- the space that was between them, and a term that fills the whole string simply becomes the term.
+    --
+    -- The block above uses a stubbed glossary (no terms at all) because the placeholder-level rule does not need
+    -- one; these two do, so they load the shipped table.
+    do
+        local real = assert(loadfile(here .. "/../scripts/mods/auto_translate/modules/glossary.lua"))()
+        real.init({ MOD_DIR = here .. "/..",
+                    file_exists = function(path)
+                        local f = io.open(path, "rb"); if f then f:close(); return true end; return false end,
+                    load_lua_file = function(path) return assert(loadfile(path))(), nil end,
+                    log = function() end })
+        check("service space: the shipped glossary loads", real.load(), true)
+        check("service space: and has terms", real.total() > 1000, true)
+        for _, case in ipairs({ { "Psyker Scream", "灵能者 Scream" }, { "Reload Speed", "装弹速度" } }) do
+            local m, tk = real.mask(case[1], "zh-cn", true)
+            check("service space: " .. case[1] .. " restores to " .. case[2],
+                real.unmask(m, tk, m), case[2])
+        end
+    end
 end
 
 -- ---------------------------------------------------------------------------
