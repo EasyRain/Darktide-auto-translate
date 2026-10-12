@@ -1194,32 +1194,47 @@ local function cache_key(mod_id, lang)
     return mod_id .. "\0" .. tostring(lang)
 end
 
--- True when the player has deleted this mod's translation file since we cached it.
+-- True when the file we loaded for this mod has since disappeared from disk.
 --
--- Deleting one mod's file while the game runs and pressing Reload is a deliberate thing to do - it is how a
--- single mod gets redone, possibly with another engine - and the cache used to answer for the file anyway: the
--- flush wrote the old table back to disk and the run saved the old entries into it, so the file reappeared with
--- the previous engine's text and the new engine's work had nowhere to go. The user's report was exactly that
--- ("it still writes Baidu's text back"), with the reload button in the middle of it.
-local function store_file_gone(mod_id, lang)
+-- The distinction that matters, and getting it wrong cost a round: a mod with no file at all is the normal
+-- first-run case and its translations must be written; only a file we actually read and that is now gone was
+-- deleted by the player. Treating "no file" as "deleted" made every new mod's work vanish - the report was
+-- simply "the translation file is not being written".
+--
+-- Why the check exists at all: deleting one mod's file while the game runs and pressing Reload is how a single
+-- mod gets redone, possibly with another engine, and the cache used to answer for the file anyway - the flush
+-- wrote the old table back to disk and the run saved into it, so the file reappeared with the previous engine's
+-- text and the new engine's work had nowhere to go.
+local loaded_from_disk = {}
+
+local function deleted_since_load(mod_id, lang)
+    local k = cache_key(mod_id, lang)
+    if not loaded_from_disk[k] then
+        return false
+    end
     if type(store.path_for) ~= "function" or type(util.file_exists) ~= "function" then
         return false
     end
     return not util.file_exists(store.path_for(mod_id, lang))
 end
 
+M.deleted_since_load_for_tests = deleted_since_load
+
 local function data_for(mod_id, lang)
     local k = cache_key(mod_id, lang)
     local data = data_cache[k]
-    if data and store_file_gone(mod_id, lang) then
+    if data and deleted_since_load(mod_id, lang) then
         -- The player deleted it: forget what we loaded, so the run starts from an empty store and writes the
         -- new engine's translations into a file that is created fresh.
         data_cache[k] = nil
+        loaded_from_disk[k] = nil
         data = nil
     end
     if not data then
         data = store.load(mod_id, lang)
-        if type(data) ~= "table" then
+        if type(data) == "table" then
+            loaded_from_disk[k] = true
+        else
             data = { enabled = true, entries = {} }
         end
         data_cache[k] = data
@@ -1242,7 +1257,7 @@ function M.flush(mod)
     local written = 0
     for k, item in pairs(dirty) do
         local data = data_cache[k]
-        if data and store_file_gone(item.mod_id, item.lang) then
+        if data and deleted_since_load(item.mod_id, item.lang) then
             -- Do not resurrect a file the player deleted: dropping the cache is what lets the next scan see the
             -- keys as missing and redo them.
             data_cache[k] = nil

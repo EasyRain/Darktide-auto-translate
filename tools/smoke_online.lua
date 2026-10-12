@@ -685,11 +685,23 @@ do
     check("deleted file: the cache answers while the file exists",
         onl.data_for_for_tests("SomeMod", "zh-cn"), first)
 
-    -- the player deletes it mid-session
+    -- the player deletes it mid-session: at that instant it is "deleted since load" - and once the cache has
+    -- been dropped it deliberately no longer is, because from then on the run is creating the file anew
     exists = false
+    check("deleted file: it reads as deleted before the cache is dropped",
+        onl.deleted_since_load_for_tests("SomeMod", "zh-cn"), true)
     local after = onl.data_for_for_tests("SomeMod", "zh-cn")
     check("deleted file: the cache is dropped", after ~= first, true)
     check("deleted file: and a fresh, empty store is started", next(after.entries), nil)
+
+    -- A mod with no file at all is the ordinary first run, and its work has to be saved. Treating "no file" as
+    -- "deleted" made every new mod's translations vanish, which is a report this test now prevents.
+    local fresh = onl.data_for_for_tests("NoFileYet", "zh-cn")
+    check("no file yet: an empty store is started", type(fresh.entries), "table")
+    check("no file yet: and it is not treated as deleted",
+        onl.deleted_since_load_for_tests("NoFileYet", "zh-cn"), false)
+    check("deleted file: and after the drop it is a file to create, not one to mourn",
+        onl.deleted_since_load_for_tests("SomeMod", "zh-cn"), false)
 end
 
 -- ---------------------------------------------------------------------------
