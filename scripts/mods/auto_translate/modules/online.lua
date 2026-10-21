@@ -1263,6 +1263,52 @@ end
 -- wrote the old table back to disk and the run saved into it, so the file reappeared with the previous engine's
 -- text and the new engine's work had nowhere to go.
 local loaded_from_disk = {}
+-- The size of the file as we last saw it (after a read or after our own write). A different size means someone
+-- edited it - the player, in game, which is the case this exists for.
+local seen_size = {}
+
+local function file_size(path)
+    if type(path) ~= "string" then return nil end
+    local f = io.open(path, "rb")
+    if not f then return nil end
+    local size = f:seek("end")
+    f:close()
+    return size
+end
+
+local function path_for(mod_id, lang)
+    if type(store.path_for) ~= "function" then return nil end
+    return store.path_for(mod_id, lang)
+end
+
+-- The player edited this mod's file since we read it. Their edit has to win, or editing a translation in game is
+-- pointless: the run would write its cached copy over the change on the next flush. Reported by the user, who
+-- found that a hand edit made while playing was silently reverted.
+local function edited_since_load(mod_id, lang)
+    local k = cache_key(mod_id, lang)
+    local known = seen_size[k]
+    if not known then return false end
+    local now = file_size(path_for(mod_id, lang))
+    return now ~= nil and now ~= known
+end
+
+-- Take what is on disk, without throwing away what this run has produced: a key that exists only on disk is the
+-- player's, and a hand written one on disk (no src line) always wins - that is the file's own contract.
+local function merge_from_disk(memory, disk)
+    if type(disk) ~= "table" or type(disk.entries) ~= "table" then return 0 end
+    if type(memory.entries) ~= "table" then memory.entries = {} end
+    local taken = 0
+    for key, entry in pairs(disk.entries) do
+        if type(entry) == "table" and type(entry.text) == "string" and entry.text ~= "" then
+            local ours = memory.entries[key]
+            if ours == nil or entry.src == nil or entry.src == "" then
+                memory.entries[key] = entry
+                taken = taken + 1
+            end
+        end
+    end
+    return taken
+end
 
 local function deleted_since_load(mod_id, lang)
     local k = cache_key(mod_id, lang)
@@ -1291,13 +1337,19 @@ local function data_for(mod_id, lang)
         data = store.load(mod_id, lang)
         if type(data) == "table" then
             loaded_from_disk[k] = true
+            seen_size[k] = file_size(path_for(mod_id, lang))
         else
             data = { enabled = true, entries = {} }
+            seen_size[k] = nil
         end
         data_cache[k] = data
     end
     return data
 end
+
+
+M.edited_since_load_for_tests = edited_since_load
+M.merge_from_disk_for_tests = merge_from_disk
 
 M.data_for_for_tests = data_for
 
@@ -1321,7 +1373,14 @@ function M.flush(mod)
             data = nil
             util.info(mod, "translation file for %s was deleted; not writing it back", item.mod_id)
         end
+        if data and edited_since_load(item.mod_id, item.lang) then
+            local disk = store.load(item.mod_id, item.lang)
+            local taken = merge_from_disk(data, disk)
+            util.info(mod, "translation file for %s was edited; re-read it and kept %d of its entr(ies)",
+                item.mod_id, taken)
+        end
         if data and store.save(item.mod_id, item.lang, data) then
+            seen_size[k] = file_size(path_for(item.mod_id, item.lang))
             written = written + 1
         else
             util.warn(mod, "could not write translations for %s (%s)", item.mod_id, item.lang)

@@ -653,6 +653,44 @@ check("scanner: unchanged is not", scanner.is_local_source("unchanged"), false)
 check("scanner: nil is not", scanner.is_local_source(nil), false)
 
 -- ---------------------------------------------------------------------------
+-- An edit made in game has to survive the next flush.
+--
+-- The store keeps one table per mod and language for the whole session, and the flush writes that table back. So
+-- a translation edited on disk while the game was running was silently reverted - the user found editing a
+-- translation in game was pointless. The flush now notices that the file changed (its size, which is cheap) and
+-- re-reads it before writing, merging:
+--
+--   * a hand written entry on disk (no src line) always wins - that is the file''s own contract;
+--   * a key that exists only on disk is the player''s and is taken;
+--   * anything else this run produced is kept.
+-- ---------------------------------------------------------------------------
+do
+    local onl = assert(loadfile(here .. "/../scripts/mods/auto_translate/modules/online.lua"))()
+    local merge = onl.merge_from_disk_for_tests
+    check("edit: the merge is exported", type(merge), "function")
+
+    local memory = { entries = {
+        a = { en = "A", hash = "h", text = "运行时译文", src = "deepl" },
+        c = { en = "C", hash = "h", text = "仅内存", src = "deepl" },
+    } }
+    local disk = { entries = {
+        a = { en = "A", hash = "h", text = "机器写的旧文", src = "baidu" },   -- machine: ours wins
+        b = { en = "B", hash = "h", text = "手写的", },                        -- hand: theirs wins, new key
+        c = { en = "C", hash = "h", text = "玩家改过的", },                    -- hand: theirs wins
+    } }
+    local taken = merge(memory, disk)
+    check("edit: the hand written entry for a key we had wins", memory.entries.c.text, "玩家改过的")
+    check("edit: a machine entry on disk does not beat this run''s", memory.entries.a.text, "运行时译文")
+    check("edit: a key that exists only on disk is taken", memory.entries.b.text, "手写的")
+    check("edit: and the count says how many were taken", taken, 2)
+
+    -- a disk table with no entries changes nothing
+    local before = memory.entries.a.text
+    check("edit: an empty disk table is a no-op", merge(memory, { entries = {} }), 0)
+    check("edit: and leaves memory alone", memory.entries.a.text, before)
+end
+
+-- ---------------------------------------------------------------------------
 -- Percent escapes survive a round trip through the service.
 --
 -- Three FpsDoctor strings were refused three times each with "translation has 1 stray '%' the source does not
