@@ -1292,16 +1292,31 @@ local function edited_since_load(mod_id, lang)
     return now ~= nil and now ~= known
 end
 
--- Take what is on disk, without throwing away what this run has produced: a key that exists only on disk is the
--- player's, and a hand written one on disk (no src line) always wins - that is the file's own contract.
-local function merge_from_disk(memory, disk)
+-- Which keys this session has written itself. Anything else that turns up on disk was put there by the player,
+-- and their text has to win - that is the whole point of editing a translation.
+local written_keys = {}
+
+local function note_written(mod_id, lang, key)
+    local k = cache_key(mod_id, lang)
+    local set = written_keys[k]
+    if not set then set = {}; written_keys[k] = set end
+    set[key] = true
+end
+
+-- Take what is on disk, with the player's text winning over anything this session did not produce itself:
+--
+--   * a key on disk that we have no entry for      -> taken (a key the player added);
+--   * a key on disk that we have and did NOT write -> taken (the player edited it; the cache is stale);
+--   * a key on disk that this session wrote        -> ours is kept, or new translations could never be saved;
+--   * a key we have that is not on disk            -> kept (missing entries are exactly what a run fills).
+local function merge_from_disk(memory, disk, wrote)
     if type(disk) ~= "table" or type(disk.entries) ~= "table" then return 0 end
     if type(memory.entries) ~= "table" then memory.entries = {} end
+    wrote = wrote or {}
     local taken = 0
     for key, entry in pairs(disk.entries) do
         if type(entry) == "table" and type(entry.text) == "string" and entry.text ~= "" then
-            local ours = memory.entries[key]
-            if ours == nil or entry.src == nil or entry.src == "" then
+            if memory.entries[key] == nil or not wrote[key] then
                 memory.entries[key] = entry
                 taken = taken + 1
             end
@@ -1374,9 +1389,11 @@ function M.flush(mod)
             util.info(mod, "translation file for %s was deleted; not writing it back", item.mod_id)
         end
         if data and edited_since_load(item.mod_id, item.lang) then
+            -- The file changed under us. Keep the player's text for every entry this run did not produce, and
+            -- keep ours for the ones it did, so a translation written now is still written.
             local disk = store.load(item.mod_id, item.lang)
-            local taken = merge_from_disk(data, disk)
-            util.info(mod, "translation file for %s was edited; re-read it and kept %d of its entr(ies)",
+            local taken = merge_from_disk(data, disk, written_keys[k])
+            util.info(mod, "translation file for %s was edited; re-read it, took %d entr(ies) from disk",
                 item.mod_id, taken)
         end
         if data and store.save(item.mod_id, item.lang, data) then
@@ -2478,6 +2495,7 @@ local function store_translation(mod, item, text, src)
     -- Named one by one: "3 translated" next to a file whose three entries say baidu cannot be told apart from
     -- a file that was never touched. This says which key was written with which engine.
     util.log(mod, "store write %s:%s src=%s", tostring(item.mod_id), tostring(item.key), tostring(src))
+    note_written(item.mod_id, M.state.lang, item.key)
     store.set_entry(data, item.key, item.en, item.hash, text, src)
     mark_dirty(item.mod_id, M.state.lang)
     remember_shared_text(item.mod_id, M.state.lang, item.en, text, src)

@@ -669,25 +669,35 @@ do
     local merge = onl.merge_from_disk_for_tests
     check("edit: the merge is exported", type(merge), "function")
 
-    local memory = { entries = {
-        a = { en = "A", hash = "h", text = "运行时译文", src = "deepl" },
-        c = { en = "C", hash = "h", text = "仅内存", src = "deepl" },
-    } }
+    local function fresh()
+        return { entries = {
+            a = { en = "A", hash = "h", text = "运行时译文", src = "deepl" },
+            c = { en = "C", hash = "h", text = "仅内存", src = "deepl" },
+        } }
+    end
     local disk = { entries = {
-        a = { en = "A", hash = "h", text = "机器写的旧文", src = "baidu" },   -- machine: ours wins
-        b = { en = "B", hash = "h", text = "手写的", },                        -- hand: theirs wins, new key
-        c = { en = "C", hash = "h", text = "玩家改过的", },                    -- hand: theirs wins
+        a = { en = "A", hash = "h", text = "磁盘上的旧文", src = "baidu" },
+        b = { en = "B", hash = "h", text = "磁盘新加的", },
+        c = { en = "C", hash = "h", text = "玩家改过的", },
     } }
-    local taken = merge(memory, disk)
-    check("edit: the hand written entry for a key we had wins", memory.entries.c.text, "玩家改过的")
-    check("edit: a machine entry on disk does not beat this run''s", memory.entries.a.text, "运行时译文")
-    check("edit: a key that exists only on disk is taken", memory.entries.b.text, "手写的")
-    check("edit: and the count says how many were taken", taken, 2)
 
-    -- a disk table with no entries changes nothing
-    local before = memory.entries.a.text
-    check("edit: an empty disk table is a no-op", merge(memory, { entries = {} }), 0)
-    check("edit: and leaves memory alone", memory.entries.a.text, before)
+    -- This session wrote none of these, so every entry on disk is the player's and every one of them wins.
+    local m1 = fresh()
+    local taken = merge(m1, disk, {})
+    check("edit: the disk wins when this session wrote nothing", m1.entries.a.text, "磁盘上的旧文")
+    check("edit: the hand written one too", m1.entries.c.text, "玩家改过的")
+    check("edit: and a disk-only key is taken", m1.entries.b.text, "磁盘新加的")
+    check("edit: the count reports how many", taken, 3)
+
+    -- This session wrote a and c: those keep the run's text, or a new translation could never be saved.
+    local m2 = fresh()
+    local took2 = merge(m2, disk, { a = true, c = true })
+    check("edit: a key this session wrote keeps its new text", m2.entries.a.text, "运行时译文")
+    check("edit: and so does one it rewrote", m2.entries.c.text, "仅内存")
+    check("edit: but a key it never wrote still comes from disk", m2.entries.b.text, "磁盘新加的")
+    check("edit: one entry taken", took2, 1)
+
+    check("edit: an empty disk table is a no-op", merge(fresh(), { entries = {} }, {}), 0)
 end
 
 -- ---------------------------------------------------------------------------
