@@ -653,6 +653,37 @@ check("scanner: unchanged is not", scanner.is_local_source("unchanged"), false)
 check("scanner: nil is not", scanner.is_local_source(nil), false)
 
 -- ---------------------------------------------------------------------------
+-- Percent escapes survive a round trip through the service.
+--
+-- Three FpsDoctor strings were refused three times each with "translation has 1 stray '%' the source does not
+-- have". The cause was not the guard: their source contains "%%" - a format escape, because DMF passes every
+-- translation through string.format - and DeepL tidied it into a single "%", which is not an escape but a syntax
+-- error waiting for the first localize() call.
+--
+-- So the service is shown a plain percent and the reply is escaped back. Real specifiers are left alone.
+-- ---------------------------------------------------------------------------
+do
+    local onl = assert(loadfile(here .. "/../scripts/mods/auto_translate/modules/online.lua"))()
+    local P = onl._pct_for_tests
+    check("percent: the helpers are exported", type(P), "table")
+
+    local cases = {
+        { "92%% at 90%%", "92% at 90%",    "92%% at 90%%" },
+        { "1%% low",      "1% low",        "1%% low" },
+        { "100%",         "100%",          "100%%" },
+        { "%s and %d",    "%s and %d",     "%s and %d" },
+        { "%.2f sec",     "%.2f sec",      "%.2f sec" },
+        { "no percent",   "no percent",    "no percent" },
+    }
+    for _, c in ipairs(cases) do
+        check("percent: " .. c[1] .. " leaves as " .. c[2], P.unescape(c[1]), c[2])
+        check("percent: and returns as " .. c[3], P.escape(c[2]), c[3])
+    end
+    -- what the guard must see: the escaped form, which matches the source
+    check("percent: a dropped escape comes back", P.escape("92% at 90%"), "92%% at 90%%")
+end
+
+-- ---------------------------------------------------------------------------
 -- A space between two Chinese characters is the service carrying English word spacing into Chinese.
 --
 -- The counter-example is in the user''s own store: "Cancel Edit" - cancel is a term (取消), edit is prose - was

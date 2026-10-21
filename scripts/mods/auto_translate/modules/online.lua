@@ -448,12 +448,69 @@ local function wire_for(provider)
 end
 M.wire_for_for_tests = wire_for
 
+-- Percent escapes, and why they need a pair of helpers.
+--
+-- A source string like "(92%%)" is a *format* string: DMF passes every stored translation through
+-- string.format, so "%%" there means one literal '%'. A service sees "92%%" and tidies it to "92%", which is
+-- not an escape but a lone '%' - and a lone '%' in a format string is a syntax error at the worst moment. The
+-- guard refused three FpsDoctor strings for exactly that, three times each, before anyone looked.
+--
+-- So the service is shown the plain percent (it has no reason to know about Lua escaping, and no opportunity to
+-- drop one), and the reply is escaped back on the way in. A real specifier ("%s", "%d", "%.2f") is left alone -
+-- those do not survive a service either, and the placeholder guard is what deals with them.
+local PCT = {}
+
+function PCT.unescape(s)
+    if type(s) ~= "string" then return s end
+    local out, i, n = {}, 1, #s
+    while i <= n do
+        local c = s:sub(i, i)
+        if c == "%" and s:sub(i + 1, i + 1) == "%" then
+            out[#out + 1] = "%"
+            i = i + 2
+        else
+            out[#out + 1] = c
+            i = i + 1
+        end
+    end
+    return table.concat(out)
+end
+
+function PCT.escape(s)
+    if type(s) ~= "string" then return s end
+    local out, i, n = {}, 1, #s
+    while i <= n do
+        local c = s:sub(i, i)
+        if c == "%" then
+            local nx = s:sub(i + 1, i + 1)
+            if nx == "%" then
+                out[#out + 1] = "%%"
+                i = i + 2
+            elseif nx ~= "" and nx:match("[%a%.%d]") then
+                out[#out + 1] = "%"
+                i = i + 1
+            else
+                out[#out + 1] = "%%"
+                i = i + 1
+            end
+        else
+            out[#out + 1] = c
+            i = i + 1
+        end
+    end
+    return table.concat(out)
+end
+
+M._pct_for_tests = PCT
+
 local function to_wire(text, tokens)
+    local out = text
     if type(glossary) == "table" and glossary.to_wire then
-        return glossary.to_wire(text, glossary.wire_reserved and glossary.wire_reserved(tokens) or nil,
+        out = glossary.to_wire(text, glossary.wire_reserved and glossary.wire_reserved(tokens) or nil,
                             current_wire)
     end
-    return text
+    -- What leaves the mod: a plain percent.
+    return PCT.unescape(out)
 end
 
 local function from_wire(text, tokens)
@@ -2837,6 +2894,9 @@ function accept_translation(mod, req, raw, src)
         end
         return true
     end
+
+    -- What comes back is a plain percent again; make it format-safe before any guard looks.
+    restored = PCT.escape(restored)
 
     local safe, why = M.text_is_safe(item.en, restored, M.state.lang)
     if not safe then
