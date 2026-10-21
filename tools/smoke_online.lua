@@ -689,13 +689,21 @@ do
     check("edit: and a disk-only key is taken", m1.entries.b.text, "磁盘新加的")
     check("edit: the count reports how many", taken, 3)
 
-    -- This session wrote a and c: those keep the run's text, or a new translation could never be saved.
+    -- This session wrote a and c. The disk now holds different text for both, which is an edit: it wins.
     local m2 = fresh()
-    local took2 = merge(m2, disk, { a = true, c = true })
-    check("edit: a key this session wrote keeps its new text", m2.entries.a.text, "运行时译文")
-    check("edit: and so does one it rewrote", m2.entries.c.text, "仅内存")
-    check("edit: but a key it never wrote still comes from disk", m2.entries.b.text, "磁盘新加的")
-    check("edit: one entry taken", took2, 1)
+    local took2 = merge(m2, disk, { a = "运行时译文", c = "仅内存" })
+    check("edit: an edit over a key this session wrote still wins", m2.entries.a.text, "磁盘上的旧文")
+    check("edit: and likewise for the other", m2.entries.c.text, "玩家改过的")
+    check("edit: a disk-only key is taken too", m2.entries.b.text, "磁盘新加的")
+    check("edit: three taken", took2, 3)
+
+    -- But when the disk still holds exactly what this session wrote, there is no edit and ours stays.
+    local m3 = fresh()
+    local disk_same = { entries = {
+        a = { en = "A", hash = "h", text = "运行时译文", src = "deepl" },
+    } }
+    check("edit: unchanged disk text leaves ours alone", merge(m3, disk_same, { a = "运行时译文" }), 0)
+    check("edit: and the text is still ours", m3.entries.a.text, "运行时译文")
 
     check("edit: an empty disk table is a no-op", merge(fresh(), { entries = {} }, {}), 0)
 end

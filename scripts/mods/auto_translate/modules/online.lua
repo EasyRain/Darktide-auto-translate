@@ -1299,11 +1299,16 @@ end
 -- and their text has to win - that is the whole point of editing a translation.
 local written_keys = {}
 
-local function note_written(mod_id, lang, key)
+-- Records the *text* this session wrote for a key, not just that it wrote one. Comparing the text is what tells a
+-- player's edit apart from this run's own work: a flush that finds different text on disk than it wrote must be
+-- looking at an edit and has to keep it. A boolean was not enough - the three FpsDoctor strings had just been
+-- translated when the player replaced them, so "this run wrote it" was true and the edit would have been thrown
+-- away.
+local function note_written(mod_id, lang, key, text)
     local k = cache_key(mod_id, lang)
     local set = written_keys[k]
     if not set then set = {}; written_keys[k] = set end
-    set[key] = true
+    set[key] = text
 end
 
 -- Take what is on disk, with the player's text winning over anything this session did not produce itself:
@@ -1319,7 +1324,11 @@ local function merge_from_disk(memory, disk, wrote)
     local taken = 0
     for key, entry in pairs(disk.entries) do
         if type(entry) == "table" and type(entry.text) == "string" and entry.text ~= "" then
-            if memory.entries[key] == nil or not wrote[key] then
+            local ours = memory.entries[key]
+            local ours_text = wrote[key]
+            if ours == nil
+                or type(ours_text) ~= "string"                      -- this session never wrote it: the player's
+                or entry.text ~= ours_text then                     -- or: different text on disk means an edit
                 memory.entries[key] = entry
                 taken = taken + 1
             end
@@ -2498,7 +2507,7 @@ local function store_translation(mod, item, text, src)
     -- Named one by one: "3 translated" next to a file whose three entries say baidu cannot be told apart from
     -- a file that was never touched. This says which key was written with which engine.
     util.log(mod, "store write %s:%s src=%s", tostring(item.mod_id), tostring(item.key), tostring(src))
-    note_written(item.mod_id, M.state.lang, item.key)
+    note_written(item.mod_id, M.state.lang, item.key, text)
     store.set_entry(data, item.key, item.en, item.hash, text, src)
     mark_dirty(item.mod_id, M.state.lang)
     remember_shared_text(item.mod_id, M.state.lang, item.en, text, src)
