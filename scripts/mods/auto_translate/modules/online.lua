@@ -1267,13 +1267,16 @@ local loaded_from_disk = {}
 -- edited it - the player, in game, which is the case this exists for.
 local seen_size = {}
 
+-- The darktide Lua sandbox has no global `io`; every file operation goes through util (which resolves the real
+-- library from Mods.lua). Using io.open here crashed the whole startup pipeline - "attempt to index global 'io' (a
+-- nil value)" - which is how this was caught: the run never started and the three translations the player was
+-- testing never appeared.
 local function file_size(path)
     if type(path) ~= "string" then return nil end
-    local f = io.open(path, "rb")
-    if not f then return nil end
-    local size = f:seek("end")
-    f:close()
-    return size
+    if type(util.read_file) ~= "function" then return nil end
+    local content = util.read_file(path)
+    if type(content) ~= "string" then return nil end
+    return #content
 end
 
 local function path_for(mod_id, lang)

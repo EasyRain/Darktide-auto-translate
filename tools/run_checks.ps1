@@ -1,4 +1,4 @@
-# run_checks.ps1 -- every check the README lists, one command, with a timing per check.
+﻿# run_checks.ps1 -- every check the README lists, one command, with a timing per check.
 #
 #   powershell -File tools\run_checks.ps1                  # all of them
 #   powershell -File tools\run_checks.ps1 -Only store,glossary
@@ -52,6 +52,7 @@ $checks = @(
     @{ name = 'changelog';hint = 'Nexus changelogs fit 255 and match their stated length'; cmd = { python tools\check_changelog.py --selftest; python tools\check_changelog.py } }
     @{ name = 'lf';       hint = 'every text file keeps LF endings';          cmd = { python tools\check_line_endings.py --selftest; python tools\check_line_endings.py } }
     @{ name = 'rebuild';  hint = 'the generated files are what the tools write now'; cmd = { python tools\check_reproducible.py } }
+    @{ name = 'sandbox';   hint = 'no io/os in the mod (the sandbox has neither)'; cmd = { python tools\check_sandbox.py } },
     @{ name = 'selfcheck'; hint = 'the FFI-surface check behaves as documented'; cmd = { python tools\selftest_check_exports.py } }
 )
 
