@@ -15,9 +15,26 @@ REM   * at_model.c and at_model.cpp would otherwise both claim at_model.obj and
 REM     one would silently overwrite the other.
 setlocal
 
-call "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat" >nul
+REM Find the MSVC environment through vswhere, which knows every edition and every install path. The
+REM hardcoded "...\2022\Community\VC\Auxiliary\Build\vcvars64.bat" this replaces failed the moment the machine
+REM had Build Tools instead of Community, or Visual Studio on another drive - and the failure read like a broken
+REM build rather than a missing compiler (2026-10-31, after a Windows reinstall).
+set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
+set "VCVARS="
+if exist "%VSWHERE%" (
+  for /f "usebackq delims=" %%P in (`"%VSWHERE%" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do (
+    if exist "%%P\VC\Auxiliary\Build\vcvars64.bat" set "VCVARS=%%P\VC\Auxiliary\Build\vcvars64.bat"
+  )
+)
+if not defined VCVARS if exist "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat" set "VCVARS=C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat"
+if not defined VCVARS (
+  echo FAILED: no Visual Studio C++ toolchain found.
+  echo         install Visual Studio 2022 with "Desktop development with C++" - Community or Build Tools^(^)
+  exit /b 1
+)
+call "%VCVARS%" >nul
 if errorlevel 1 (
-  echo FAILED: could not initialise the MSVC environment
+  echo FAILED: could not initialise the MSVC environment from "%VCVARS%"
   exit /b 1
 )
 
