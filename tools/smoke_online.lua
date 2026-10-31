@@ -658,6 +658,11 @@ do
     local onl = assert(loadfile(here .. "/../scripts/mods/auto_translate/modules/online.lua"))()
     check("busy: exported", type(onl.busy), "function")
     check("busy: nothing in flight reads false", onl.busy(), false)
+    -- A test asked for mid-run is queued rather than refused; the queue driver runs it at the next gap.
+    check("test: request_test is exported", type(onl.request_test), "function")
+    check("test: nothing queued to begin with", onl.test_pending(), false)
+    onl.request_test({}, "zh-cn")
+    check("test: a request is queued", onl.test_pending(), true)
 end
 
 -- ---------------------------------------------------------------------------

@@ -347,6 +347,16 @@ end
 -- online.start() alone cannot queue anything: it needs a scan report.
 local resume_after_test = false
 
+
+local function run_engine_test()
+    local was_running = online.is_running()
+    online.probe(mod, current_lang())
+    -- Only when the test actually stopped a run: a test refused as "busy" never touched the queue.
+    if was_running and not online.is_running() then
+        resume_after_test = true
+    end
+end
+
 local function run_pipeline(reason, quiet)
     -- Any deliberate start (the switch, Reload) supersedes a pending "resume after the test", so the frame loop
     -- does not start a second run once this one finishes.
@@ -587,12 +597,15 @@ end
 -- same from the outside ("translation failed"), so this is what makes it configurable at
 -- all.
 function mod.test_custom_api()
-    local was_running = online.is_running()
-    online.probe(mod, current_lang())
-    -- Only when the test actually stopped a run: a test that returned "busy" never touched it.
-    if was_running and not online.is_running() then
-        resume_after_test = true
+    if online.busy() then
+        -- Hand it to the queue driver, which sees the gap between requests; the run is stopped there and this
+        -- flag brings it back afterwards.
+        online.request_test(mod, current_lang())
+        resume_after_test = online.is_running()
+        util.info(mod, "a request is in flight; the test runs as soon as it finishes")
+        return
     end
+    run_engine_test()
 end
 
 -- Mod options: "Clear local translations" (only the current target language)

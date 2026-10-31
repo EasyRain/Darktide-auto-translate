@@ -2171,6 +2171,21 @@ function M.busy()
     return inflight ~= nil
 end
 
+-- A test the player asked for while a request was in flight. The queue keeps one request outstanding almost all
+-- the time and dispatches the next one in the same frame it handles a reply, so the only reliable gap is here,
+-- just before the next request goes out. Deferring beats refusing: "press again in a moment" was the answer every
+-- time a player actually wanted to test something.
+local pending_test = nil
+
+function M.request_test(mod, lang)
+    pending_test = { mod = mod, lang = lang or M.state.lang }
+    return true
+end
+
+function M.test_pending()
+    return pending_test ~= nil
+end
+
 -- Builds the queue from a scan report and starts (or resumes) work.
 function M.start(mod, report, lang)
     M.wire_engine_health(engines)
@@ -2419,6 +2434,9 @@ function M.stop(mod)
     M.state.running = false
     M.state.finished = false
     M.state.is_local = false
+    -- A deliberate stop cancels a test that was waiting for a gap; otherwise the test would fire later, after the
+    -- player had already switched the run off.
+    pending_test = nil
 end
 
 local function finish(mod, reason)
@@ -4287,6 +4305,12 @@ function M.update(mod, dt)
     -- shown its reply above. This gate used to sit at the top of the function, where it also
     -- skipped the collection of a probe's reply.
     if not M.state.running then
+        if pending_test and not inflight then
+            local req = pending_test
+            pending_test = nil
+            M.probe(req.mod, req.lang)
+            return
+        end
         return
     end
 
@@ -4305,10 +4329,19 @@ function M.update(mod, dt)
         return
     end
 
-    -- 4. start the next request
+    -- 4. a test the button deferred: this is the gap it was waiting for
+    if pending_test then
+        local req = pending_test
+        pending_test = nil
+        M.stop(mod)
+        M.probe(req.mod, req.lang)
+        return
+    end
+
+    -- 5. start the next request
     dispatch(mod)
 
-    -- 5. the startup check of the keyless tier, in the idle time *after* the run's own work.
+    -- 6. the startup check of the keyless tier, in the idle time *after* the run's own work.
     --
     -- The first strings go out with the order we already have, and whichever endpoint answers while
     -- the check proceeds becomes the one the later strings use (provider_answered writes it, and the
