@@ -598,10 +598,9 @@ end
 -- all.
 function mod.test_custom_api()
     if online.busy() then
-        -- Hand it to the queue driver, which sees the gap between requests; the run is stopped there and this
-        -- flag brings it back afterwards.
+        -- Hand it to the queue driver, which sees the gap between requests. It inserts the test's request between
+        -- the run's own, so the run is never stopped and its counters keep counting: nothing to resume afterwards.
         online.request_test(mod, current_lang())
-        resume_after_test = online.is_running()
         util.info(mod, "a request is in flight; the test runs as soon as it finishes")
         return
     end

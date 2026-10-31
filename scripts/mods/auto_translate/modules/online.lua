@@ -4308,7 +4308,7 @@ function M.update(mod, dt)
         if pending_test and not inflight then
             local req = pending_test
             pending_test = nil
-            M.probe(req.mod, req.lang)
+            M.send_probe(req.mod, req.lang)
             return
         end
         return
@@ -4333,8 +4333,8 @@ function M.update(mod, dt)
     if pending_test then
         local req = pending_test
         pending_test = nil
-        M.stop(mod)
-        M.probe(req.mod, req.lang)
+        -- No M.stop(): the run keeps its counters and picks up where it was when the test's reply is in.
+        M.send_probe(req.mod, req.lang)
         return
     end
 
@@ -4374,22 +4374,13 @@ end
 -- configurable at all. It uses the same single inflight slot as a translation - one
 -- request at a time is what keeps the answers paired with their strings - so a run in
 -- progress is stopped first.
-function M.probe(mod, lang)
-    lang = lang or M.state.lang or "en"
-    if not core then
-        local _, why = M.load_core(mod)
-        if not core then
-            util.popup(mod, "custom_test_failed", tostring(why))
-            return false
-        end
-    end
-    if inflight then
-        util.popup(mod, "custom_test_busy")
-        return false
-    end
-
-    M.stop(mod)
-
+-- The request half of the test button, without touching the queue.
+--
+-- Split out so a test asked for in the middle of a run can slip one request in between the run's own
+-- requests: stopping and restarting the run (the first version of this fix) worked, but the restart is a
+-- new run, so the progress counters went back to zero and the player watched the count they had already
+-- seen start over.
+local function probe_body(mod, lang)
     -- Which provider the button tests is the engine's business, not the API setting's: with
     -- "Online (free)" selected (or 'auto' falling back to it because there is no key and no
     -- model), testing DeepL would ask for a key the player does not have and miss the point of
@@ -4525,6 +4516,26 @@ function M.probe(mod, lang)
         describe = describe,
     }
     return true
+end
+
+M.send_probe = probe_body
+
+function M.probe(mod, lang)
+    lang = lang or M.state.lang or "en"
+    if not core then
+        local _, why = M.load_core(mod)
+        if not core then
+            util.popup(mod, "custom_test_failed", tostring(why))
+            return false
+        end
+    end
+    if inflight then
+        util.popup(mod, "custom_test_busy")
+        return false
+    end
+
+    M.stop(mod)
+    return probe_body(mod, lang)
 end
 
 -- Progress snapshot for the HUD and for the options buttons.
