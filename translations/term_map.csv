@@ -1536,6 +1536,7 @@ Selecting this Keystone locks all other Keystones.,loc_talent_mechanic_exclusive
 Sergeant Major Morrow,loc_npc_full_name_sergeant_a,486050E5,keys
 Serrated Blade,loc_talent_veteran_hits_cause_bleed,370E935F,keys
 Serrated Maw,loc_talent_adamant_dog_applies_brittleness,F882D8E5,keys
+Servo-Skull,loc_talent_cryptic_servo_skull,A5B45CEA,game_source
 Shambling Pyres,loc_havoc_common_minion_on_fire_name,3AB11D4F,keys
 Shattering Impact,loc_trait_bespoke_armor_rend_on_projectile_hit,36F31112,keys
 Shield Plates,loc_talent_adamant_shield_plates,3032BBE2,keys
@@ -1906,6 +1907,7 @@ Voidstrike Force Staff,loc_weapon_family_forcestaff_p4_m1,118DC70C,keys
 Volley Adept,loc_talent_veteran_reload_speed_on_elite_kill,A07849B9,keys
 Volley Fire,loc_talent_veteran_2_combat_ability,2B30F2CA,keys
 Voltaic,loc_achievement_horde_win_electric_archetype_name,0D98E631,uk_cache
+Voltaic Emitter,loc_talent_cryptic_discharge,0C5B9C4A,game_source
 Voltaic Mandibles Augment,loc_talent_adamant_dog_attacks_electrocute,CB0985B3,keys
 Voltaic Shock Mine,loc_talent_ability_shock_mine,DB593AF0,keys
 Volume,loc_stimm_lab_volume,0938B400,game_source

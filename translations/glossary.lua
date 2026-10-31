@@ -35,6 +35,11 @@ return {
         { en = "Unknown", ["zh-cn"] = "未知", ["zh-tw"] = "未知", ja = "不明", ko = "알 수 없음", ru = "Неизвестно", de = "Unbekannt", fr = "Inconnu", es = "Desconocido", it = "Sconosciuto", pl = "Nieznany", ["pt-br"] = "Desconhecido", uk = "Невідомо" },
         { en = "Arbites", ["zh-cn"] = "法务官", ["zh-tw"] = "法務官", ja = "裁定者", ko = "조정관", ru = "Арбитратор", de = "Arbitrator", fr = "Arbitrator", es = "Arbitrador", it = "Arbitrator", pl = "Arbitrator", ["pt-br"] = "Árbitro", uk = "Арбітр" },
         { en = "Skitarii", ["zh-cn"] = "护教军", ["zh-tw"] = "護教軍", ja = "スキタリ", ko = "스키타리", ru = "Скитарий", de = "Skitarii", fr = "Skitarii", es = "Skitarii", it = "Gli Skitarii", pl = "Skitarii", ["pt-br"] = "Skitarii", uk = "Скітарій" },
+        { en = "Servo-Skull", ["zh-cn"] = "伺服头骨", ["zh-tw"] = "伺服頭骨", ja = "サーボスカル", ko = "서보 스컬", ru = "Сервочереп", de = "Servoschädel", fr = "Servocrâne", es = "Servocráneo", it = "Servoteschio", pl = "Serwoczaszka", ["pt-br"] = "Servocrânio", uk = "Сервочереп" },
+        { en = "Auspex", ["zh-cn"] = "鸟卜仪", ["zh-tw"] = "占卜者", ja = "アウスペクス", ko = "아우스펙스", ru = "ауспекс", de = "Auspex", fr = "auspex", es = "auspex", it = "Auspex", pl = "skaner", ["pt-br"] = "Auspex" },
+        { en = "Voltaic Emitter", ["zh-cn"] = "电流放射器", ["zh-tw"] = "電能發射器", ja = "放電機構", ko = "전류 방출기", ru = "Гальванический излучатель", de = "Voltaischer Sender", fr = "Émetteur voltaïque", es = "Emisor voltaico", it = "Emittore voltaico", pl = "Galwaniczny Emiter", ["pt-br"] = "Emissor Voltaico", uk = "Вольтаїчний Випромінювач" },
+        { en = "Beasts of Nurgle", ["zh-cn"] = "纳垢兽", ["zh-tw"] = "納垢巨獸", ja = "ナーグルの獣", ko = "너글 야수", ru = "Тварь Нургла", de = "Schleimbestie", fr = "Bête de Nurgle", es = "Bestia de Nurgle", it = "Bestia di Nurgle", pl = "Bestia Nurgla", ["pt-br"] = "Fera de Nurgle" },
+        { en = "Poxbursters", ["zh-cn"] = "瘟疫爆破者", ["zh-tw"] = "瘟疫爆破者", ja = "ポックスバースター", ko = "폭스 버스터", ru = "Чумной Взрывун", de = "Pockenspeier", fr = "Explosible vérolé", es = "Reventador de plaga", it = "Spargipeste", pl = "Rozpylacz wysypki", ["pt-br"] = "Estourador de peste" },
 
         -- game terms whose own loc key is not in the collected key list (yet); the game's
         -- wording, checked against the export where the export has the term

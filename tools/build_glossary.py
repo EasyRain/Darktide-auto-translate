@@ -308,6 +308,19 @@ HAND = [
     # which the game itself also uses in strings like "Arbites Class"
     ("Arbites",  {"zh-cn": "法务官", "zh-tw": "法務官", "ja": "裁定者", "ko": "조정관", "ru": "Арбитратор", "de": "Arbitrator", "fr": "Arbitrator", "es": "Arbitrador", "it": "Arbitrator", "pl": "Arbitrator", "pt-br": "Árbitro", "uk": "Арбітр"}),
     ("Skitarii", {"zh-cn": "护教军", "zh-tw": "護教軍", "ja": "スキタリ", "ko": "스키타리", "ru": "Скитарий", "de": "Skitarii", "fr": "Skitarii", "es": "Skitarii", "it": "Gli Skitarii", "pl": "Skitarii", "pt-br": "Skitarii", "uk": "Скітарій"}),
+    # Terms the mods use that the key list never covered, so they went to the services as plain text.
+    # From EmperorsSight: "Servo-Skull" came back untouched (a service has no reason to translate a name
+    # it does not know), "Auspex Scanning" came back half translated, and the plural/one-word forms below
+    # missed an exact-match table entirely - "Beasts of Nurgle" arrived as 努尔格的野兽 instead of the
+    # game's 纳垢兽, "Poxbursters" as 瘟疫爆裂者 instead of 瘟疫爆破者. Values are the game's own, read from
+    # the 2026-10-22 localisation pack.
+    ("Servo-Skull", {"zh-cn": "伺服头骨", "zh-tw": "伺服頭骨", "ja": "サーボスカル", "ko": "서보 스컬", "ru": "Сервочереп", "de": "Servoschädel", "fr": "Servocrâne", "es": "Servocráneo", "it": "Servoteschio", "pl": "Serwoczaszka", "pt-br": "Servocrânio"}),
+    # the client shows 鸟卜仪 (zh-cn) / 占卜者 (zh-tw) and keeps "Auspex" in most Latin-script locales
+    ("Auspex", {"zh-cn": "鸟卜仪", "zh-tw": "占卜者", "ja": "アウスペクス", "ko": "아우스펙스", "ru": "ауспекс", "de": "Auspex", "fr": "auspex", "es": "auspex", "it": "Auspex", "pl": "skaner", "pt-br": "Auspex"}),
+    ("Voltaic Emitter", {"zh-cn": "电流放射器", "zh-tw": "電能發射器", "ja": "放電機構", "ko": "전류 방출기", "ru": "Гальванический излучатель", "de": "Voltaischer Sender", "fr": "Émetteur voltaïque", "es": "Emisor voltaico", "it": "Emittore voltaico", "pl": "Galwaniczny Emiter", "pt-br": "Emissor Voltaico"}),
+    # plural / one-word spellings that mods actually write; same wording as the singular already listed
+    ("Beasts of Nurgle", {"zh-cn": "纳垢兽", "zh-tw": "納垢巨獸", "ja": "ナーグルの獣", "ko": "너글 야수", "ru": "Тварь Нургла", "de": "Schleimbestie", "fr": "Bête de Nurgle", "es": "Bestia de Nurgle", "it": "Bestia di Nurgle", "pl": "Bestia Nurgla", "pt-br": "Fera de Nurgle"}),
+    ("Poxbursters", {"zh-cn": "瘟疫爆破者", "zh-tw": "瘟疫爆破者", "ja": "ポックスバースター", "ko": "폭스 버스터", "ru": "Чумной Взрывун", "de": "Pockenspeier", "fr": "Explosible vérolé", "es": "Reventador de plaga", "it": "Spargipeste", "pl": "Rozpylacz wysypki", "pt-br": "Estourador de peste"}),
 ]
 
 # ---- game terms whose loc key is not in the collected key list (yet) ----

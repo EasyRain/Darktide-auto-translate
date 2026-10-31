@@ -917,6 +917,7 @@ return {
     ["Sergeant Major Morrow"] = "Сержант-майор Морроу", -- community 'Sergeant Major Morrow'
     ["Serrated Blade"] = "Зазубрений клинок", -- community 'Serrated Blade'
     ["Serrated Maw"] = "Зазубрена пащека", -- community 'Serrated Maw'
+    ["Servo-Skull"] = "Сервочереп", -- community 'Servo-Skull'
     ["Shambling Pyres"] = "Тліючі Погребальні Вогнища", -- community 'Shambling Pyres'
     ["Shattering Impact"] = "Розриввний удар", -- community 'Shattering Impact'
     ["Shield Plates"] = "Щитові панелі", -- community 'Shield Plates'
@@ -1157,6 +1158,7 @@ return {
     ["Volley Adept"] = "Знавіснілий стрілець", -- community 'Volley Adept'
     ["Volley Fire"] = "Залповий вогонь", -- community 'Volley Fire'
     ["Voltaic"] = "Шокуючий", -- community 'Voltaic'
+    ["Voltaic Emitter"] = "Вольтаїчний Випромінювач", -- community 'Voltaic Emitter'
     ["Voltaic Mandibles Augment"] = "Вольтове підсилення щелеп", -- community 'Voltaic Mandibles Augment'
     ["Voltaic Shock Mine"] = "Вольтова шок-міна", -- community 'Voltaic Shock Mine'
     ["Volume"] = "Гучність", -- hand (context: audio slider)
