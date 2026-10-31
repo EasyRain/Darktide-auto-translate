@@ -339,7 +339,18 @@ local function stand_down(reason)
     end
 end
 
+-- Set when the "Test the online engine" button stopped a run, cleared when that run has been started again.
+--
+-- online.probe() stops the queue so its reply cannot be read as a translation's, which is right - but it used to
+-- leave the run stopped, so testing a provider mid-run ended the translation and only toggling the switch got it
+-- going again (reported by the user). The resume goes through the same entry point the switch uses, because
+-- online.start() alone cannot queue anything: it needs a scan report.
+local resume_after_test = false
+
 local function run_pipeline(reason, quiet)
+    -- Any deliberate start (the switch, Reload) supersedes a pending "resume after the test", so the frame loop
+    -- does not start a second run once this one finishes.
+    resume_after_test = false
     local on, why = active()
     if not on then
         util.info(mod, "nothing to do: %s (%s)", why, reason)
@@ -478,6 +489,18 @@ function mod.update(dt)
         return
     end
 
+    -- Pick the run back up once the test's reply has been handed in. Done in the frame loop rather than in a
+    -- reply handler because a test can end in several ways (transport error, HTTP error, a lost placeholder).
+    if resume_after_test and not online.busy() and not online.is_running() then
+        resume_after_test = false
+        local rok, rerr = pcall(run_pipeline, "resumed after the engine test", true)
+        if rok then
+            util.info(mod, "resumed the run the engine test interrupted")
+        else
+            util.info(mod, "could not resume after the engine test: %s", tostring(rerr))
+        end
+    end
+
     local ok, err = pcall(online.update, mod, dt)
     if not ok then
         util.warn(mod, "online update error: %s", tostring(err))
@@ -564,7 +587,12 @@ end
 -- same from the outside ("translation failed"), so this is what makes it configurable at
 -- all.
 function mod.test_custom_api()
+    local was_running = online.is_running()
     online.probe(mod, current_lang())
+    -- Only when the test actually stopped a run: a test that returned "busy" never touched it.
+    if was_running and not online.is_running() then
+        resume_after_test = true
+    end
 end
 
 -- Mod options: "Clear local translations" (only the current target language)

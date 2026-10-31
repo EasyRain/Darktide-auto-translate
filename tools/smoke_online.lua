@@ -652,6 +652,14 @@ check("scanner: manual is not", scanner.is_local_source("manual"), false)
 check("scanner: unchanged is not", scanner.is_local_source("unchanged"), false)
 check("scanner: nil is not", scanner.is_local_source(nil), false)
 
+-- The test button stops the run to keep its reply separate; the frame loop needs to ask "is anything in flight
+-- yet?" before it can start that run again.
+do
+    local onl = assert(loadfile(here .. "/../scripts/mods/auto_translate/modules/online.lua"))()
+    check("busy: exported", type(onl.busy), "function")
+    check("busy: nothing in flight reads false", onl.busy(), false)
+end
+
 -- ---------------------------------------------------------------------------
 -- An edit made in game has to survive the next flush.
 --

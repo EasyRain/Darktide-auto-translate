@@ -2165,6 +2165,12 @@ function M.is_running()
     return M.state.running
 end
 
+-- True while a request (translation, test or startup check) is in flight. The test button needs this: it stops
+-- the queue, and the run can only be picked back up once its own reply has been handed in.
+function M.busy()
+    return inflight ~= nil
+end
+
 -- Builds the queue from a scan report and starts (or resumes) work.
 function M.start(mod, report, lang)
     M.wire_engine_health(engines)
