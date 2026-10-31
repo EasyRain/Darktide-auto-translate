@@ -983,6 +983,7 @@ At {max_stacks:%s} Stacks, remove all stacks of {adrenaline:%s} and gain {frenzy
 {frenzy:%s} grants {attack_speed:%s} Attack Speed and {melee_damage:%s} Melee Damage, lasting {frenzy_duration:%s}s.",loc_talent_broker_keystone_adrenaline_junkie_desc,B4493FF1,keys
 Melee Weakspot Kills Quell {vent:%s} Peril and Reduce further Peril Generation by {warp_generation:%s} for {duration:%s}s.,loc_talent_psyker_melee_weaving_desc,9A0CBDA1,keys
 Melee Weakspot hits make the enemy count as Staggered for {duration:%s}s.,loc_talent_adamant_melee_weakspot_hits_count_as_stagger_desc,3BE4DAEA,keys
+Melee Weapons,loc_glossary_term_melee_weapons,AB476A10,game_source
 Mercantile HL-70-04,loc_mission_name_fm_armoury,7DD4086E,keys
 Metalfab 36,loc_zone_name_tank_foundry_short,B654A07F,keys
 Mettle,loc_talent_psyker_crits_regen_tougness_and_movement_speed,56D92A9D,keys
@@ -991,6 +992,7 @@ Mind in Motion,loc_talent_psyker_venting_doesnt_slow,F93D1ADE,keys
 Mission,loc_hud_presence_mission,AF1A8807,keys
 Mission Terminal,loc_mission_board_view,9706261C,keys
 Mission starts in,loc_lobby_timer_description,3703632B,keys
+Missions,loc_achievement_category_missions_label,AF5B1E16,game_source
 Mk CV,loc_weapon_mark_galvanic_rifle_p1_m1,400DAEDA,keys
 Mk I,loc_weapon_mark_autogun_p1_m1,577CAD10,keys
 Mk I,loc_weapon_mark_combataxe_p3_m1,2430C4FD,keys

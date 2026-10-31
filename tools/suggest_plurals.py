@@ -88,6 +88,9 @@ def main():
         sys.exit("no store folder at %s" % store)
 
     strings = load_store_strings(store)
+    # Compile each term's pattern once. The first version built it inside the pair loop, which is 2796 strings x
+    # 1269 terms of regex compilation - it looked like a hang.
+    compiled = [(term, variant_pattern(term)) for term in terms if len(term) >= 5]
     hits, seen = [], set()
     for mod, key, en in strings:
         flat = en.strip()
@@ -95,10 +98,10 @@ def main():
             continue
         if not re.search(r"[A-Za-z]{3,}", flat):
             continue
-        for term in terms:
-            if len(term) < 5:
+        for term, pattern in compiled:
+            if flat.lower() == term.lower():
                 continue
-            if variant_pattern(term).fullmatch(flat) and flat.lower() != term.lower():
+            if pattern.fullmatch(flat):
                 if (flat, term) in seen:
                     break
                 seen.add((flat, term))

@@ -321,6 +321,17 @@ HAND = [
     # plural / one-word spellings that mods actually write; same wording as the singular already listed
     ("Beasts of Nurgle", {"zh-cn": "纳垢兽", "zh-tw": "納垢巨獸", "ja": "ナーグルの獣", "ko": "너글 야수", "ru": "Тварь Нургла", "de": "Schleimbestie", "fr": "Bête de Nurgle", "es": "Bestia de Nurgle", "it": "Bestia di Nurgle", "pl": "Bestia Nurgla", "pt-br": "Fera de Nurgle"}),
     ("Poxbursters", {"zh-cn": "瘟疫爆破者", "zh-tw": "瘟疫爆破者", "ja": "ポックスバースター", "ko": "폭스 버스터", "ru": "Чумной Взрывун", "de": "Pockenspeier", "fr": "Explosible vérolé", "es": "Reventador de plaga", "it": "Spargipeste", "pl": "Rozpylacz wysypki", "pt-br": "Estourador de peste"}),
+    # Plurals and a spacing variant of terms above, for the spellings mods actually write. Found with
+    # tools/suggest_plurals.py against the installed stores (six near misses there, nothing else). The values
+    # are the singular ones, which is how the glossary already handles short breed names (Maulers, Pox
+    # Bursters): Chinese, Japanese and Korean do not inflect, and for ru/uk/pl the singular is what the
+    # precedent ships rather than an invented plural.
+    ("Colors", {"zh-cn": "颜色", "zh-tw": "顏色", "ja": "色", "ko": "색상", "ru": "цвет", "de": "Farbe", "fr": "couleur", "es": "color", "it": "colore", "pl": "kolor", "pt-br": "cor", "uk": "колір"}),   # the plural a mod UI writes; the spelling a mods folder contains
+    ("Daemonhosts", {"zh-cn": "恶魔宿主", "zh-tw": "惡魔宿主", "ja": "ディーモンホスト", "ko": "데몬호스트", "ru": "Демонхост", "de": "Besessener", "fr": "Hôte Démoniaque", "es": "Huésped Demoníaco", "it": "Ospite demoniaco", "pl": "Opętaniec", "pt-br": "Possuído", "uk": "Демононосій"}),   # plural; the spelling a mods folder contains
+    ("Positions", {"zh-cn": "位置", "zh-tw": "位置", "ja": "位置", "ko": "위치", "ru": "позиция", "de": "Position", "fr": "position", "es": "posición", "it": "posizione", "pl": "pozycja", "pt-br": "posição", "uk": "позиція"}),   # plural; the spelling a mods folder contains
+    ("Melee Weapons", {"zh-cn": "近战武器", "zh-tw": "近戰武器", "ja": "近接武器", "ko": "근접 무기", "ru": "Оружие ближнего боя", "de": "Nahkampfwaffe", "fr": "Arme de mêlée", "es": "Arma cuerpo a cuerpo", "it": "Arma corpo a corpo", "pl": "Broń biała", "pt-br": "Arma corpo a corpo", "uk": "Зброя ближнього бою"}),   # plural; the spelling a mods folder contains
+    ("Missions", {"zh-cn": "任务", "zh-tw": "任務", "ja": "ミッション", "ko": "미션", "ru": "Задание", "de": "Mission", "fr": "Mission", "es": "Misión", "it": "Missione", "pl": "Misja", "pt-br": "Missão", "uk": "Завданні"}),   # plural; the spelling a mods folder contains
+    ("Nuncio Aquila", {"zh-cn": "传谕天鹰", "zh-tw": "天鷹使節", "ja": "ヌンシオ・アクィラ", "ko": "눈시오 아퀼라", "ru": "Нунцио-аквила", "de": "Nuncio-Aquila", "fr": "Nuncio-aquila", "es": "Nuncio-Aquila", "it": "Nuncio-aquila", "pl": "Nuncio-aquila", "pt-br": "Núncio-áquila", "uk": "Нунцій-аквіла"}),   # the same name with a space instead of the hyphen; the spelling a mods folder contains
 ]
 
 # ---- game terms whose loc key is not in the collected key list (yet) ----

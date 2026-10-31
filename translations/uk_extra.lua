@@ -620,6 +620,7 @@ return {
     ["Melee Hits"] = "Влучання у ближньому бою", -- hand
     ["Melee Kills"] = "Вбивства у ближньому бою", -- hand
     ["Melee Weapon"] = "Зброя ближнього бою", -- community 'Melee Weapon'
+    ["Melee Weapons"] = "Зброя ближнього бою", -- community 'Melee Weapons'
     ["Mercantile HL-70-04"] = "Торгівельний HL-70-04", -- community 'Mercantile HL-70-04'
     ["Metalfab 36"] = "Металфаб 36", -- community 'Metalfab 36'
     ["Mettle"] = "Відвага", -- community 'Mettle'
@@ -628,6 +629,7 @@ return {
     ["Mission"] = "Завданні", -- community 'Mission'
     ["Mission Terminal"] = "Термінал місій", -- community 'Mission Terminal'
     ["Mission starts in"] = "Початок через", -- community 'Mission starts in'
+    ["Missions"] = "Місії", -- community 'Missions'
     ["Mk CV"] = "Mk CV", -- community 'Mk CV'
     ["Mobile"] = "Мобільний", -- community 'Mobile'
     ["Mobile Emplacement"] = "Рухома позиція", -- community 'Mobile Emplacement'
